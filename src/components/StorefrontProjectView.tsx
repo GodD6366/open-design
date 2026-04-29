@@ -592,10 +592,6 @@ export function StorefrontProjectView({
         <section className="storefront-runtime-pane storefront-runtime-tab-pane">
           <div className="storefront-runtime-head">
             <div>
-              <span className="storefront-runtime-kicker">店铺首页工作台</span>
-              <h2>手机预览</h2>
-              <p>右侧可在手机预览和设计文件之间切换，生成后的素材会进入设计文件。</p>
-              <p>{previewMeta}</p>
             </div>
             <div className="storefront-runtime-head-actions">
               <span className={`storefront-runtime-status storefront-status-${runtimeState?.status ?? 'idle'}`}>

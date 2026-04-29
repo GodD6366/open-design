@@ -5108,12 +5108,16 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border-radius: 44px;
   overflow: hidden;
   background: #fafaf7;
-  display: flex;
-  flex-direction: column;
+}
+
+.storefront-phone-overlay {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 6;
+  pointer-events: none;
 }
 
 .storefront-phone-statusbar {
-  flex: 0 0 47px;
   padding: 18px 26px 0;
   display: flex;
   align-items: flex-start;
@@ -5125,67 +5129,110 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   pointer-events: none;
 }
 
+.storefront-phone-navbar {
+  display: none;
+}
+
 .storefront-phone-status-right {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
-.storefront-phone-signal,
-.storefront-phone-wifi,
-.storefront-phone-battery {
-  display: inline-block;
-  background: #1a1916;
-  opacity: 0.9;
+.storefront-phone-battery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
 }
 
-.storefront-phone-signal {
-  width: 17px;
-  height: 11px;
-  clip-path: polygon(0% 100%, 0% 70%, 18% 70%, 18% 100%, 33% 100%, 33% 52%, 51% 52%, 51% 100%, 66% 100%, 66% 28%, 84% 28%, 84% 100%);
+.storefront-phone-battery-badge span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: rgba(17, 17, 19, 0.96);
+  color: #fff;
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 700;
 }
 
-.storefront-phone-wifi {
-  width: 17px;
-  height: 11px;
+.storefront-phone-battery-badge i {
+  width: 3px;
+  height: 7px;
+  border-radius: 0 2px 2px 0;
+  background: rgba(17, 17, 19, 0.26);
+  display: block;
+}
+
+.storefront-phone-capsule-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 18px 0;
+}
+
+.storefront-phone-mini-capsule {
+  width: 84px;
+  height: 30px;
+  border-radius: 15px;
+  border: 1px solid transparent;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  align-items: center;
+  padding: 0 8px;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.storefront-phone-mini-capsule-left,
+.storefront-phone-mini-capsule-right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.storefront-phone-mini-capsule-left span {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  clip-path: polygon(0 48%, 11% 36%, 22% 28%, 35% 21%, 50% 18%, 65% 21%, 78% 28%, 89% 36%, 100% 48%, 88% 60%, 77% 50%, 65% 43%, 50% 40%, 35% 43%, 23% 50%, 12% 60%);
+  background: rgba(28, 27, 26, 0.88);
 }
 
-.storefront-phone-battery {
+.storefront-phone-mini-divider {
+  width: 1px;
+  height: 13px;
+  background: rgba(28, 27, 26, 0.1);
+  justify-self: center;
+}
+
+.storefront-phone-mini-capsule-right span {
   position: relative;
-  width: 25px;
-  height: 11px;
-  border-radius: 3px;
-  background: transparent;
-  border: 1px solid rgba(26,25,22,0.45);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(28, 27, 26, 0.9);
+  display: block;
 }
 
-.storefront-phone-battery::before {
+.storefront-phone-mini-capsule-right span::after {
   content: '';
   position: absolute;
-  inset: 1px 4px 1px 1px;
-  border-radius: 2px;
-  background: rgba(26,25,22,0.9);
-}
-
-.storefront-phone-battery::after {
-  content: '';
-  position: absolute;
-  right: -3px;
-  top: 3px;
-  width: 2px;
-  height: 4px;
-  border-radius: 1px;
-  background: rgba(26,25,22,0.45);
+  inset: 3px;
+  border-radius: 50%;
+  background: rgba(28, 27, 26, 0.9);
 }
 
 .storefront-phone-scroll {
-  flex: 1 1 auto;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   overflow-x: hidden;
   background: #fafaf7;
-  padding-bottom: 4px;
+  padding-bottom: 32px;
 }
 
 .storefront-phone-scroll::-webkit-scrollbar {
@@ -5194,8 +5241,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 .storefront-phone-home-indicator {
-  flex: 0 0 28px;
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28px;
+  z-index: 7;
   pointer-events: none;
 }
 

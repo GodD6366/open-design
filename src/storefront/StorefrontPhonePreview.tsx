@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { projectFileUrl } from '../providers/registry';
 import type { StorefrontSchema, StorefrontSchemaModule } from './types';
 
@@ -220,11 +220,10 @@ function userAssetsHeightFor(module: StorefrontSchemaModule, schema: StorefrontS
     pageWidthFor(schema),
   );
   const imageHeight = Math.round((availableWidth * metrics.canvasHeight) / metrics.canvasWidth);
-  const mapping = data.body_image_schema?.content?.slots_mapping ?? {};
-  const hasBodyImage = Boolean(data.body_image || Object.keys(mapping).length);
-  const fallback = hasBodyImage ? imageHeight + 134 : 132;
+  const hasBodyImage = Boolean(stringOr(data.body_image));
+  const fallback = hasBodyImage ? imageHeight + 134 : 208;
   const maxHeight = metrics.isFreeform ? 760 : 560;
-  return blendSuggestion(data.height, fallback, 124, maxHeight);
+  return hasBodyImage ? blendSuggestion(data.height, fallback, 124, maxHeight) : fallback;
 }
 
 function resolvePageLayout(schema: StorefrontSchema): StorefrontSchema {
@@ -332,28 +331,32 @@ function placeholderVariantFor(moduleType: StorefrontSchemaModule['type']): Plac
 function GenericPendingImageMark({
   palette,
   label = '图片待生成',
+  compact = false,
 }: {
   palette: PendingPalette;
   label?: string;
+  compact?: boolean;
 }) {
   return (
     <div
       style={{
         display: 'grid',
         placeItems: 'center',
-        gap: 10,
+        gap: compact ? 6 : 10,
         width: '100%',
         height: '100%',
         minHeight: 0,
-        padding: 12,
         boxSizing: 'border-box',
-        borderRadius: 24,
-        border: `1px dashed ${palette.edge}`,
-        background: palette.panel,
         color: palette.muted,
       }}
     >
-      <svg width="46" height="46" viewBox="0 0 46 46" fill="none" aria-hidden>
+      <svg
+        width={compact ? 32 : 46}
+        height={compact ? 32 : 46}
+        viewBox="0 0 46 46"
+        fill="none"
+        aria-hidden
+      >
         <rect x="8" y="10" width="30" height="26" rx="7" stroke="currentColor" strokeWidth="1.6" />
         <circle cx="18" cy="19" r="3.5" fill="currentColor" opacity="0.42" />
         <path
@@ -364,7 +367,9 @@ function GenericPendingImageMark({
           strokeLinejoin="round"
         />
       </svg>
-      <span style={{ fontSize: 12, lineHeight: '18px' }}>{label}</span>
+      <span style={{ fontSize: compact ? 11 : 12, lineHeight: compact ? '16px' : '18px' }}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -448,6 +453,93 @@ function userAssetsDetailFor(schema: UserAssetsSchemaLike | undefined) {
   return `${slots.length} 个入口 · ${layoutLabel}`;
 }
 
+function hasImageAsset(item: ImageItemLike | undefined) {
+  return Boolean(stringOr(item?.image));
+}
+
+function heroModuleFor(schema: StorefrontSchema) {
+  const first = schema.modules[0];
+  if (!first || first.type !== 'top_slider') return null;
+  return first;
+}
+
+function heroHasImage(schema: StorefrontSchema) {
+  const hero = heroModuleFor(schema);
+  if (!hero) return false;
+  const items = Array.isArray((hero.data as { items?: ImageItemLike[] }).items)
+    ? ((hero.data as { items?: ImageItemLike[] }).items ?? [])
+    : [];
+  return items.some((item) => hasImageAsset(item));
+}
+
+function StatusSignalIcon({ color }: { color: string }) {
+  const bars = [1, 5, 9, 13];
+  return (
+    <svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden>
+      {bars.map((x, index) => (
+        <rect
+          key={x}
+          x={x}
+          y={12 - (index + 1) * 2.5}
+          width="3"
+          height={(index + 1) * 2.5}
+          rx="1.4"
+          fill={color}
+          opacity={0.45 + index * 0.16}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function StatusWifiIcon({ color }: { color: string }) {
+  return (
+    <svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden>
+      <path d="M1.7 4.8C3.6 3 6.2 2 9 2c2.8 0 5.4 1 7.3 2.8" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4.4 7.5A6.6 6.6 0 0 1 9 5.8c1.8 0 3.4.6 4.6 1.7" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M7.1 10.2A2.9 2.9 0 0 1 9 9.5c.7 0 1.4.3 1.9.7" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="9" cy="12" r="1.25" fill={color} />
+    </svg>
+  );
+}
+
+function StatusBatteryBadge() {
+  return (
+    <div className="storefront-phone-battery-badge" aria-hidden>
+      <span>73</span>
+      <i />
+    </div>
+  );
+}
+
+function MiniProgramCapsule({
+  lightChrome,
+  borderColor,
+}: {
+  lightChrome: boolean;
+  borderColor: string;
+}) {
+  return (
+    <div
+      className="storefront-phone-mini-capsule"
+      style={{
+        background: lightChrome ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.9)',
+        borderColor,
+      }}
+    >
+      <div className="storefront-phone-mini-capsule-left" aria-hidden>
+        <span />
+        <span />
+        <span />
+      </div>
+      <span className="storefront-phone-mini-divider" aria-hidden />
+      <div className="storefront-phone-mini-capsule-right" aria-hidden>
+        <span />
+      </div>
+    </div>
+  );
+}
+
 function UserAssetsEntryGhost({
   item,
   palette,
@@ -510,13 +602,7 @@ function UserAssetsEntryGhost({
   );
 }
 
-function UserAssetsPendingArt({
-  schema,
-  designContext,
-}: {
-  schema: UserAssetsSchemaLike | undefined;
-  designContext: DesignContext;
-}) {
+function UserAssetsPendingArt({ designContext }: { designContext: DesignContext }) {
   const palette = buildPendingPalette(designContext);
 
   return (
@@ -525,48 +611,11 @@ function UserAssetsPendingArt({
         width: '100%',
         height: '100%',
         overflow: 'hidden',
-        padding: 12,
+        padding: 8,
         background: palette.shellSoft,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          gap: 10,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              height: 26,
-              padding: '0 10px',
-              borderRadius: 999,
-              background: palette.chip,
-              border: `1px solid ${palette.edge}`,
-              fontSize: 11,
-              lineHeight: '16px',
-              fontWeight: 600,
-              color: palette.text,
-            }}
-          >
-            入口布局预览
-          </span>
-          <span style={{ fontSize: 11, lineHeight: '16px', color: palette.muted }}>待生成</span>
-        </div>
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
-          <GenericPendingImageMark palette={palette} label="入口素材待生成" />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <strong style={{ fontSize: 12, lineHeight: '18px', color: palette.text }}>默认入口布局</strong>
-          <span style={{ fontSize: 10, lineHeight: '14px', color: palette.muted }}>
-            {userAssetsDetailFor(schema)}
-          </span>
-        </div>
-      </div>
+      <GenericPendingImageMark palette={palette} label="图片待生成" compact />
     </div>
   );
 }
@@ -639,14 +688,20 @@ function ImageAdModule({
   const [currentIndex, setCurrentIndex] = useState(0);
   const activeIndex = items.length > 0 ? currentIndex % items.length : 0;
   const hasImage = (item: ImageItemLike | undefined) => Boolean(resolveAssetUrl(projectId, item?.image));
+  const carouselItems =
+    data.mode === 'carousel_poster' && items.some((item) => hasImage(item))
+      ? items.filter((item) => hasImage(item))
+      : items;
+  const carouselActiveIndex =
+    carouselItems.length > 0 ? currentIndex % carouselItems.length : 0;
 
   useEffect(() => {
-    if (data.mode !== 'carousel_poster' || items.length < 2) return;
+    if (data.mode !== 'carousel_poster' || carouselItems.length < 2) return;
     const timer = window.setInterval(() => {
       setCurrentIndex((value) => value + 1);
     }, data.auto_play_ms || 2800);
     return () => window.clearInterval(timer);
-  }, [data.auto_play_ms, data.mode, items.length]);
+  }, [carouselItems.length, data.auto_play_ms, data.mode]);
 
   if (items.length === 0) return null;
 
@@ -715,17 +770,17 @@ function ImageAdModule({
     );
   }
 
-  if (data.mode === 'carousel_poster' && items.length > 1) {
-    const activeItem = items[activeIndex];
+  if (data.mode === 'carousel_poster' && carouselItems.length > 1) {
+    const activeItem = carouselItems[carouselActiveIndex];
     return (
       <section style={{ position: 'relative', overflow: 'hidden', minHeight: hasImage(activeItem) ? undefined : data.height || 300 }}>
-        {items.map((item, index) => (
+        {carouselItems.map((item, index) => (
           <div
             key={item.id || String(index)}
             style={{
-              position: index === activeIndex ? 'relative' : 'absolute',
-              inset: index === activeIndex ? undefined : 0,
-              opacity: index === activeIndex ? 1 : 0,
+              position: index === carouselActiveIndex ? 'relative' : 'absolute',
+              inset: index === carouselActiveIndex ? undefined : 0,
+              opacity: index === carouselActiveIndex ? 1 : 0,
               transition: 'opacity 700ms ease',
             }}
           >
@@ -737,6 +792,20 @@ function ImageAdModule({
             />
           </div>
         ))}
+      </section>
+    );
+  }
+
+  if (data.mode === 'carousel_poster' && carouselItems.length === 1) {
+    const item = carouselItems[0];
+    return (
+      <section style={{ position: 'relative', overflow: 'hidden', minHeight: hasImage(item) ? undefined : data.height || 300 }}>
+        <PreviewFrame
+          projectId={projectId}
+          item={item}
+          moduleType={module.type}
+          designContext={designContext}
+        />
       </section>
     );
   }
@@ -774,8 +843,11 @@ function UserAssetsModule({
     body_image_schema?: UserAssetsSchemaLike;
   };
   const metrics = resolveUserAssetsLayoutMetrics(data.body_image_schema);
-  const bodyHeight = Math.round((metrics.canvasHeight / metrics.canvasWidth) * 311);
   const bodyImageUrl = resolveAssetUrl(projectId, data.body_image);
+  const hasBodyImage = Boolean(bodyImageUrl);
+  const bodyHeight = hasBodyImage
+    ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * 311)
+    : clamp(Math.round(toNumber(data.height, 208) * 0.38), 72, 108);
   const avatarUrl = resolveAssetUrl(projectId, data.avatar || USER_ASSETS_DEFAULTS.avatar);
   const progress = clamp(toNumber(data.progress_percent, 33), 0, 100);
   return (
@@ -873,7 +945,7 @@ function UserAssetsModule({
             style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }}
           />
         ) : (
-          <UserAssetsPendingArt schema={data.body_image_schema} designContext={designContext} />
+          <UserAssetsPendingArt designContext={designContext} />
         )}
       </div>
     </section>
@@ -914,6 +986,43 @@ function ModuleRenderer({
 export function StorefrontPhonePreview({ projectId, schema }: Props) {
   const resolved = resolvePageLayout(schema);
   const context = resolved.design_context;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const immersiveHero = heroHasImage(resolved);
+  const navProgress = clamp(scrollTop / 92, 0, 1);
+  const lightChrome = immersiveHero && navProgress < 0.58;
+  const chromeColor = lightChrome ? '#ffffff' : context.color_palette.text_primary;
+  const overlayBaseAlpha = immersiveHero ? 0.14 : 0.84;
+  const overlayAlpha = clamp(overlayBaseAlpha + navProgress * 0.72, overlayBaseAlpha, 0.92);
+  const overlayFadeAlpha = immersiveHero
+    ? clamp(0.04 + navProgress * 0.4, 0.04, 0.48)
+    : clamp(0.14 + navProgress * 0.16, 0.14, 0.3);
+  const chromeBorder = lightChrome
+    ? 'rgba(255,255,255,0.18)'
+    : hexToRgba(context.color_palette.text_primary, 0.08 + navProgress * 0.08);
+  const overlayBackground = `linear-gradient(180deg, ${hexToRgba(
+    context.color_palette.bg,
+    overlayAlpha,
+  )} 0%, ${hexToRgba(context.color_palette.bg, overlayFadeAlpha)} 76%, ${hexToRgba(
+    context.color_palette.bg,
+    0,
+  )} 100%)`;
+  const navShadow =
+    navProgress > 0.12
+      ? `0 12px 28px ${hexToRgba(context.color_palette.text_primary, 0.08 + navProgress * 0.06)}`
+      : 'none';
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const handleScroll = () => {
+      setScrollTop(node.scrollTop);
+    };
+    handleScroll();
+    node.addEventListener('scroll', handleScroll, { passive: true });
+    return () => node.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <div className="storefront-phone-stage">
       <div className="storefront-phone-device">
@@ -923,15 +1032,20 @@ export function StorefrontPhonePreview({ projectId, schema }: Props) {
         <span className="storefront-phone-rail storefront-phone-rail-right-1" aria-hidden />
         <span className="storefront-phone-island" aria-hidden />
         <div className="storefront-phone-screen">
-          <div className="storefront-phone-statusbar">
-            <span>9:41</span>
-            <span className="storefront-phone-status-right">
-              <span className="storefront-phone-signal" aria-hidden />
-              <span className="storefront-phone-wifi" aria-hidden />
-              <span className="storefront-phone-battery" aria-hidden />
-            </span>
+          <div className="storefront-phone-overlay" style={{ background: overlayBackground }}>
+            <div className="storefront-phone-statusbar" style={{ color: chromeColor }}>
+              <span>9:41</span>
+              <span className="storefront-phone-status-right">
+                <StatusSignalIcon color={chromeColor} />
+                <StatusWifiIcon color={chromeColor} />
+                <StatusBatteryBadge />
+              </span>
+            </div>
+            <div className="storefront-phone-capsule-wrap" style={{ boxShadow: navShadow }}>
+              <MiniProgramCapsule lightChrome={lightChrome} borderColor={chromeBorder} />
+            </div>
           </div>
-          <div className="storefront-phone-scroll">
+          <div ref={scrollRef} className="storefront-phone-scroll">
             <div
               style={{
                 background: context.color_palette.bg,

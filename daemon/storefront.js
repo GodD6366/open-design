@@ -1758,6 +1758,13 @@ function deriveStatus(schema, validationErrors, fallbackStatus) {
   return 'schema-ready';
 }
 
+function hasImmersiveHero(schema) {
+  const hero = Array.isArray(schema?.modules) ? schema.modules[0] : null;
+  if (!hero || hero.type !== 'top_slider') return false;
+  const items = Array.isArray(hero.data?.items) ? hero.data.items : [];
+  return items.some((item) => hasImageAsset(item));
+}
+
 function hasGeneratedAssets(schema) {
   return schema.modules.some((module) => {
     if (module.type === 'user_assets') {
@@ -1870,6 +1877,7 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
   const bgSoft = hexToRgba(context.color_palette.bg, 0.96);
   const accentSoft = hexToRgba(context.color_palette.accent, 0.18);
   const shadowSoft = hexToRgba(context.color_palette.text_primary, 0.08);
+  const immersiveHero = hasImmersiveHero(resolved);
   const errorBanner = validationErrors.length > 0
     ? `<div class="sf-error-banner">
         <strong>Schema validation warnings</strong>
@@ -1901,7 +1909,7 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
         --sf-page-width: ${context.page_width}px;
       }
       * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; min-height: 100%; }
+      html, body { margin: 0; padding: 0; min-height: 100%; height: 100%; }
       body {
         background:
           radial-gradient(circle at top, var(--sf-accent-soft), transparent 34%),
@@ -1909,6 +1917,135 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
         color: var(--sf-fg);
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
+        overflow: hidden;
+      }
+      .sf-screen {
+        position: relative;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .sf-scroll {
+        position: absolute;
+        inset: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-bottom: 24px;
+        scrollbar-width: none;
+      }
+      .sf-scroll::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+      .sf-overlay {
+        position: absolute;
+        inset: 0 0 auto;
+        z-index: 8;
+        pointer-events: none;
+        background: linear-gradient(180deg, ${hexToRgba(context.color_palette.bg, immersiveHero ? 0.14 : 0.86)} 0%, ${hexToRgba(context.color_palette.bg, immersiveHero ? 0.04 : 0.16)} 78%, ${hexToRgba(context.color_palette.bg, 0)} 100%);
+        transition: background 220ms ease;
+      }
+      .sf-statusbar {
+        padding: 14px 18px 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        font-size: 15px;
+        line-height: 18px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--sf-fg);
+        transition: color 220ms ease;
+      }
+      .sf-statusbar__right {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .sf-battery-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 1px;
+      }
+      .sf-battery-badge__value {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 20px;
+        padding: 0 7px;
+        border-radius: 10px;
+        background: rgba(17,17,19,0.96);
+        color: #fff;
+        font-size: 10.5px;
+        line-height: 14px;
+        font-weight: 700;
+      }
+      .sf-battery-badge__nub {
+        width: 3px;
+        height: 7px;
+        border-radius: 0 2px 2px 0;
+        background: rgba(17,17,19,0.26);
+      }
+      .sf-capsule-wrap {
+        display: flex;
+        justify-content: flex-end;
+        padding: 8px 18px 0;
+      }
+      .sf-mini-capsule {
+        width: 84px;
+        height: 30px;
+        border-radius: 15px;
+        backdrop-filter: blur(18px) saturate(1.35);
+        -webkit-backdrop-filter: blur(18px) saturate(1.35);
+        border: 1px solid ${immersiveHero ? 'rgba(255,255,255,0.18)' : hexToRgba(context.color_palette.text_primary, 0.08)};
+        background: rgba(255,255,255,0.88);
+        box-shadow: 0 12px 28px ${hexToRgba(context.color_palette.text_primary, immersiveHero ? 0.06 : 0.08)};
+        display: grid;
+        align-items: center;
+        grid-template-columns: 1fr 1px 1fr;
+        padding: 0 8px;
+        transition: border-color 220ms ease, box-shadow 220ms ease;
+      }
+      .sf-mini-capsule__left,
+      .sf-mini-capsule__right {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+      }
+      .sf-mini-capsule__left span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(28,27,26,0.88);
+      }
+      .sf-mini-capsule__divider {
+        width: 1px;
+        height: 13px;
+        background: rgba(28,27,26,0.1);
+        justify-self: center;
+      }
+      .sf-mini-capsule__right span {
+        position: relative;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2.5px solid rgba(28,27,26,0.9);
+        display: block;
+      }
+      .sf-mini-capsule__right span::after {
+        content: "";
+        position: absolute;
+        inset: 3px;
+        border-radius: 50%;
+        background: rgba(28,27,26,0.9);
+      }
+      .sf-screen.is-scrolled .sf-overlay {
+        background: linear-gradient(180deg, ${hexToRgba(context.color_palette.bg, 0.9)} 0%, ${hexToRgba(context.color_palette.bg, 0.22)} 78%, ${hexToRgba(context.color_palette.bg, 0)} 100%);
+      }
+      .sf-screen.is-scrolled .sf-mini-capsule {
+        border-color: ${hexToRgba(context.color_palette.text_primary, 0.12)};
+        box-shadow: 0 12px 28px ${hexToRgba(context.color_palette.text_primary, 0.12)};
       }
       .sf-root {
         width: 100%;
@@ -1996,10 +2133,6 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
         height: 100%;
         min-height: 0;
         box-sizing: border-box;
-        padding: 12px;
-        border-radius: 24px;
-        border: 1px dashed rgba(255,255,255,0.58);
-        background: rgba(255,255,255,0.68);
         color: rgba(31,41,55,0.62);
         display: grid;
         place-items: center;
@@ -2012,6 +2145,17 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
       .sf-placeholder__generic-image span {
         font-size: 12px;
         line-height: 18px;
+      }
+      .sf-placeholder__generic-image.is-compact {
+        gap: 6px;
+      }
+      .sf-placeholder__generic-image.is-compact svg {
+        width: 32px;
+        height: 32px;
+      }
+      .sf-placeholder__generic-image.is-compact span {
+        font-size: 11px;
+        line-height: 16px;
       }
       .sf-placeholder__footer {
         display: flex;
@@ -2030,84 +2174,11 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
         color: rgba(31,41,55,0.62);
       }
       .sf-user-assets-placeholder {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+        display: block;
         height: 100%;
         overflow: hidden;
-        padding: 12px;
+        padding: 8px;
         background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(201,140,90,0.1) 100%);
-      }
-      .sf-user-assets-placeholder::before {
-        content: "";
-        position: absolute;
-        top: -30px;
-        right: -28px;
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        background: rgba(201,140,90,0.16);
-      }
-      .sf-user-assets-placeholder__inner {
-        position: relative;
-        z-index: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        height: 100%;
-      }
-      .sf-user-assets-placeholder__layout {
-        flex: 1;
-        min-height: 0;
-      }
-      .sf-user-assets-entry {
-        height: 100%;
-        border-radius: 20px;
-        background: rgba(255,255,255,0.9);
-        border: 1px solid rgba(255,255,255,0.48);
-        box-shadow: 0 18px 40px rgba(31,41,55,0.08);
-        padding: 14px 14px 12px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        gap: 12px;
-      }
-      .sf-user-assets-entry.is-large {
-        border-radius: 24px;
-        padding: 16px 16px 14px;
-      }
-      .sf-user-assets-entry__icon {
-        width: 38px;
-        height: 38px;
-        border-radius: 14px;
-        background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(201,140,90,0.16));
-        border: 1px solid rgba(255,255,255,0.48);
-      }
-      .sf-user-assets-entry.is-large .sf-user-assets-entry__icon {
-        width: 46px;
-        height: 46px;
-        border-radius: 16px;
-      }
-      .sf-user-assets-entry__copy {
-        display: grid;
-        gap: 4px;
-      }
-      .sf-user-assets-entry__title {
-        font-size: 14px;
-        line-height: 20px;
-        font-weight: 650;
-      }
-      .sf-user-assets-entry.is-large .sf-user-assets-entry__title {
-        font-size: 18px;
-        line-height: 24px;
-      }
-      .sf-user-assets-entry__subtitle {
-        font-size: 10px;
-        line-height: 14px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: rgba(31,41,55,0.62);
       }
       .sf-top-slider,
       .sf-banner,
@@ -2262,12 +2333,42 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
     </style>
   </head>
   <body>
-    <main class="sf-root">
-      ${errorBanner}
-      ${modulesHtml}
-    </main>
+    <div class="sf-screen${immersiveHero ? ' is-immersive' : ''}" id="sfScreen">
+      <div class="sf-overlay">
+        <div class="sf-statusbar">
+          <span>9:41</span>
+          <span class="sf-statusbar__right">
+            ${renderStatusSignalIcon()}
+            ${renderStatusWifiIcon()}
+            <span class="sf-battery-badge" aria-hidden="true">
+              <span class="sf-battery-badge__value">73</span>
+              <span class="sf-battery-badge__nub"></span>
+            </span>
+          </span>
+        </div>
+        <div class="sf-capsule-wrap" aria-hidden="true">
+          ${renderMiniProgramCapsule()}
+        </div>
+      </div>
+      <div class="sf-scroll" id="sfScroll">
+        <main class="sf-root">
+          ${errorBanner}
+          ${modulesHtml}
+        </main>
+      </div>
+    </div>
     <script>
       (function () {
+        var screen = document.getElementById('sfScreen');
+        var scrollRoot = document.getElementById('sfScroll');
+        if (screen && scrollRoot) {
+          var handleChrome = function () {
+            var top = scrollRoot.scrollTop || 0;
+            screen.classList.toggle('is-scrolled', top > 36);
+          };
+          handleChrome();
+          scrollRoot.addEventListener('scroll', handleChrome, { passive: true });
+        }
         var carousels = document.querySelectorAll('[data-carousel]');
         carousels.forEach(function (root) {
           var items = root.querySelectorAll('.sf-carousel__item');
@@ -2381,13 +2482,18 @@ function renderModuleInner(projectId, module, designContext) {
   }
 
   if (data.mode === 'carousel_poster' && items.length > 1) {
-    return `<div class="sf-carousel sf-top-slider" data-carousel="true">
-      ${items
+    const carouselItems = items.some((item) => hasImageAsset(item))
+      ? items.filter((item) => hasImageAsset(item))
+      : items;
+    return `<div class="sf-carousel sf-top-slider"${carouselItems.length > 1 ? ' data-carousel="true"' : ''}>
+      ${carouselItems
         .map((item, index) => `<div class="sf-carousel__item${index === 0 ? ' is-active' : ''}" ${imageCardStyleAttr(item, height)}>${renderImageItem(projectId, module.type, item, height)}</div>`)
         .join('')}
-      <div class="sf-carousel__dots">
-        ${items.map((_, index) => `<span class="${index === 0 ? 'is-active' : ''}"></span>`).join('')}
-      </div>
+      ${carouselItems.length > 1
+        ? `<div class="sf-carousel__dots">
+        ${carouselItems.map((_, index) => `<span class="${index === 0 ? 'is-active' : ''}"></span>`).join('')}
+      </div>`
+        : ''}
     </div>`;
   }
 
@@ -2419,7 +2525,9 @@ function renderUserAssetsModule(projectId, module) {
   const metrics = resolveUserAssetsLayoutMetrics(data.body_image_schema);
   const asset = resolveAssetUrl(projectId, data.body_image);
   const avatar = resolveAssetUrl(projectId, data.avatar || USER_ASSETS_DEFAULTS.avatar);
-  const bodyHeight = Math.round((metrics.canvasHeight / metrics.canvasWidth) * 311);
+  const bodyHeight = asset
+    ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * 311)
+    : clamp(Math.round(toNumber(data.height, 208) * 0.38), 72, 108);
   return `<div class="sf-user-assets" style="min-height:${Math.max(124, toNumber(data.height, 188))}px">
     <div class="sf-user-assets__top">
       <div>
@@ -2438,7 +2546,7 @@ function renderUserAssetsModule(projectId, module) {
     <div class="sf-user-assets__body" style="height:${bodyHeight}px">
       ${asset
         ? `<img src="${escapeAttr(asset)}" alt="${escapeAttr(stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt))}" class="sf-image-fill" />`
-        : renderUserAssetsPendingPlaceholder(data.body_image_schema)}
+        : renderUserAssetsPendingPlaceholder()}
     </div>
   </div>`;
 }
@@ -2499,14 +2607,46 @@ function renderPlaceholderPill(width) {
   return `<div class="sf-ph-pill" style="${styleAttr({ width: `${width}px` })}"></div>`;
 }
 
-function renderGenericPendingImageMark(label = '图片待生成') {
-  return `<div class="sf-placeholder__generic-image">
+function renderGenericPendingImageMark(label = '图片待生成', compact = false) {
+  return `<div class="sf-placeholder__generic-image${compact ? ' is-compact' : ''}">
     <svg viewBox="0 0 46 46" fill="none" aria-hidden="true">
       <rect x="8" y="10" width="30" height="26" rx="7" stroke="currentColor" stroke-width="1.6"></rect>
       <circle cx="18" cy="19" r="3.5" fill="currentColor" opacity="0.42"></circle>
       <path d="M14 32l7.2-7.2 5.1 5.1 3.5-3.5L36 32" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
     <span>${escapeHtml(label)}</span>
+  </div>`;
+}
+
+function renderStatusSignalIcon() {
+  return `<svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden="true">
+    <rect x="1" y="9.5" width="3" height="2.5" rx="1.4" fill="currentColor" opacity="0.45"></rect>
+    <rect x="5" y="7" width="3" height="5" rx="1.4" fill="currentColor" opacity="0.61"></rect>
+    <rect x="9" y="4.5" width="3" height="7.5" rx="1.4" fill="currentColor" opacity="0.77"></rect>
+    <rect x="13" y="2" width="3" height="10" rx="1.4" fill="currentColor" opacity="0.93"></rect>
+  </svg>`;
+}
+
+function renderStatusWifiIcon() {
+  return `<svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden="true">
+    <path d="M1.7 4.8C3.6 3 6.2 2 9 2c2.8 0 5.4 1 7.3 2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+    <path d="M4.4 7.5A6.6 6.6 0 0 1 9 5.8c1.8 0 3.4.6 4.6 1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+    <path d="M7.1 10.2A2.9 2.9 0 0 1 9 9.5c.7 0 1.4.3 1.9.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+    <circle cx="9" cy="12" r="1.25" fill="currentColor"></circle>
+  </svg>`;
+}
+
+function renderMiniProgramCapsule() {
+  return `<div class="sf-mini-capsule">
+    <div class="sf-mini-capsule__left">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <span class="sf-mini-capsule__divider"></span>
+    <div class="sf-mini-capsule__right">
+      <span></span>
+    </div>
   </div>`;
 }
 
@@ -2604,21 +2744,9 @@ function renderUserAssetsPendingLayout(schema) {
   </div>`;
 }
 
-function renderUserAssetsPendingPlaceholder(schema) {
+function renderUserAssetsPendingPlaceholder() {
   return `<div class="sf-user-assets-placeholder">
-    <div class="sf-user-assets-placeholder__inner">
-      <div class="sf-placeholder__top">
-        <span class="sf-placeholder__chip">入口布局预览</span>
-        <span class="sf-placeholder__status">待生成</span>
-      </div>
-      <div style="flex:1;min-height:0;display:flex;align-items:center">
-        ${renderGenericPendingImageMark('入口素材待生成')}
-      </div>
-      <div class="sf-placeholder__footer">
-        <strong class="sf-placeholder__title">默认入口布局</strong>
-        <span class="sf-placeholder__desc">${escapeHtml(userAssetsDetailFor(schema))}</span>
-      </div>
-    </div>
+    ${renderGenericPendingImageMark('图片待生成', true)}
   </div>`;
 }
 
@@ -2727,13 +2855,12 @@ function computeUserAssetsHeight(module, schema) {
     schema.design_context.page_width,
   );
   const imageHeight = Math.round((availableWidth * metrics.canvasHeight) / metrics.canvasWidth);
-  const hasBodyImage = Boolean(
-    module.data.body_image ||
-      Object.keys(module.data.body_image_schema?.content?.slots_mapping ?? {}).length,
-  );
-  const fallback = hasBodyImage ? imageHeight + 134 : 132;
+  const hasBodyImage = Boolean(stringOr(module.data.body_image));
+  const fallback = hasBodyImage ? imageHeight + 134 : 208;
   const maxHeight = metrics.isFreeform ? 760 : 560;
-  return blendSuggestion(toNumber(module.data.height, fallback), fallback, 124, maxHeight);
+  return hasBodyImage
+    ? blendSuggestion(toNumber(module.data.height, fallback), fallback, 124, maxHeight)
+    : fallback;
 }
 
 function resolveUserAssetsLayoutMetrics(schema) {
