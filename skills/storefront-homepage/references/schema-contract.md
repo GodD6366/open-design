@@ -43,11 +43,16 @@ The modules array must contain exactly the confirmed modules from
   - `image_prompt_schema.layout.structure` = `landscape_entry_banner`
   - `asset_type` = `png`
   - `entry_purpose` required
+  - `image_prompt_schema.brand` must be omitted or empty; do not show shop logo, brand corner mark, watermark, or shop slogan
+  - `content.tags` must be `[]`
+  - `promotion.price`, `original_price`, `discount`, `badge`, `cta` must be empty strings
+  - visual direction must stay lightweight and distinct from `goods`: prefer horizontal color blocks, light graphics, texture, illustration, or sticker-like elements over product-card photography
 - `goods`
   - `aspect_ratio` = `4:3`
   - `image_prompt_schema.type` = `goods`
   - `image_prompt_schema.layout.structure` = `product_showcase`
   - `promotion.cta` must be non-empty
+  - `image_prompt_schema.brand` must be omitted or empty; do not show shop logo, brand corner mark, watermark, or shop slogan
 - `shop_info`
   - `aspect_ratio` = `9:16`
   - `image_prompt_schema.type` = `shop_info`
@@ -61,4 +66,7 @@ The modules array must contain exactly the confirmed modules from
 - `body_image_schema.layout.slots` must contain at least 2 slots
 - `body_image_schema.content.slots_mapping` must cover every slot id
 - every slot mapping must contain `icon`, `title`, `subtitle`
+- entry-panel image content is limited to function icons, titles, and subtitles; icon style follows the page style
+- background must stay plain white; do not use gradients, patterns, scenic illustration, photography, paper texture, or other complex backgrounds
+- do not introduce shop logo, brand corner mark, watermark, or shop slogan into the entry-panel image
 - do not use legacy keys such as `primaryColor`, `divider`, `aspectRatio`, `tone`, `items`

@@ -86,6 +86,10 @@ const STOREFRONT_TONE_LABELS: Record<string, string> = Object.fromEntries(
   ]),
 );
 
+function isTerminalAssetTask(task: AssetTask) {
+  return task.status === 'done' || task.status === 'failed';
+}
+
 interface Props {
   project: Project;
   routeFileName: string | null;
@@ -144,6 +148,7 @@ export function StorefrontProjectView({
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const tabsLoadedRef = useRef(false);
+  const handledTerminalTaskIdsRef = useRef<Set<string>>(new Set());
   const skillCache = useRef<Map<string, ReturnType<typeof fetchSkill> extends Promise<infer T> ? T : never>>(new Map());
   const designCache = useRef<Map<string, ReturnType<typeof fetchDesignSystem> extends Promise<infer T> ? T : never>>(new Map());
 
@@ -228,15 +233,16 @@ export function StorefrontProjectView({
     setRuntimeError(null);
   }, []);
 
-  const refreshRuntimeState = useCallback(async () => {
-    setRuntimeLoading(true);
+  const refreshRuntimeState = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) setRuntimeLoading(true);
     try {
       const state = await fetchStorefrontState(project.id);
       hydrateRuntimeState(state);
     } catch (err) {
       setRuntimeError(localizeStorefrontText(String(err instanceof Error ? err.message : err)));
     } finally {
-      setRuntimeLoading(false);
+      if (!silent) setRuntimeLoading(false);
     }
   }, [hydrateRuntimeState, project.id]);
 
@@ -509,10 +515,11 @@ export function StorefrontProjectView({
   const handleGenerateAssets = useCallback(async () => {
     setRuntimeBusy('generate-assets');
     setRuntimeError(null);
+    handledTerminalTaskIdsRef.current = new Set();
     try {
       const result = await enqueueStorefrontAssets(project.id, false);
+      hydrateRuntimeState(result.state);
       if (result.tasks.length === 0) {
-        hydrateRuntimeState(result.state);
         setRuntimeBusy(null);
         return;
       }
@@ -525,36 +532,62 @@ export function StorefrontProjectView({
     }
   }, [hydrateRuntimeState, project.id]);
 
-  // Poll generate queue progress every 5 seconds
+  // Poll generate queue progress and refresh preview as each image finishes.
   useEffect(() => {
     if (generateQueue.length === 0) return;
-    const pendingOrRunning = generateQueue.filter((t) => t.status === 'pending' || t.status === 'running');
-    if (pendingOrRunning.length === 0) {
-      // All tasks finished – refresh UI once and clear
-      void refreshProjectFiles();
-      void refreshRuntimeState();
-      onTouchProject();
-      setGenerateQueue([]);
-      setRuntimeBusy(null);
-      return;
-    }
 
     let cancelled = false;
-    const timer = setInterval(async () => {
+    const poll = async () => {
       try {
         const tasks = await fetchStorefrontAssetTasks(project.id);
         if (cancelled) return;
+
         setGenerateQueue(tasks);
+        if (tasks.length === 0) {
+          await Promise.all([
+            refreshProjectFiles(),
+            refreshRuntimeState({ silent: true }),
+          ]);
+          if (cancelled) return;
+          setRuntimeBusy(null);
+          return;
+        }
+
+        const terminalTasks = tasks.filter(isTerminalAssetTask);
+        const newTerminalTasks = terminalTasks.filter(
+          (task) => !handledTerminalTaskIdsRef.current.has(task.id),
+        );
+        if (newTerminalTasks.length > 0) {
+          for (const task of newTerminalTasks) {
+            handledTerminalTaskIdsRef.current.add(task.id);
+          }
+          await Promise.all([
+            refreshProjectFiles(),
+            refreshRuntimeState({ silent: true }),
+          ]);
+          if (cancelled) return;
+          onTouchProject();
+        }
+
+        if (tasks.length > 0 && terminalTasks.length === tasks.length) {
+          setGenerateQueue([]);
+          setRuntimeBusy(null);
+        }
       } catch {
         // Swallow poll errors silently; will retry next tick
       }
-    }, 5000);
+    };
+
+    void poll();
+    const timer = setInterval(() => {
+      void poll();
+    }, 2000);
 
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [generateQueue, project.id, refreshProjectFiles, refreshRuntimeState, onTouchProject]);
+  }, [generateQueue.length, project.id, refreshProjectFiles, refreshRuntimeState, onTouchProject]);
 
   const projectMeta = useMemo(() => {
     const skillName = skills.find((skill) => skill.id === project.skillId)?.name;

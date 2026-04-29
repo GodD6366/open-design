@@ -32,8 +32,21 @@ const STRUCTURES = {
   shop_info: "vertical_shop_story",
 };
 
+const BRAND_PROMPT_MODULES = new Set(["top_slider", "shop_info"]);
+
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasDisplayableBrand(brand) {
+  if (!isRecord(brand)) return false;
+  const logoPosition =
+    typeof brand.logo_position === "string" ? brand.logo_position.trim() : "";
+  return Boolean(
+    (typeof brand.name === "string" && brand.name.trim()) ||
+      (typeof brand.slogan === "string" && brand.slogan.trim()) ||
+      (logoPosition && !/^(none|hidden|off)$/i.test(logoPosition)),
+  );
 }
 
 function isHomepageModuleType(value) {
@@ -403,6 +416,10 @@ function validateImagePromptSchema(module, item, index, errors) {
     fail(errors, `${path}.type 必须是 ${PROMPT_TYPES[module.type]}。`);
   }
 
+  if (!BRAND_PROMPT_MODULES.has(module.type) && hasDisplayableBrand(promptSchema.brand)) {
+    fail(errors, `${path}.brand 对 ${module.type} 不应包含店铺 Logo、品牌角标或店铺 slogan。`);
+  }
+
   if (!isRecord(promptSchema.layout)) {
     fail(errors, `${path}.layout 必须是对象。`);
   } else {
@@ -437,6 +454,21 @@ function validateImagePromptSchema(module, item, index, errors) {
       promptSchema.content.tags.length
     ) {
       fail(errors, `${path}.content.tags 对 top_slider 必须是 []。`);
+    }
+  }
+
+  if (module.type === "banner") {
+    const promotion = promptSchema.promotion ?? {};
+    for (const key of ["price", "original_price", "discount", "badge", "cta"]) {
+      if (promotion[key] !== "") {
+        fail(errors, `${path}.promotion.${key} 对 banner 必须为空，活动横幅只保留轻量入口文案。`);
+      }
+    }
+    if (
+      !Array.isArray(promptSchema.content?.tags) ||
+      promptSchema.content.tags.length
+    ) {
+      fail(errors, `${path}.content.tags 对 banner 必须是 []，不要生成标签胶囊或券墙信息。`);
     }
   }
 
@@ -518,6 +550,19 @@ function validateUserAssets(module, errors) {
 
   if (schema.type !== "mobile_ui_entry_panel") {
     fail(errors, 'user_assets body_image_schema.type 必须是 "mobile_ui_entry_panel"。');
+  }
+
+  const canvasRules = schema.instruction?.canvas_rules;
+  if (
+    isRecord(canvasRules) &&
+    typeof canvasRules.background === "string" &&
+    canvasRules.background !== "pure_white"
+  ) {
+    fail(errors, 'user_assets body_image_schema.instruction.canvas_rules.background 必须是 "pure_white"。');
+  }
+
+  if (schema.visual_style?.color_system?.usage?.background === true) {
+    fail(errors, "user_assets 入口图背景必须保持白色，不允许启用品牌色或复杂背景。");
   }
 
   const slots = schema.layout?.slots;

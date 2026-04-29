@@ -139,7 +139,10 @@
               "background": "pure_white",
               "no_border": true,
               "no_divider": true,
-              "no_outline": true
+              "no_outline": true,
+              "fill_to_edge": true,
+              "no_margin": true,
+              "no_padding": true
             }
           },
           "layout": {
@@ -221,7 +224,16 @@
             "no_outline",
             "no_extra_cards",
             "no_floating_elements",
-            "no_circle_entries"
+            "no_circle_entries",
+            "icon_style_follow_page",
+            "white_background_only",
+            "no_complex_background",
+            "no_background_pattern",
+            "no_gradient_background",
+            "no_photography_background",
+            "no_logo",
+            "no_brand_mark",
+            "no_shop_slogan"
           ],
           "output": {
             "aspect_ratio": "dynamic",
@@ -266,38 +278,33 @@
                 "full_bleed": true
               },
               "style": {
-                "background_type": "gradient",
+                "background_type": "graphic_blocks",
                 "background_color": "#F9F9F9",
                 "primary_color": "#C98C5A",
                 "accent_color": "#C98C5A",
                 "text_color": "#1F2937",
                 "style_tone": "warm",
-                "visual_feel": "realistic_ui"
+                "visual_feel": "light_campaign_graphic"
               },
               "product": {
                 "name": "首页入口",
                 "category": "retail",
-                "visual_type": "photo",
-                "scene": "composition",
+                "visual_type": "graphic",
+                "scene": "landscape_entry",
                 "elements": []
               },
               "content": {
-                "title": "精选入口",
-                "subtitle": "DISCOVER MORE",
-                "description": "首页入口型 Banner",
-                "tags": ["精选", "入口"]
+                "title": "活动入口",
+                "subtitle": "DISCOVER",
+                "description": "轻量活动入口横幅",
+                "tags": []
               },
               "promotion": {
                 "price": "",
                 "original_price": "",
                 "discount": "",
-                "badge": "活动",
+                "badge": "",
                 "cta": ""
-              },
-              "brand": {
-                "name": "店铺品牌",
-                "slogan": "",
-                "logo_position": "corner"
               },
               "constraints": {
                 "no_border": true,
@@ -305,9 +312,19 @@
                 "no_margin_lr": true,
                 "full_bleed": true,
                 "ui_only": true,
+                "no_logo": true,
+                "no_brand_mark": true,
+                "no_shop_slogan": true,
                 "no_button_ui": true,
                 "no_tag_chips": true,
-                "no_dense_text": true
+                "no_dense_text": true,
+                "no_price_text": true,
+                "no_coupon_wall": true,
+                "no_complex_cta": true,
+                "lightweight_copy": true,
+                "visually_distinct_from_goods": true,
+                "prefer_graphic_blocks": true,
+                "no_product_showcase_background": true
               }
             },
             "alt": "首页入口 Banner",
@@ -381,17 +398,15 @@
                 "badge": "",
                 "cta": "立即购买"
               },
-              "brand": {
-                "name": "店铺品牌",
-                "slogan": "",
-                "logo_position": "corner"
-              },
               "constraints": {
                 "no_border": true,
                 "no_divider": true,
                 "no_margin_lr": true,
                 "full_bleed": true,
-                "ui_only": true
+                "ui_only": true,
+                "no_logo": true,
+                "no_brand_mark": true,
+                "no_shop_slogan": true
               }
             },
             "alt": "商品营销卡片",

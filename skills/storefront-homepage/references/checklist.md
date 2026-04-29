@@ -10,6 +10,9 @@
 - Module order matches `storefront.requirements.json`.
 - `top_slider` and `goods` item counts match `counts.sliderCount` / `counts.goodsCount`.
 - `banner` has exactly 1 item and `asset_type = png`.
+- `banner` and `goods` image prompt schemas do not carry displayable `brand`, logo placement, shop logo, brand mark, watermark, or shop slogan instructions.
+- `banner` keeps lightweight entry copy: no tags, price, discount, badge, CTA, coupon wall, or product-card photography background.
 - `user_assets.body_image_schema` keeps the `mobile_ui_entry_panel` DSL intact.
+- `user_assets` only describes function icons, titles, and subtitles; icons follow page style while the background remains plain white with no complex background.
 - Schema copy, palette, and prompt intent stay aligned with the active style guide or inferred industry preset.
 - No HTML artifacts were created.

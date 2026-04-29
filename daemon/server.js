@@ -778,6 +778,9 @@ export async function startServer({ port = 7456 } = {}) {
   app.get('/api/projects/:id/files/:name', async (req, res) => {
     try {
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.type(file.mime).send(file.buffer);
     } catch (err) {
       const code = err && err.code === 'ENOENT' ? 404 : 400;

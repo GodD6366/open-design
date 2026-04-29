@@ -288,6 +288,8 @@ const IMAGE_PROMPT_TYPE_MAP = {
   shop_info: 'shop_info',
 };
 
+const BRAND_PROMPT_MODULES = new Set(['top_slider', 'shop_info']);
+
 const IMAGE_FILE_PREFIX = {
   top_slider: 'top-slider',
   user_assets: 'user-assets',
@@ -295,6 +297,37 @@ const IMAGE_FILE_PREFIX = {
   goods: 'goods',
   shop_info: 'shop-info',
 };
+
+function imagePromptAllowsBrand(moduleType) {
+  return BRAND_PROMPT_MODULES.has(moduleType);
+}
+
+function modulePolicyConstraints(moduleType) {
+  if (moduleType === 'banner') {
+    return {
+      no_logo: true,
+      no_brand_mark: true,
+      no_shop_slogan: true,
+      no_price_text: true,
+      no_coupon_wall: true,
+      no_complex_cta: true,
+      lightweight_copy: true,
+      visually_distinct_from_goods: true,
+      prefer_graphic_blocks: true,
+      no_product_showcase_background: true,
+    };
+  }
+
+  if (moduleType === 'goods') {
+    return {
+      no_logo: true,
+      no_brand_mark: true,
+      no_shop_slogan: true,
+    };
+  }
+
+  return {};
+}
 
 export function storefrontSkillDir(projectRoot) {
   return path.join(projectRoot, 'skills', 'storefront-homepage');
@@ -1172,7 +1205,7 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
     moduleType === 'top_slider'
       ? `${brandName}${itemLabel}`
       : moduleType === 'banner'
-        ? '精选入口'
+        ? '活动入口'
         : moduleType === 'goods'
           ? `主推商品${itemLabel}`
           : '品牌故事';
@@ -1180,14 +1213,14 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
     moduleType === 'top_slider'
       ? 'SPRING FEATURE'
       : moduleType === 'banner'
-        ? 'DISCOVER MORE'
+        ? 'DISCOVER'
         : moduleType === 'goods'
           ? 'LIMITED PICK'
           : 'ABOUT THE BRAND';
   const description = moduleContent || `${brandName} 店铺首页模块`;
   const styleTone = resolvePromptStyleTone(requirements, styleGuide);
 
-  return {
+  const promptSchema = {
     type,
     version: '1.0',
     template:
@@ -1204,7 +1237,9 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
     },
     style: {
       background_type:
-        styleGuide?.preset_id === 'bakery-handdrawn-cream'
+        moduleType === 'banner'
+          ? 'graphic_blocks'
+          : styleGuide?.preset_id === 'bakery-handdrawn-cream'
           ? 'solid'
           : moduleType === 'goods'
             ? 'solid'
@@ -1214,13 +1249,23 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
       accent_color: accent,
       text_color: designContext.color_palette.text_primary,
       style_tone: styleTone,
-      visual_feel: 'realistic_ui',
+      visual_feel: moduleType === 'banner' ? 'light_campaign_graphic' : 'realistic_ui',
     },
     product: {
-      name: moduleType === 'goods' ? `商品 ${index + 1}` : brandName,
+      name:
+        moduleType === 'goods'
+          ? `商品 ${index + 1}`
+          : moduleType === 'banner'
+            ? '活动入口'
+            : brandName,
       category: inferCategory(requirements.style.industry),
-      visual_type: 'photo',
-      scene: moduleType === 'shop_info' ? 'composition' : 'single',
+      visual_type: moduleType === 'banner' ? 'graphic' : 'photo',
+      scene:
+        moduleType === 'shop_info'
+          ? 'composition'
+          : moduleType === 'banner'
+            ? 'landscape_entry'
+            : 'single',
       elements: moduleContent ? [moduleContent] : [],
     },
     content: {
@@ -1228,23 +1273,16 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
       subtitle,
       description,
       tags:
-        moduleType === 'top_slider' || moduleType === 'shop_info'
+        moduleType === 'top_slider' || moduleType === 'shop_info' || moduleType === 'banner'
           ? []
-          : moduleType === 'banner'
-            ? ['精选', '入口']
-            : ['热卖'],
+          : ['热卖'],
     },
     promotion: {
       price: moduleType === 'goods' ? '¥99 起' : '',
       original_price: '',
       discount: '',
-      badge: moduleType === 'banner' ? '活动' : '',
+      badge: '',
       cta: moduleType === 'goods' ? '立即购买' : '',
-    },
-    brand: {
-      name: brandName,
-      slogan: requirements.style.tone || '',
-      logo_position: moduleType === 'shop_info' ? 'bottom' : 'corner',
     },
     constraints: {
       no_border: true,
@@ -1265,10 +1303,27 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
               no_button_ui: true,
               no_tag_chips: true,
               no_dense_text: true,
+              no_price_text: true,
+              no_coupon_wall: true,
+              lightweight_copy: true,
+              visually_distinct_from_goods: true,
+              prefer_graphic_blocks: true,
+              no_product_showcase_background: true,
             }
           : {}),
+      ...modulePolicyConstraints(moduleType),
     },
   };
+
+  if (imagePromptAllowsBrand(moduleType)) {
+    promptSchema.brand = {
+      name: brandName,
+      slogan: requirements.style.tone || '',
+      logo_position: moduleType === 'shop_info' ? 'bottom' : 'corner',
+    };
+  }
+
+  return promptSchema;
 }
 
 function createDefaultUserAssetsImageSchema(accent, styleGuide, requirements) {
@@ -1315,6 +1370,15 @@ function createDefaultUserAssetsImageSchema(accent, styleGuide, requirements) {
       'no_circle_entries',
       'fill_canvas_edge_to_edge',
       'icon_height_200px',
+      'icon_style_follow_page',
+      'white_background_only',
+      'no_complex_background',
+      'no_background_pattern',
+      'no_gradient_background',
+      'no_photography_background',
+      'no_logo',
+      'no_brand_mark',
+      'no_shop_slogan',
     ],
     output: {
       aspect_ratio: 'dynamic',
@@ -1564,7 +1628,7 @@ function normalizePromptSchema(type, input, fallback) {
   const brand = isPlainObject(input.brand) ? input.brand : {};
   const constraints = isPlainObject(input.constraints) ? input.constraints : {};
 
-  return {
+  const normalized = {
     type: stringOr(input.type, fallback.type),
     version: stringOr(input.version, fallback.version),
     template: stringOr(input.template, fallback.template),
@@ -1575,19 +1639,27 @@ function normalizePromptSchema(type, input, fallback) {
       full_bleed: layout.full_bleed !== false,
     },
     style: {
-      background_type: stringOr(style.background_type, fallback.style.background_type),
+      background_type: type === 'banner'
+        ? fallback.style.background_type
+        : stringOr(style.background_type, fallback.style.background_type),
       background_color: stringOr(style.background_color, fallback.style.background_color),
       primary_color: sanitizeHexColor(style.primary_color, fallback.style.primary_color),
       accent_color: sanitizeHexColor(style.accent_color, fallback.style.accent_color),
       text_color: sanitizeHexColor(style.text_color, fallback.style.text_color),
       style_tone: stringOr(style.style_tone, fallback.style.style_tone),
-      visual_feel: stringOr(style.visual_feel, fallback.style.visual_feel),
+      visual_feel: type === 'banner'
+        ? fallback.style.visual_feel
+        : stringOr(style.visual_feel, fallback.style.visual_feel),
     },
     product: {
       name: stringOr(product.name, fallback.product.name),
       category: stringOr(product.category, fallback.product.category),
-      visual_type: stringOr(product.visual_type, fallback.product.visual_type),
-      scene: stringOr(product.scene, fallback.product.scene),
+      visual_type: type === 'banner'
+        ? fallback.product.visual_type
+        : stringOr(product.visual_type, fallback.product.visual_type),
+      scene: type === 'banner'
+        ? fallback.product.scene
+        : stringOr(product.scene, fallback.product.scene),
       elements: Array.isArray(product.elements)
         ? product.elements.filter((value) => typeof value === 'string')
         : fallback.product.elements,
@@ -1596,27 +1668,44 @@ function normalizePromptSchema(type, input, fallback) {
       title: stringOr(content.title, fallback.content.title),
       subtitle: stringOr(content.subtitle, fallback.content.subtitle),
       description: stringOr(content.description, fallback.content.description),
-      tags: Array.isArray(content.tags)
-        ? content.tags.filter((value) => typeof value === 'string')
-        : fallback.content.tags,
+      tags: type === 'banner'
+        ? []
+        : Array.isArray(content.tags)
+          ? content.tags.filter((value) => typeof value === 'string')
+          : fallback.content.tags,
     },
-    promotion: {
-      price: stringOr(promotion.price, fallback.promotion.price),
-      original_price: stringOr(promotion.original_price, fallback.promotion.original_price),
-      discount: stringOr(promotion.discount, fallback.promotion.discount),
-      badge: stringOr(promotion.badge, fallback.promotion.badge),
-      cta: stringOr(promotion.cta, fallback.promotion.cta),
-    },
-    brand: {
-      name: stringOr(brand.name, fallback.brand.name),
-      slogan: stringOr(brand.slogan, fallback.brand.slogan),
-      logo_position: stringOr(brand.logo_position, fallback.brand.logo_position),
-    },
+    promotion: type === 'banner'
+      ? {
+          price: '',
+          original_price: '',
+          discount: '',
+          badge: '',
+          cta: '',
+        }
+      : {
+          price: stringOr(promotion.price, fallback.promotion.price),
+          original_price: stringOr(promotion.original_price, fallback.promotion.original_price),
+          discount: stringOr(promotion.discount, fallback.promotion.discount),
+          badge: stringOr(promotion.badge, fallback.promotion.badge),
+          cta: stringOr(promotion.cta, fallback.promotion.cta),
+        },
     constraints: {
       ...fallback.constraints,
       ...constraints,
+      ...modulePolicyConstraints(type),
     },
   };
+
+  if (imagePromptAllowsBrand(type)) {
+    const fallbackBrand = isPlainObject(fallback.brand) ? fallback.brand : {};
+    normalized.brand = {
+      name: stringOr(brand.name, fallbackBrand.name),
+      slogan: stringOr(brand.slogan, fallbackBrand.slogan),
+      logo_position: stringOr(brand.logo_position, fallbackBrand.logo_position),
+    };
+  }
+
+  return normalized;
 }
 
 function normalizeUserAssetsData(value, designContext, styleGuide, requirements) {
@@ -1689,7 +1778,7 @@ function normalizeUserAssetsSchema(input, fallback) {
         usage: {
           icon: usage.icon !== false,
           accent: usage.accent !== false,
-          background: usage.background === true,
+          background: false,
         },
       },
       icon: {
@@ -1718,9 +1807,18 @@ function normalizeUserAssetsSchema(input, fallback) {
         fallback.content.slots_mapping,
       ),
     },
-    constraints: Array.isArray(input.constraints)
-      ? input.constraints.filter((value) => typeof value === 'string')
-      : fallback.constraints,
+    constraints: uniqueStrings([
+      ...(Array.isArray(fallback.constraints) ? fallback.constraints : []),
+      ...(Array.isArray(input.constraints)
+        ? input.constraints.filter((value) => typeof value === 'string')
+        : []),
+      'icon_style_follow_page',
+      'white_background_only',
+      'no_complex_background',
+      'no_background_pattern',
+      'no_gradient_background',
+      'no_photography_background',
+    ]),
     output: {
       aspect_ratio: stringOr(output.aspect_ratio, fallback.output.aspect_ratio),
       format: stringOr(output.format, fallback.output.format),
@@ -2977,11 +3075,19 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
 function buildImagePrompt(moduleType, item, styleGuide) {
   const promptSchema = deepClone(item.image_prompt_schema ?? {});
   const styleNotes = buildStyleGenerationNotes(styleGuide, moduleType);
-  if (moduleType === 'goods') {
+  if (moduleType === 'banner') {
+    promptSchema.generation_notes = [
+      ...styleNotes,
+      '活动横幅定位为首页入口导流：只保留短标题和短副标题，不要价格、券墙、复杂按钮或多层促销信息。',
+      '不要在画面中展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
+      '横幅必须和商品图明显区分：使用横向色块、轻图形、纹理、插画或贴纸式元素；避免做成商品摄影卡片、白底商品图或与商品模块相同的背景画风。',
+    ];
+  } else if (moduleType === 'goods') {
     const cta = stringOr(promptSchema.promotion?.cta, '立即购买');
     promptSchema.generation_notes = [
       ...styleNotes,
       `商品图必须是带转化动作的营销卡片，购买行动点属于图片内容本身；请将“${cta}”直接设计在画面里，例如按钮、行动条或购买引导区。`,
+      '不要在商品图中展示店铺 Logo、品牌角标、店铺名称水印或 logo placeholder；画面重点放在商品主体、卖点和购买行动点。',
       Array.isArray(item.reference_images) && item.reference_images.length > 0
         ? '已提供参考图：请沿用参考图中的商品主体、包装或摆盘方式、摄影风格、材质质感和整体气质。'
         : '未提供参考图：可以根据提示词自由发挥商品主体、场景和购买引导，但必须保持强转化视觉。',
@@ -3000,10 +3106,14 @@ function buildImagePrompt(moduleType, item, styleGuide) {
 
 function buildUserAssetsPrompt(bodyImageSchema, styleGuide) {
   const promptSchema = deepClone(bodyImageSchema ?? {});
-  const styleNotes = buildStyleGenerationNotes(styleGuide, 'user_assets');
-  if (styleNotes.length > 0) {
-    promptSchema.generation_notes = styleNotes;
-  }
+  const styleNotes = buildUserAssetsGenerationNotes(styleGuide);
+  promptSchema.generation_notes = [
+    ...styleNotes,
+    '客户资产入口图只表达功能入口 icon、标题、副标题，不要添加其他营销文案、装饰场景或复杂背景。',
+    '入口 icon 的造型、描边、圆角和用色跟随页面整体视觉风格；除 icon 和必要文字外不要引入额外图形。',
+    '画布背景必须保持纯白色，不能使用页面背景色、渐变、纹理、插画场景、摄影图、纸张质感或复杂图案。',
+    '不要展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
+  ];
   if (Array.isArray(styleGuide?.reference_images) && styleGuide.reference_images.length > 0) {
     promptSchema.reference_style = {
       preset_id: stringOr(styleGuide?.preset_id, 'custom'),
@@ -3011,6 +3121,21 @@ function buildUserAssetsPrompt(bodyImageSchema, styleGuide) {
     };
   }
   return JSON.stringify(promptSchema);
+}
+
+function buildUserAssetsGenerationNotes(styleGuide) {
+  const notes = [];
+  const guide = coerceStyleGuide(styleGuide, null);
+  if (guide.analysis?.icon_style) {
+    notes.push(`入口 icon 风格参考页面视觉：${guide.analysis.icon_style}`);
+  }
+  if (Array.isArray(guide.generation_rules?.avoid) && guide.generation_rules.avoid.length > 0) {
+    notes.push(`避免：${guide.generation_rules.avoid.join('；')}`);
+  }
+  if (guide.preset_id === 'bakery-handdrawn-cream') {
+    notes.push('入口 icon 可以保留手绘涂鸦感和暖橙点缀，但背景仍必须是纯白，不要奶油纸感底纹或海报背景。');
+  }
+  return uniqueStrings(notes.filter(Boolean));
 }
 
 function buildStyleGenerationNotes(styleGuide, moduleType) {
@@ -3098,15 +3223,15 @@ async function runAssetTask(task) {
       });
     }
     task.assign(task.fileName);
-    task.status = 'done';
-    console.log(`[storefront] 生图完成: ${task.fileName}`);
     await persistSchema(task.projectDir, task.projectId, task.schema, task.requirements, task.styleGuide);
     await writeRuntimeState(task.projectDir, 'assets-ready', 'info', `${task.fileName}: generated`);
+    task.status = 'done';
+    console.log(`[storefront] 生图完成: ${task.fileName}`);
   } catch (error) {
-    task.status = 'failed';
     task.error = error instanceof Error ? error.message : String(error);
     console.error(`[storefront] 生图失败: ${task.fileName} — ${task.error}`);
     await writeRuntimeState(task.projectDir, 'assets-ready', 'error', `${task.fileName}: ${task.error}`);
+    task.status = 'failed';
   }
 }
 
