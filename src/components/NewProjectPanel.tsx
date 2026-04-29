@@ -13,8 +13,6 @@ import { Skeleton } from './Loading';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-export type CreateTab = 'prototype' | 'deck' | 'template' | 'other';
-
 export interface CreateInput {
   name: string;
   skillId: string | null;
@@ -31,12 +29,7 @@ interface Props {
   loading?: boolean;
 }
 
-const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
-  prototype: 'newproj.tabPrototype',
-  deck: 'newproj.tabDeck',
-  template: 'newproj.tabTemplate',
-  other: 'newproj.tabOther',
-};
+export type CreateTab = 'prototype' | 'deck' | 'template' | 'storefront' | 'other';
 
 export function NewProjectPanel({
   skills,
@@ -47,7 +40,9 @@ export function NewProjectPanel({
   loading = false,
 }: Props) {
   const t = useT();
-  const [tab, setTab] = useState<CreateTab>('prototype');
+  const [tab, setTab] = useState<CreateTab>(() => (
+    templates.length > 0 ? 'template' : 'storefront'
+  ));
   const [name, setName] = useState('');
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
@@ -79,6 +74,12 @@ export function NewProjectPanel({
     }
   }, [tab, templates, templateId]);
 
+  useEffect(() => {
+    if (tab === 'template' && templates.length === 0) {
+      setTab('storefront');
+    }
+  }, [tab, templates.length]);
+
   // The skill the request still routes through — kept so prototype/deck
   // pick a default-rendered skill (so the agent gets the right SKILL.md
   // body) without requiring the user to choose one explicitly.
@@ -96,6 +97,18 @@ export function NewProjectPanel({
         ?? list[0]?.id
         ?? null;
     }
+    if (tab === 'storefront') {
+      const list = skills.filter((s) => s.mode === 'storefront');
+      return list.find((s) => s.defaultFor.includes('storefront'))?.id
+        ?? list[0]?.id
+        ?? null;
+    }
+    if (tab === 'template') {
+      const list = skills.filter((s) => s.mode === 'template');
+      return list.find((s) => s.defaultFor.includes('template'))?.id
+        ?? list[0]?.id
+        ?? null;
+    }
     return null;
   }, [tab, skills]);
 
@@ -104,8 +117,8 @@ export function NewProjectPanel({
 
   function handleCreate() {
     if (!canCreate) return;
-    const primaryDs = selectedDsIds[0] ?? null;
-    const inspirations = selectedDsIds.slice(1);
+    const primaryDs = tab === 'storefront' ? null : (selectedDsIds[0] ?? null);
+    const inspirations = tab === 'storefront' ? [] : selectedDsIds.slice(1);
     const metadata = buildMetadata({
       tab,
       fidelity,
@@ -126,7 +139,7 @@ export function NewProjectPanel({
   return (
     <div className="newproj">
       <div className="newproj-tabs" role="tablist">
-        {(Object.keys(TAB_LABEL_KEYS) as CreateTab[]).map((entry) => (
+        {(['template', 'storefront'] as CreateTab[]).map((entry) => (
           <button
             key={entry}
             role="tab"
@@ -134,7 +147,7 @@ export function NewProjectPanel({
             className={`newproj-tab ${tab === entry ? 'active' : ''}`}
             onClick={() => setTab(entry)}
           >
-            {t(TAB_LABEL_KEYS[entry])}
+            {tabLabel(entry, t)}
           </button>
         ))}
       </div>
@@ -148,15 +161,17 @@ export function NewProjectPanel({
           onChange={(e) => setName(e.target.value)}
         />
 
-        <DesignSystemPicker
-          designSystems={designSystems}
-          defaultDesignSystemId={defaultDesignSystemId}
-          selectedIds={selectedDsIds}
-          multi={dsMulti}
-          onChangeMulti={setDsMulti}
-          onChange={setSelectedDsIds}
-          loading={loading}
-        />
+        {tab !== 'storefront' ? (
+          <DesignSystemPicker
+            designSystems={designSystems}
+            defaultDesignSystemId={defaultDesignSystemId}
+            selectedIds={selectedDsIds}
+            multi={dsMulti}
+            onChangeMulti={setDsMulti}
+            onChange={setSelectedDsIds}
+            loading={loading}
+          />
+        ) : null}
 
         {tab === 'prototype' ? (
           <FidelityPicker value={fidelity} onChange={setFidelity} />
@@ -797,6 +812,9 @@ function buildMetadata(input: {
       ...inspirations,
     };
   }
+  if (input.tab === 'storefront') {
+    return { kind: 'storefront' };
+  }
   return { kind: 'other', ...inspirations };
 }
 
@@ -808,6 +826,8 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
       return t('newproj.titleDeck');
     case 'template':
       return t('newproj.titleTemplate');
+    case 'storefront':
+      return t('newproj.titleStorefront');
     case 'other':
       return t('newproj.titleOther');
   }
@@ -815,5 +835,20 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
 
 function autoName(tab: CreateTab, t: TranslateFn): string {
   const stamp = new Date().toLocaleDateString();
-  return `${t(TAB_LABEL_KEYS[tab])} · ${stamp}`;
+  return `${tabLabel(tab, t)} · ${stamp}`;
+}
+
+function tabLabel(tab: CreateTab, t: TranslateFn): string {
+  switch (tab) {
+    case 'prototype':
+      return t('newproj.tabPrototype');
+    case 'deck':
+      return t('newproj.tabDeck');
+    case 'template':
+      return t('newproj.tabTemplate');
+    case 'storefront':
+      return t('newproj.tabStorefront');
+    case 'other':
+      return t('newproj.tabOther');
+  }
 }

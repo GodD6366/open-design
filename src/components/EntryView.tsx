@@ -330,6 +330,9 @@ function metadataForSkill(skill: SkillSummary): ProjectMetadata {
         typeof skill.animations === 'boolean' ? skill.animations : false,
     };
   }
+  if (kind === 'storefront') {
+    return { kind };
+  }
   return { kind: 'other' };
 }
 
@@ -337,5 +340,6 @@ function kindForSkill(skill: SkillSummary): ProjectKind {
   if (skill.mode === 'deck') return 'deck';
   if (skill.mode === 'prototype') return 'prototype';
   if (skill.mode === 'template') return 'template';
+  if (skill.mode === 'storefront') return 'storefront';
   return 'other';
 }

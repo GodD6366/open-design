@@ -49,6 +49,7 @@ interface Props {
   // Names that exist in the project folder. Tool cards and chips use this
   // set to decide whether a path can be opened as a tab.
   projectFileNames?: Set<string>;
+  onRefreshProjectFiles?: () => Promise<void> | void;
   onEnsureProject: () => Promise<string | null>;
   onSend: (prompt: string, attachments: ChatAttachment[]) => void;
   onStop: () => void;
@@ -59,7 +60,7 @@ interface Props {
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
-  onSubmitForm?: (text: string) => void;
+  onSubmitForm?: (text: string, attachments?: ChatAttachment[]) => void;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   // Conversation list that used to live in the topbar. The chat tab now
@@ -84,6 +85,7 @@ export function ChatPane({
   projectId,
   projectFiles,
   projectFileNames,
+  onRefreshProjectFiles,
   onEnsureProject,
   onSend,
   onStop,
@@ -344,7 +346,10 @@ export function ChatPane({
                     message={m}
                     streaming={streaming && m.id === lastAssistantId}
                     projectId={projectId}
+                    projectFiles={projectFiles}
                     projectFileNames={projectFileNames}
+                    onRefreshProjectFiles={onRefreshProjectFiles}
+                    onEnsureProject={onEnsureProject}
                     onRequestOpenFile={onRequestOpenFile}
                     isLast={m.id === lastAssistantId}
                     nextUserContent={nextUserContentByAssistantId.get(m.id)}

@@ -1,0 +1,486 @@
+{
+  "page_id": "storefront_homepage",
+  "version": "1.0.0",
+  "layout_mode": "overlay",
+  "design_context": {
+    "theme": "storefront_overlay",
+    "color_palette": {
+      "bg": "#F9F9F9",
+      "card_bg": "#FFFFFF",
+      "card_subtle": "#F3F4F6",
+      "text_primary": "#1F2937",
+      "text_secondary": "#6B7280",
+      "accent": "#C98C5A"
+    },
+    "radius": "8px",
+    "shadow": "0 18px 48px rgba(94, 63, 37, 0.14)",
+    "spacing": 16,
+    "page_width": 375
+  },
+  "modules": [
+    {
+      "id": "top_slider_1",
+      "type": "top_slider",
+      "source": "ai",
+      "variant": "default",
+      "layout": {
+        "offsetY": 0,
+        "zIndex": 1,
+        "paddingX": 0,
+        "paddingTop": 0,
+        "paddingBottom": 0
+      },
+      "editable": {
+        "data": true,
+        "layout": true,
+        "variant": true
+      },
+      "data": {
+        "mode": "carousel_poster",
+        "height": 500,
+        "auto_play_ms": 3000,
+        "items": [
+          {
+            "id": "top_slider_1",
+            "image": "",
+            "image_prompt_schema": {
+              "type": "carousel_banner",
+              "version": "1.0",
+              "template": "product",
+              "layout": {
+                "ratio": "3:4",
+                "structure": "poster_hero",
+                "padding": 24,
+                "full_bleed": true
+              },
+              "style": {
+                "background_type": "gradient",
+                "background_color": "#F9F9F9",
+                "primary_color": "#C98C5A",
+                "accent_color": "#C98C5A",
+                "text_color": "#1F2937",
+                "style_tone": "warm",
+                "visual_feel": "realistic_ui"
+              },
+              "product": {
+                "name": "主推产品",
+                "category": "retail",
+                "visual_type": "photo",
+                "scene": "single",
+                "elements": []
+              },
+              "content": {
+                "title": "主视觉标题",
+                "subtitle": "SPRING FEATURE",
+                "description": "顶部主视觉海报",
+                "tags": []
+              },
+              "promotion": {
+                "price": "",
+                "original_price": "",
+                "discount": "",
+                "badge": "",
+                "cta": ""
+              },
+              "brand": {
+                "name": "店铺品牌",
+                "slogan": "",
+                "logo_position": "corner"
+              },
+              "constraints": {
+                "no_border": true,
+                "no_divider": true,
+                "no_margin_lr": true,
+                "full_bleed": true,
+                "ui_only": true,
+                "poster_like": true,
+                "no_bottom_panel": true,
+                "no_button_ui": true,
+                "no_tag_chips": true,
+                "no_dense_text": true
+              }
+            },
+            "alt": "顶部主视觉",
+            "aspect_ratio": "3:4"
+          }
+        ]
+      }
+    },
+    {
+      "id": "user_assets_1",
+      "type": "user_assets",
+      "source": "ai",
+      "variant": "default",
+      "layout": {
+        "offsetY": 0,
+        "zIndex": 1,
+        "paddingX": 16,
+        "paddingTop": 0,
+        "paddingBottom": 16
+      },
+      "editable": {
+        "data": true,
+        "layout": true,
+        "variant": true
+      },
+      "data": {
+        "greeting": "Hello",
+        "nickname": "店铺会员",
+        "upgrade_tip": "优化首页功能入口组织，提升到店与下单转化。",
+        "progress_percent": 33,
+        "body_image": "",
+        "body_image_no_cache": false,
+        "body_alt": "客户资产功能入口图",
+        "body_image_schema": {
+          "type": "mobile_ui_entry_panel",
+          "instruction": {
+            "strict_mode": true,
+            "canvas_rules": {
+              "background": "pure_white",
+              "no_border": true,
+              "no_divider": true,
+              "no_outline": true
+            }
+          },
+          "layout": {
+            "structure": "grid",
+            "distribution": "auto_balance",
+            "alignment": {
+              "horizontal": "full_bleed",
+              "edge": "no_padding"
+            },
+            "spacing": {
+              "mode": "whitespace_only",
+              "density": "comfortable"
+            },
+            "grouping": {
+              "enabled": true,
+              "visual_method": "spacing_only"
+            },
+            "slots": [
+              {
+                "id": "left",
+                "role": "sub_action",
+                "size": "medium",
+                "position": "left"
+              },
+              {
+                "id": "right",
+                "role": "sub_action",
+                "size": "medium",
+                "position": "right"
+              }
+            ]
+          },
+          "visual_style": {
+            "design_principle": "minimal_ui",
+            "brand_tone": "premium",
+            "color_system": {
+              "primary": "#C98C5A",
+              "usage": {
+                "icon": true,
+                "accent": true,
+                "background": false
+              }
+            },
+            "icon": {
+              "style": "flat_duotone",
+              "shape": "rounded",
+              "stroke": "none"
+            },
+            "block": {
+              "radius": 22,
+              "shadow": "soft"
+            },
+            "typography": {
+              "title_case": "chinese",
+              "subtitle_case": "uppercase"
+            }
+          },
+          "content": {
+            "mode": "dynamic_binding",
+            "source": "slots_mapping",
+            "fields": ["icon", "title", "subtitle"],
+            "slots_mapping": {
+              "left": {
+                "icon": "sparkles",
+                "title": "到店自取",
+                "subtitle": "功能入口"
+              },
+              "right": {
+                "icon": "sparkles",
+                "title": "外卖点单",
+                "subtitle": "功能入口"
+              }
+            }
+          },
+          "constraints": [
+            "pure_white_background",
+            "no_border",
+            "no_divider",
+            "no_outline",
+            "no_extra_cards",
+            "no_floating_elements",
+            "no_circle_entries"
+          ],
+          "output": {
+            "aspect_ratio": "dynamic",
+            "format": "image",
+            "target": "mobile_ui"
+          }
+        }
+      }
+    },
+    {
+      "id": "banner_1",
+      "type": "banner",
+      "source": "ai",
+      "variant": "default",
+      "layout": {
+        "offsetY": 0,
+        "zIndex": 1,
+        "paddingX": 0,
+        "paddingTop": 0,
+        "paddingBottom": 0
+      },
+      "editable": {
+        "data": true,
+        "layout": true,
+        "variant": true
+      },
+      "data": {
+        "mode": "single",
+        "height": 200,
+        "items": [
+          {
+            "id": "banner_1",
+            "image": "",
+            "image_prompt_schema": {
+              "type": "banner",
+              "version": "1.0",
+              "template": "promotion",
+              "layout": {
+                "ratio": "75:30",
+                "structure": "landscape_entry_banner",
+                "padding": 24,
+                "full_bleed": true
+              },
+              "style": {
+                "background_type": "gradient",
+                "background_color": "#F9F9F9",
+                "primary_color": "#C98C5A",
+                "accent_color": "#C98C5A",
+                "text_color": "#1F2937",
+                "style_tone": "warm",
+                "visual_feel": "realistic_ui"
+              },
+              "product": {
+                "name": "首页入口",
+                "category": "retail",
+                "visual_type": "photo",
+                "scene": "composition",
+                "elements": []
+              },
+              "content": {
+                "title": "精选入口",
+                "subtitle": "DISCOVER MORE",
+                "description": "首页入口型 Banner",
+                "tags": ["精选", "入口"]
+              },
+              "promotion": {
+                "price": "",
+                "original_price": "",
+                "discount": "",
+                "badge": "活动",
+                "cta": ""
+              },
+              "brand": {
+                "name": "店铺品牌",
+                "slogan": "",
+                "logo_position": "corner"
+              },
+              "constraints": {
+                "no_border": true,
+                "no_divider": true,
+                "no_margin_lr": true,
+                "full_bleed": true,
+                "ui_only": true,
+                "no_button_ui": true,
+                "no_tag_chips": true,
+                "no_dense_text": true
+              }
+            },
+            "alt": "首页入口 Banner",
+            "aspect_ratio": "75:30",
+            "asset_type": "png",
+            "entry_purpose": "首页入口"
+          }
+        ]
+      }
+    },
+    {
+      "id": "goods_1",
+      "type": "goods",
+      "source": "ai",
+      "variant": "default",
+      "layout": {
+        "offsetY": 0,
+        "zIndex": 1,
+        "paddingX": 0,
+        "paddingTop": 0,
+        "paddingBottom": 0
+      },
+      "editable": {
+        "data": true,
+        "layout": true,
+        "variant": true
+      },
+      "data": {
+        "mode": "single",
+        "height": 260,
+        "items": [
+          {
+            "id": "goods_1",
+            "image": "",
+            "image_prompt_schema": {
+              "type": "goods",
+              "version": "1.0",
+              "template": "product",
+              "layout": {
+                "ratio": "4:3",
+                "structure": "product_showcase",
+                "padding": 24,
+                "full_bleed": true
+              },
+              "style": {
+                "background_type": "solid",
+                "background_color": "#F9F9F9",
+                "primary_color": "#C98C5A",
+                "accent_color": "#C98C5A",
+                "text_color": "#1F2937",
+                "style_tone": "warm",
+                "visual_feel": "realistic_ui"
+              },
+              "product": {
+                "name": "主推商品",
+                "category": "retail",
+                "visual_type": "photo",
+                "scene": "single",
+                "elements": []
+              },
+              "content": {
+                "title": "主推商品",
+                "subtitle": "LIMITED PICK",
+                "description": "商品营销卡片",
+                "tags": ["热卖"]
+              },
+              "promotion": {
+                "price": "¥99 起",
+                "original_price": "",
+                "discount": "",
+                "badge": "",
+                "cta": "立即购买"
+              },
+              "brand": {
+                "name": "店铺品牌",
+                "slogan": "",
+                "logo_position": "corner"
+              },
+              "constraints": {
+                "no_border": true,
+                "no_divider": true,
+                "no_margin_lr": true,
+                "full_bleed": true,
+                "ui_only": true
+              }
+            },
+            "alt": "商品营销卡片",
+            "aspect_ratio": "4:3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "shop_info_1",
+      "type": "shop_info",
+      "source": "ai",
+      "variant": "default",
+      "layout": {
+        "offsetY": 0,
+        "zIndex": 1,
+        "paddingX": 0,
+        "paddingTop": 0,
+        "paddingBottom": 0
+      },
+      "editable": {
+        "data": true,
+        "layout": true,
+        "variant": true
+      },
+      "data": {
+        "mode": "single",
+        "height": 540,
+        "items": [
+          {
+            "id": "shop_info_1",
+            "image": "",
+            "image_prompt_schema": {
+              "type": "shop_info",
+              "version": "1.0",
+              "template": "brand",
+              "layout": {
+                "ratio": "9:16",
+                "structure": "vertical_shop_story",
+                "padding": 24,
+                "full_bleed": true
+              },
+              "style": {
+                "background_type": "gradient",
+                "background_color": "#F9F9F9",
+                "primary_color": "#C98C5A",
+                "accent_color": "#C98C5A",
+                "text_color": "#1F2937",
+                "style_tone": "warm",
+                "visual_feel": "realistic_ui"
+              },
+              "product": {
+                "name": "品牌故事",
+                "category": "retail",
+                "visual_type": "photo",
+                "scene": "composition",
+                "elements": []
+              },
+              "content": {
+                "title": "品牌故事",
+                "subtitle": "ABOUT THE BRAND",
+                "description": "品牌信息长图",
+                "tags": []
+              },
+              "promotion": {
+                "price": "",
+                "original_price": "",
+                "discount": "",
+                "badge": "",
+                "cta": ""
+              },
+              "brand": {
+                "name": "店铺品牌",
+                "slogan": "",
+                "logo_position": "bottom"
+              },
+              "constraints": {
+                "no_border": true,
+                "no_divider": true,
+                "no_margin_lr": true,
+                "full_bleed": true,
+                "ui_only": true
+              }
+            },
+            "alt": "品牌信息长图",
+            "aspect_ratio": "9:16"
+          }
+        ]
+      }
+    }
+  ]
+}

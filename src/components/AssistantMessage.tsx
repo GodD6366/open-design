@@ -7,13 +7,16 @@ import { QuestionFormView, parseSubmittedAnswers } from './QuestionForm';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import type { AgentEvent, ChatMessage, ProjectFile } from '../types';
+import type { AgentEvent, ChatAttachment, ChatMessage, ProjectFile } from '../types';
 
 interface Props {
   message: ChatMessage;
   streaming: boolean;
   projectId: string | null;
+  projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
+  onRefreshProjectFiles?: () => Promise<void> | void;
+  onEnsureProject?: () => Promise<string | null>;
   onRequestOpenFile?: (name: string) => void;
   // True only for the most recent assistant message — gate question-form
   // interactivity on this so older forms render as a locked "answered"
@@ -25,7 +28,7 @@ interface Props {
   nextUserContent?: string;
   // Submit handler the form fires when the user picks answers — opaque
   // to AssistantMessage; ProjectView wires it into onSend.
-  onSubmitForm?: (text: string) => void;
+  onSubmitForm?: (text: string, attachments?: ChatAttachment[]) => void;
 }
 
 /**
@@ -41,7 +44,10 @@ export function AssistantMessage({
   message,
   streaming,
   projectId,
+  projectFiles,
   projectFileNames,
+  onRefreshProjectFiles,
+  onEnsureProject,
   onRequestOpenFile,
   isLast,
   nextUserContent,
@@ -73,15 +79,19 @@ export function AssistantMessage({
                 text={b.text}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
+                projectId={projectId}
+                projectFiles={projectFiles}
+                onRefreshProjectFiles={onRefreshProjectFiles}
+                onEnsureProject={onEnsureProject}
                 nextUserContent={nextUserContent}
                 locallySubmitted={locallySubmitted}
-                onSubmitForm={(formId, text) => {
+                onSubmitForm={(formId, text, attachments) => {
                   setLocallySubmitted((prev) => {
                     const next = new Set(prev);
                     next.add(formId);
                     return next;
                   });
-                  onSubmitForm?.(text);
+                  onSubmitForm?.(text, attachments);
                 }}
               />
             );
@@ -273,6 +283,10 @@ function ProseBlock({
   text,
   isLastAssistant,
   streaming,
+  projectId,
+  projectFiles,
+  onRefreshProjectFiles,
+  onEnsureProject,
   nextUserContent,
   locallySubmitted,
   onSubmitForm,
@@ -280,9 +294,13 @@ function ProseBlock({
   text: string;
   isLastAssistant: boolean;
   streaming: boolean;
+  projectId: string | null;
+  projectFiles?: ProjectFile[];
+  onRefreshProjectFiles?: () => Promise<void> | void;
+  onEnsureProject?: () => Promise<string | null>;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
-  onSubmitForm: (formId: string, text: string) => void;
+  onSubmitForm: (formId: string, text: string, attachments: ChatAttachment[]) => void;
 }) {
   const cleaned = useMemo(() => stripArtifact(text), [text]);
   const segments = useMemo(() => splitOnQuestionForms(cleaned), [cleaned]);
@@ -316,6 +334,10 @@ function ProseBlock({
             form={seg.form}
             isLastAssistant={isLastAssistant}
             streaming={streaming}
+            projectId={projectId}
+            projectFiles={projectFiles}
+            onRefreshProjectFiles={onRefreshProjectFiles}
+            onEnsureProject={onEnsureProject}
             nextUserContent={nextUserContent}
             locallySubmitted={locallySubmitted}
             onSubmitForm={onSubmitForm}
@@ -330,6 +352,10 @@ function FormBlock({
   form,
   isLastAssistant,
   streaming,
+  projectId,
+  projectFiles,
+  onRefreshProjectFiles,
+  onEnsureProject,
   nextUserContent,
   locallySubmitted,
   onSubmitForm,
@@ -337,9 +363,13 @@ function FormBlock({
   form: QuestionForm;
   isLastAssistant: boolean;
   streaming: boolean;
+  projectId: string | null;
+  projectFiles?: ProjectFile[];
+  onRefreshProjectFiles?: () => Promise<void> | void;
+  onEnsureProject?: () => Promise<string | null>;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
-  onSubmitForm: (formId: string, text: string) => void;
+  onSubmitForm: (formId: string, text: string, attachments: ChatAttachment[]) => void;
 }) {
   // Reconstruct prior answers from a follow-up user message so older
   // forms in the scrollback render in their answered state.
@@ -355,7 +385,11 @@ function FormBlock({
       form={form}
       interactive={interactive}
       submittedAnswers={submittedFromHistory ?? undefined}
-      onSubmit={(text) => onSubmitForm(form.id, text)}
+      projectId={projectId}
+      projectFiles={projectFiles}
+      onRefreshProjectFiles={onRefreshProjectFiles}
+      onEnsureProject={onEnsureProject}
+      onSubmit={(text, attachments) => onSubmitForm(form.id, text, attachments)}
     />
   );
 }

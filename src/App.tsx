@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { ProjectView } from './components/ProjectView';
+import { StorefrontProjectView } from './components/StorefrontProjectView';
 import { SettingsDialog } from './components/SettingsDialog';
 import {
   daemonIsLive,
@@ -261,25 +262,47 @@ export function App() {
   return (
     <>
       {activeProject ? (
-        <ProjectView
-          key={activeProject.id}
-          project={activeProject}
-          routeFileName={route.kind === 'project' ? route.fileName : null}
-          config={config}
-          agents={agents}
-          skills={skills}
-          designSystems={designSystems}
-          daemonLive={daemonLive}
-          onModeChange={handleModeChange}
-          onAgentChange={handleAgentChange}
-          onRefreshAgents={refreshAgents}
-          onOpenSettings={openSettings}
-          onBack={handleBack}
-          onClearPendingPrompt={handleClearPendingPrompt}
-          onTouchProject={handleTouchProject}
-          onProjectChange={handleProjectChange}
-          onProjectsRefresh={refreshProjects}
-        />
+        activeProject.metadata?.kind === 'storefront' ? (
+          <StorefrontProjectView
+            key={activeProject.id}
+            project={activeProject}
+            routeFileName={route.kind === 'project' ? route.fileName : null}
+            config={config}
+            agents={agents}
+            skills={skills}
+            designSystems={designSystems}
+            daemonLive={daemonLive}
+            onModeChange={handleModeChange}
+            onAgentChange={handleAgentChange}
+            onRefreshAgents={refreshAgents}
+            onOpenSettings={openSettings}
+            onBack={handleBack}
+            onClearPendingPrompt={handleClearPendingPrompt}
+            onTouchProject={handleTouchProject}
+            onProjectChange={handleProjectChange}
+            onProjectsRefresh={refreshProjects}
+          />
+        ) : (
+          <ProjectView
+            key={activeProject.id}
+            project={activeProject}
+            routeFileName={route.kind === 'project' ? route.fileName : null}
+            config={config}
+            agents={agents}
+            skills={skills}
+            designSystems={designSystems}
+            daemonLive={daemonLive}
+            onModeChange={handleModeChange}
+            onAgentChange={handleAgentChange}
+            onRefreshAgents={refreshAgents}
+            onOpenSettings={openSettings}
+            onBack={handleBack}
+            onClearPendingPrompt={handleClearPendingPrompt}
+            onTouchProject={handleTouchProject}
+            onProjectChange={handleProjectChange}
+            onProjectsRefresh={refreshProjects}
+          />
+        )
       ) : (
         <EntryView
           skills={skills}

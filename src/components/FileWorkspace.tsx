@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import {
   deleteProjectFile,
@@ -25,6 +25,12 @@ interface Props {
   // daemon's SQLite store can hold the source of truth and survive reloads.
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
+  leadingTab?: {
+    id: string;
+    label: string;
+    icon: ComponentProps<typeof Icon>['name'];
+    render: () => ReactNode;
+  };
 }
 
 interface SketchState {
@@ -47,13 +53,16 @@ export function FileWorkspace({
   openRequest,
   tabsState,
   onTabsStateChange,
+  leadingTab,
 }: Props) {
   const t = useT();
+  const fallbackTab = leadingTab?.id ?? DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
-  // at a pending sketch — pending sketches are not in tabsState.tabs.
+  // at a pending sketch or a parent-provided leading tab — neither is in
+  // tabsState.tabs.
   const persistedTabs = tabsState.tabs;
   const [activeTab, setActiveTab] = useState<string>(
-    tabsState.active ?? DESIGN_FILES_TAB,
+    tabsState.active ?? fallbackTab,
   );
 
   const [showPasteDialog, setShowPasteDialog] = useState(false);
@@ -64,11 +73,11 @@ export function FileWorkspace({
   // (or on project switch). Fall back to the Design Files browser so a
   // fresh project lands in a useful place.
   useEffect(() => {
-    setActiveTab(tabsState.active ?? DESIGN_FILES_TAB);
-  }, [tabsState.active]);
+    setActiveTab(tabsState.active ?? fallbackTab);
+  }, [fallbackTab, tabsState.active]);
 
   function setPersistedActive(name: string | null) {
-    setActiveTab(name ?? DESIGN_FILES_TAB);
+    setActiveTab(name ?? fallbackTab);
     onTabsStateChange({ tabs: persistedTabs, active: name });
   }
 
@@ -78,10 +87,18 @@ export function FileWorkspace({
     setActiveTab(name);
   }
 
+  function activateLocalTab(name: string) {
+    setActiveTab(name);
+    if (tabsState.active !== null) {
+      onTabsStateChange({ tabs: persistedTabs, active: null });
+    }
+  }
+
   // When the persisted tab list changes and the active tab is gone, fall
   // back to the last remaining tab. Skip transient activeTab values
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
+    if (leadingTab && activeTab === leadingTab.id) return;
     if (activeTab === DESIGN_FILES_TAB) return;
     if (sketches[activeTab] && !sketches[activeTab]!.persisted) return;
     if (!persistedTabs.includes(activeTab)) {
@@ -132,7 +149,7 @@ export function FileWorkspace({
         ? nextTabs[nextTabs.length - 1] ?? null
         : tabsState.active;
     onTabsStateChange({ tabs: nextTabs, active: nextActive });
-    setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+    setActiveTab(nextActive ?? fallbackTab);
     setSketches((curr) => {
       const next = { ...curr };
       const entry = next[name];
@@ -163,7 +180,7 @@ export function FileWorkspace({
           ? nextTabs[nextTabs.length - 1] ?? null
           : tabsState.active;
       onTabsStateChange({ tabs: nextTabs, active: nextActive });
-      setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+      setActiveTab(nextActive ?? fallbackTab);
       setSketches((curr) => {
         const next = { ...curr };
         delete next[name];
@@ -185,6 +202,7 @@ export function FileWorkspace({
   // When the active tab is a sketch we don't have items for yet, load from
   // disk. Pending sketches start with loaded=true and skip this path.
   useEffect(() => {
+    if (leadingTab && activeTab === leadingTab.id) return;
     if (activeTab === DESIGN_FILES_TAB) return;
     if (!isSketchName(activeTab)) return;
     if (sketches[activeTab]?.loaded) return;
@@ -277,10 +295,23 @@ export function FileWorkspace({
   return (
     <div className="workspace">
       <div className="ws-tabs-bar">
+        {leadingTab ? (
+          <button
+            type="button"
+            className={`ws-tab ${activeTab === leadingTab.id ? 'active' : ''}`}
+            onClick={() => activateLocalTab(leadingTab.id)}
+            title={leadingTab.label}
+          >
+            <span className="tab-icon" aria-hidden>
+              <Icon name={leadingTab.icon} size={13} />
+            </span>
+            <span className="ws-tab-label">{leadingTab.label}</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
-          onClick={() => setActiveTab(DESIGN_FILES_TAB)}
+          onClick={() => activateLocalTab(DESIGN_FILES_TAB)}
           title={t('workspace.designFiles')}
         >
           <span className="tab-icon" aria-hidden>
@@ -310,7 +341,9 @@ export function FileWorkspace({
         })}
       </div>
       <div className="ws-body">
-        {activeTab === DESIGN_FILES_TAB ? (
+        {leadingTab && activeTab === leadingTab.id ? (
+          leadingTab.render()
+        ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             projectId={projectId}
             files={files}
@@ -351,7 +384,7 @@ export function FileWorkspace({
               href="#"
               onClick={(e) => {
                 e.preventDefault();
-                setActiveTab(DESIGN_FILES_TAB);
+                setActiveTab(fallbackTab);
               }}
             >
               {t('workspace.designFilesLink')}

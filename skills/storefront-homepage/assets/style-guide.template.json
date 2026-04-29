@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "preset_id": "auto",
+  "reference_images": [],
+  "analysis": {
+    "source_summary": "",
+    "icon_style": "",
+    "background_style": "",
+    "layout_style": "",
+    "tone_keywords": []
+  },
+  "generation_rules": {
+    "must": [],
+    "avoid": []
+  }
+}

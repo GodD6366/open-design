@@ -107,10 +107,12 @@ export interface Dict {
   'newproj.tabPrototype': string;
   'newproj.tabDeck': string;
   'newproj.tabTemplate': string;
+  'newproj.tabStorefront': string;
   'newproj.tabOther': string;
   'newproj.titlePrototype': string;
   'newproj.titleDeck': string;
   'newproj.titleTemplate': string;
+  'newproj.titleStorefront': string;
   'newproj.titleOther': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;
@@ -482,10 +484,21 @@ export interface Dict {
   'qf.hint': string;
   'qf.submitDefault': string;
   'qf.submitDisabledTitle': string;
+  'qf.submitPendingTitle': string;
   'qf.submitTitle': string;
   'qf.cardSelected': string;
   'qf.cardRefs': string;
   'qf.cardSampleText': string;
+  'qf.refUpload': string;
+  'qf.refUploading': string;
+  'qf.refImport': string;
+  'qf.refImporting': string;
+  'qf.refUrlPlaceholder': string;
+  'qf.refSelected': string;
+  'qf.refExisting': string;
+  'qf.refNoImages': string;
+  'qf.refNeedProject': string;
+  'qf.refUploadFailed': string;
 
   // Sketch editor
   'sketch.toolSelect': string;

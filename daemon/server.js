@@ -43,6 +43,16 @@ import {
   updateProject,
   upsertMessage,
 } from './db.js';
+import {
+  applyStorefrontSchemaText,
+  buildStorefrontAgentPrompt,
+  finalizeGeneratedSchema,
+  generateStorefrontAssets,
+  loadStorefrontPromptContext,
+  loadStorefrontState,
+  saveStorefrontBrief,
+  storefrontSkillDir,
+} from './storefront.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +62,8 @@ const SKILLS_DIR = path.join(PROJECT_ROOT, 'skills');
 const DESIGN_SYSTEMS_DIR = path.join(PROJECT_ROOT, 'design-systems');
 const ARTIFACTS_DIR = path.join(PROJECT_ROOT, '.od', 'artifacts');
 const PROJECTS_DIR = path.join(PROJECT_ROOT, '.od', 'projects');
+const STOREFRONT_SKILL_DIR = storefrontSkillDir(PROJECT_ROOT);
+loadDotEnv(PROJECT_ROOT);
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
 const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
@@ -93,6 +105,173 @@ const projectUpload = multer({
   }),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
+
+const IMPORT_IMAGE_TIMEOUT_MS = 15_000;
+const IMPORT_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_EXT_KIND = {
+  '.png': 'png',
+  '.jpg': 'jpeg',
+  '.jpeg': 'jpeg',
+  '.gif': 'gif',
+  '.webp': 'webp',
+  '.svg': 'svg',
+  '.avif': 'avif',
+  '.bmp': 'bmp',
+};
+const IMAGE_MIME_KIND = {
+  'image/png': 'png',
+  'image/jpeg': 'jpeg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/svg+xml': 'svg',
+  'image/avif': 'avif',
+  'image/bmp': 'bmp',
+};
+
+function loadDotEnv(rootDir) {
+  for (const fileName of ['.env', '.env.local']) {
+    const filePath = path.join(rootDir, fileName);
+    if (!fs.existsSync(filePath)) continue;
+    const text = fs.readFileSync(filePath, 'utf8');
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const match = line.match(/^(?:export\s+)?([\w.-]+)\s*=\s*(.*)$/);
+      if (!match) continue;
+      const key = match[1];
+      let value = match[2] ?? '';
+      const quote = value[0];
+      if ((quote === '"' || quote === "'") && value.endsWith(quote)) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+async function runAgentOnce(def, prompt, cwd, extraAllowedDirs = []) {
+  const args = def.buildArgs(prompt, [], extraAllowedDirs);
+  return await new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    let finished = false;
+    let child;
+    try {
+      child = spawn(def.bin, args, {
+        env: { ...process.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd,
+      });
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      if (!finished && child && !child.killed) child.kill('SIGTERM');
+    }, 180_000);
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      finished = true;
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(timeout);
+      finished = true;
+      resolve({ code, signal, stdout, stderr });
+    });
+  });
+}
+
+function imageKindFromUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    const ext = path.extname(parsed.pathname).toLowerCase();
+    return IMAGE_EXT_KIND[ext] ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function imageKindFromContentType(contentType) {
+  const normalized = String(contentType ?? '')
+    .split(';')[0]
+    ?.trim()
+    .toLowerCase();
+  return normalized ? IMAGE_MIME_KIND[normalized] ?? '' : '';
+}
+
+function importedImageFileName(rawUrl, kind) {
+  const parsed = new URL(rawUrl);
+  const ext = path.extname(parsed.pathname).toLowerCase();
+  const safeBase = sanitizeName(path.basename(parsed.pathname, ext) || 'reference-image');
+  const normalizedExt = Object.entries(IMAGE_EXT_KIND).find(([, value]) => value === kind)?.[0] ?? ext;
+  return `ref-${Date.now().toString(36)}-${safeBase}${normalizedExt || '.png'}`;
+}
+
+async function importProjectImageFromUrl(projectId, rawUrl) {
+  const parsed = new URL(rawUrl);
+  if (!/^https?:$/i.test(parsed.protocol)) {
+    throw new Error('Only http/https image URLs are supported.');
+  }
+  const urlKind = imageKindFromUrl(rawUrl);
+  if (!urlKind) {
+    throw new Error('URL must point directly to a supported image file.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), IMPORT_IMAGE_TIMEOUT_MS);
+  try {
+    const response = await fetch(parsed.toString(), {
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Could not download image (${response.status}).`);
+    }
+
+    const mimeKind = imageKindFromContentType(response.headers.get('content-type'));
+    if (!mimeKind) {
+      throw new Error('URL did not return a supported image content type.');
+    }
+    if (mimeKind !== urlKind) {
+      throw new Error('Image URL extension does not match the returned content type.');
+    }
+
+    const contentLength = Number(response.headers.get('content-length') || '0');
+    if (contentLength > IMPORT_IMAGE_MAX_BYTES) {
+      throw new Error('Image is larger than 10MB.');
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > IMPORT_IMAGE_MAX_BYTES) {
+      throw new Error('Image is larger than 10MB.');
+    }
+
+    return await writeProjectFile(
+      PROJECTS_DIR,
+      projectId,
+      importedImageFileName(parsed.toString(), mimeKind),
+      buffer,
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Image download timed out after 15 seconds.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function startServer({ port = 7456 } = {}) {
   const app = express();
@@ -682,6 +861,20 @@ export async function startServer({ port = 7456 } = {}) {
     },
   );
 
+  app.post('/api/projects/:id/import-image-url', async (req, res) => {
+    try {
+      const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+      if (!rawUrl) {
+        return res.status(400).json({ error: 'url required' });
+      }
+      await ensureProject(PROJECTS_DIR, req.params.id);
+      const file = await importProjectImageFromUrl(req.params.id, rawUrl);
+      res.json({ file });
+    } catch (err) {
+      res.status(400).json({ error: String(err instanceof Error ? err.message : err) });
+    }
+  });
+
   app.post('/api/chat', async (req, res) => {
     const {
       agentId,
@@ -843,6 +1036,160 @@ export async function startServer({ port = 7456 } = {}) {
       send('end', { code, signal });
       res.end();
     });
+  });
+
+  // ---- Storefront runtime -------------------------------------------------
+
+  app.get('/api/storefront/state/:projectId', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+      if (project.metadata?.kind !== 'storefront') {
+        return res.status(400).json({ error: 'project is not a storefront project' });
+      }
+      const state = await loadStorefrontState(
+        PROJECTS_DIR,
+        req.params.projectId,
+        STOREFRONT_SKILL_DIR,
+      );
+      res.json({ state });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/storefront/brief', async (req, res) => {
+    try {
+      const { projectId, brief } = req.body || {};
+      if (typeof projectId !== 'string' || !projectId) {
+        return res.status(400).json({ error: 'projectId required' });
+      }
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+      if (project.metadata?.kind !== 'storefront') {
+        return res.status(400).json({ error: 'project is not a storefront project' });
+      }
+      const state = await saveStorefrontBrief(
+        PROJECTS_DIR,
+        projectId,
+        STOREFRONT_SKILL_DIR,
+        brief,
+      );
+      updateProject(db, projectId, {});
+      res.json({ state });
+    } catch (err) {
+      const code = err?.statusCode ?? 400;
+      res.status(code).json({ error: String(err?.message || err) });
+    }
+  });
+
+  app.post('/api/storefront/generate-schema', async (req, res) => {
+    try {
+      const { projectId, agentId } = req.body || {};
+      if (typeof projectId !== 'string' || !projectId) {
+        return res.status(400).json({ error: 'projectId required' });
+      }
+      if (typeof agentId !== 'string' || !agentId) {
+        return res.status(400).json({ error: 'agentId required' });
+      }
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+      if (project.metadata?.kind !== 'storefront') {
+        return res.status(400).json({ error: 'project is not a storefront project' });
+      }
+      const def = getAgentDef(agentId);
+      if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
+      if (!def.bin) return res.status(400).json({ error: 'agent has no binary' });
+      const projectDir = await ensureProject(PROJECTS_DIR, projectId);
+      const promptParts = await loadStorefrontPromptContext(STOREFRONT_SKILL_DIR);
+      let validationErrors = [];
+      let lastStderr = '';
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const prompt = buildStorefrontAgentPrompt(promptParts, validationErrors);
+        const result = await runAgentOnce(
+          def,
+          prompt,
+          projectDir,
+          [STOREFRONT_SKILL_DIR],
+        );
+        lastStderr = result.stderr;
+        const finalized = await finalizeGeneratedSchema(
+          PROJECTS_DIR,
+          projectId,
+          STOREFRONT_SKILL_DIR,
+        );
+        if (finalized.ok) {
+          updateProject(db, projectId, {});
+          return res.json({ state: finalized.value });
+        }
+        validationErrors = finalized.errors;
+      }
+      const detail = validationErrors.length > 0
+        ? `\n${validationErrors.join('\n')}`
+        : '';
+      const stderrBlock = lastStderr.trim()
+        ? `\n\nAgent stderr:\n${lastStderr.trim()}`
+        : '';
+      res.status(422).json({
+        error: `Schema validation failed after 3 attempts.${detail}${stderrBlock}`,
+      });
+    } catch (err) {
+      const code = err?.statusCode ?? 500;
+      res.status(code).json({ error: String(err?.message || err) });
+    }
+  });
+
+  app.post('/api/storefront/apply-schema', async (req, res) => {
+    try {
+      const { projectId, schemaText } = req.body || {};
+      if (typeof projectId !== 'string' || !projectId) {
+        return res.status(400).json({ error: 'projectId required' });
+      }
+      if (typeof schemaText !== 'string' || !schemaText.trim()) {
+        return res.status(400).json({ error: 'schemaText required' });
+      }
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+      if (project.metadata?.kind !== 'storefront') {
+        return res.status(400).json({ error: 'project is not a storefront project' });
+      }
+      const state = await applyStorefrontSchemaText(
+        PROJECTS_DIR,
+        projectId,
+        STOREFRONT_SKILL_DIR,
+        schemaText,
+      );
+      updateProject(db, projectId, {});
+      res.json({ state });
+    } catch (err) {
+      const code = err?.statusCode ?? 400;
+      res.status(code).json({ error: String(err?.message || err) });
+    }
+  });
+
+  app.post('/api/storefront/generate-assets', async (req, res) => {
+    try {
+      const { projectId, ...rest } = req.body || {};
+      if (typeof projectId !== 'string' || !projectId) {
+        return res.status(400).json({ error: 'projectId required' });
+      }
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+      if (project.metadata?.kind !== 'storefront') {
+        return res.status(400).json({ error: 'project is not a storefront project' });
+      }
+      const state = await generateStorefrontAssets(
+        PROJECTS_DIR,
+        projectId,
+        STOREFRONT_SKILL_DIR,
+        rest,
+      );
+      updateProject(db, projectId, {});
+      res.json({ state });
+    } catch (err) {
+      const code = err?.statusCode ?? 400;
+      res.status(code).json({ error: String(err?.message || err) });
+    }
   });
 
   // SPA fallback for the built web app. Put this LAST so it never shadows

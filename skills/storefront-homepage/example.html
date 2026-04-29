@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Storefront Homepage Example</title>
+    <style>
+      :root {
+        --bg: #f7f2eb;
+        --surface: #ffffff;
+        --ink: #1f2937;
+        --muted: #6b7280;
+        --accent: #c98c5a;
+        --subtle: #f3f4f6;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        padding: 32px;
+        background:
+          radial-gradient(circle at top, rgba(201, 140, 90, 0.18), transparent 30%),
+          linear-gradient(180deg, #fbf8f2 0%, #efe8dd 100%);
+        color: var(--ink);
+        font: 14px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      }
+      .stage {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+      }
+      .caption {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(31, 41, 55, 0.58);
+      }
+      .device {
+        width: 390px;
+        height: 844px;
+        border-radius: 56px;
+        padding: 12px;
+        background:
+          linear-gradient(160deg, #2a2a2c 0%, #1a1a1c 50%, #0e0e10 100%);
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.04) inset,
+          0 0 0 2px #000 inset,
+          0 28px 60px -12px rgba(0,0,0,0.45),
+          0 8px 20px -8px rgba(0,0,0,0.35);
+      }
+      .screen {
+        width: 100%;
+        height: 100%;
+        border-radius: 44px;
+        overflow: hidden;
+        background: #f9f9f9;
+      }
+      .statusbar {
+        display: flex;
+        justify-content: space-between;
+        padding: 18px 26px 8px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .page {
+        width: 375px;
+        margin: 0 auto;
+        background: #f9f9f9;
+      }
+      .hero,
+      .banner,
+      .goods-card,
+      .shop-info {
+        overflow: hidden;
+      }
+      .hero {
+        aspect-ratio: 3 / 4;
+        background:
+          linear-gradient(165deg, rgba(201,140,90,0.3), rgba(255,255,255,0.85)),
+          linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.22));
+        padding: 22px;
+        display: flex;
+        align-items: end;
+      }
+      .hero-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-width: 76%;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(31, 41, 55, 0.65);
+      }
+      .hero h1,
+      .shop-info h2 {
+        margin: 0;
+        line-height: 1.05;
+      }
+      .hero h1 {
+        font-size: 30px;
+      }
+      .hero p,
+      .shop-info p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .user-assets-wrap {
+        margin: -54px 16px 16px;
+        position: relative;
+        z-index: 2;
+      }
+      .user-assets {
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: 0 18px 48px rgba(94, 63, 37, 0.14);
+        padding: 16px;
+      }
+      .ua-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 12px;
+      }
+      .ua-name strong {
+        display: block;
+        font-size: 18px;
+      }
+      .ua-badge {
+        width: 76px;
+        height: 24px;
+        border-radius: 16px;
+        background: #2f2f34;
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+      }
+      .ua-image {
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--subtle);
+      }
+      .ua-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 14px;
+      }
+      .ua-grid article {
+        aspect-ratio: 1.36 / 1;
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: inset 0 0 0 1px rgba(31, 41, 55, 0.06);
+        padding: 14px;
+      }
+      .ua-grid strong {
+        display: block;
+        margin-top: 26px;
+        font-size: 14px;
+      }
+      .ua-grid span {
+        display: block;
+        margin-top: 4px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .banner {
+        aspect-ratio: 75 / 30;
+        background:
+          linear-gradient(135deg, rgba(201,140,90,0.88), rgba(255,255,255,0.4)),
+          linear-gradient(180deg, rgba(255,255,255,0), rgba(0,0,0,0.15));
+        margin-top: 16px;
+        display: flex;
+        align-items: end;
+        padding: 14px 18px;
+      }
+      .banner strong {
+        font-size: 18px;
+      }
+      .goods {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .goods-card {
+        aspect-ratio: 4 / 3;
+        background:
+          linear-gradient(150deg, rgba(201,140,90,0.22), rgba(255,255,255,0.95)),
+          #fff;
+        padding: 18px;
+        display: flex;
+        align-items: end;
+      }
+      .shop-info {
+        aspect-ratio: 9 / 16;
+        margin-top: 16px;
+        background:
+          linear-gradient(160deg, rgba(31,41,55,0.88), rgba(31,41,55,0.16)),
+          linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.06));
+        color: #fff;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        justify-content: end;
+        gap: 8px;
+      }
+      .shop-info p {
+        color: rgba(255,255,255,0.82);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="caption">Workspace storefront runtime preview</div>
+      <div class="device">
+        <div class="screen">
+          <div class="statusbar">
+            <span>9:41</span>
+            <span>▮▮▮</span>
+          </div>
+          <main class="page">
+            <section class="hero">
+              <div class="hero-copy">
+                <span class="eyebrow">top_slider</span>
+                <h1>Spring latte drops built as mobile-first storefront posters.</h1>
+                <p>Schema output is the source of truth. The host compiles phone preview later.</p>
+              </div>
+            </section>
+
+            <div class="user-assets-wrap">
+              <section class="user-assets">
+                <div class="ua-head">
+                  <div class="ua-name">
+                    <span>Hello</span>
+                    <strong>山野咖啡会员</strong>
+                  </div>
+                  <div class="ua-badge">会员码</div>
+                </div>
+                <div class="ua-image">
+                  <div class="ua-grid">
+                    <article><strong>会员权益</strong><span>MEMBER BENEFITS</span></article>
+                    <article><strong>手机商城</strong><span>MOBILE SHOP</span></article>
+                    <article><strong>全国配送</strong><span>NATIONWIDE DELIVERY</span></article>
+                    <article><strong>本周活动</strong><span>THIS WEEK</span></article>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <section class="banner">
+              <div>
+                <span class="eyebrow">banner</span>
+                <strong>手机商城精选入口</strong>
+              </div>
+            </section>
+
+            <section class="goods">
+              <article class="goods-card">
+                <div>
+                  <span class="eyebrow">goods</span>
+                  <strong>主推商品 1 · 立即购买</strong>
+                </div>
+              </article>
+              <article class="goods-card">
+                <div>
+                  <span class="eyebrow">goods</span>
+                  <strong>主推商品 2 · 立即购买</strong>
+                </div>
+              </article>
+            </section>
+
+            <section class="shop-info">
+              <span class="eyebrow">shop_info</span>
+              <h2>From schema to storefront story page.</h2>
+              <p>The final visual is still mobile, still schema-first, and still host-compiled.</p>
+            </section>
+          </main>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -26,7 +26,8 @@ export type QuestionType =
   | 'select'
   | 'text'
   | 'textarea'
-  | 'direction-cards';
+  | 'direction-cards'
+  | 'reference-images';
 
 /**
  * Rich card metadata for a single `direction-cards` option. The picker
@@ -213,6 +214,9 @@ function normalizeType(raw: unknown): QuestionType {
     lower === 'direction'
   )
     return 'direction-cards';
+  if (lower === 'reference-images' || lower === 'reference_images') {
+    return 'reference-images';
+  }
   return 'text';
 }
 

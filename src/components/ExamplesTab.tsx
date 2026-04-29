@@ -448,6 +448,7 @@ function tagForSkill(skill: SkillSummary, t: TranslateFn): string {
   if (skill.mode === 'deck') return t('examples.tagSlideDeck');
   if (skill.mode === 'template') return t('examples.tagTemplate');
   if (skill.mode === 'design-system') return t('examples.tagDesignSystem');
+  if (skill.mode === 'storefront') return 'Storefront';
   if (skill.platform === 'mobile') return t('examples.tagMobilePrototype');
   return t('examples.tagDesktopPrototype');
 }

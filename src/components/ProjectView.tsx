@@ -253,14 +253,14 @@ export function ProjectView({
   const composedSystemPrompt = useCallback(async (): Promise<string> => {
     let skillBody: string | undefined;
     let skillName: string | undefined;
-    let skillMode: SkillSummary['mode'] | undefined;
+    let skillMode: Exclude<SkillSummary['mode'], 'storefront'> | undefined;
     let designSystemBody: string | undefined;
     let designSystemTitle: string | undefined;
 
     if (project.skillId) {
       const summary = skills.find((s) => s.id === project.skillId);
       skillName = summary?.name;
-      skillMode = summary?.mode;
+      skillMode = summary?.mode === 'storefront' ? undefined : summary?.mode;
       const cached = skillCache.current.get(project.skillId);
       if (cached !== undefined) {
         skillBody = cached;
@@ -745,14 +745,17 @@ export function ProjectView({
           projectId={project.id}
           projectFiles={projectFiles}
           projectFileNames={projectFileNames}
+          onRefreshProjectFiles={async () => {
+            await refreshProjectFiles();
+          }}
           onEnsureProject={handleEnsureProject}
           onSend={handleSend}
           onStop={handleStop}
           onRequestOpenFile={requestOpenFile}
           initialDraft={initialDraft}
-          onSubmitForm={(text) => {
+          onSubmitForm={(text, attachments) => {
             if (streaming) return;
-            void handleSend(text, []);
+            void handleSend(text, attachments ?? []);
           }}
           onNewConversation={handleNewConversation}
           conversations={conversations}

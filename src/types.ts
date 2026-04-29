@@ -77,7 +77,7 @@ export interface SkillSummary {
   name: string;
   description: string;
   triggers: string[];
-  mode: 'prototype' | 'deck' | 'template' | 'design-system';
+  mode: 'prototype' | 'deck' | 'template' | 'design-system' | 'storefront';
   platform?: 'desktop' | 'mobile' | null;
   scenario?: string | null;
   previewType: string;
@@ -147,7 +147,7 @@ export interface ProjectFile {
 // Per-project metadata captured at creation time. The agent reads this
 // during chat (via the system prompt) and the question-form re-asks for
 // any field that's missing. Each `kind` carries a different shape.
-export type ProjectKind = 'prototype' | 'deck' | 'template' | 'other';
+export type ProjectKind = 'prototype' | 'deck' | 'template' | 'storefront' | 'other';
 
 export interface ProjectMetadata {
   kind: ProjectKind;

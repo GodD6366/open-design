@@ -110,6 +110,22 @@ export async function fetchProjectFileText(
   }
 }
 
+async function readRegistryError(resp: Response): Promise<string> {
+  try {
+    const json = (await resp.json()) as { error?: string };
+    if (json?.error) return json.error;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const text = await resp.text();
+    if (text) return text;
+  } catch {
+    /* ignore */
+  }
+  return `Request failed with ${resp.status}`;
+}
+
 export async function writeProjectTextFile(
   projectId: string,
   name: string,
@@ -167,6 +183,22 @@ export async function uploadProjectFile(
   } catch {
     return null;
   }
+}
+
+export async function importProjectImageUrl(
+  projectId: string,
+  url: string,
+) : Promise<ProjectFile> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/import-image-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!resp.ok) {
+    throw new Error(await readRegistryError(resp));
+  }
+  const json = (await resp.json()) as { file: ProjectFile };
+  return json.file;
 }
 
 // Multi-file project upload used by the chat composer's paste / drop /

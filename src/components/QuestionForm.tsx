@@ -1,7 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { DirectionCard, QuestionForm } from '../artifacts/question-form';
 import { formatFormAnswers } from '../artifacts/question-form';
+import {
+  importProjectImageUrl,
+  projectRawUrl,
+  uploadProjectFile,
+} from '../providers/registry';
+import type { ChatAttachment, ProjectFile } from '../types';
 
 interface Props {
   form: QuestionForm;
@@ -13,14 +19,41 @@ interface Props {
   // begins with "[form answers — <id>]", we parse it back out and pass it
   // here so the rendered form reflects what was sent.
   submittedAnswers?: Record<string, string | string[]>;
-  onSubmit?: (text: string, answers: Record<string, string | string[]>) => void;
+  onSubmit?: (text: string, attachments: ChatAttachment[]) => void;
+  projectId?: string | null;
+  projectFiles?: ProjectFile[];
+  onRefreshProjectFiles?: () => Promise<void> | void;
+  onEnsureProject?: () => Promise<string | null>;
 }
 
-export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit }: Props) {
+export function QuestionFormView({
+  form,
+  interactive,
+  submittedAnswers,
+  onSubmit,
+  projectId,
+  projectFiles,
+  onRefreshProjectFiles,
+  onEnsureProject,
+}: Props) {
   const t = useT();
   const initial = useMemo(() => buildInitialState(form, submittedAnswers), [form, submittedAnswers]);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
+  const [pendingFields, setPendingFields] = useState<Record<string, boolean>>({});
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
+  const handleFieldBusyChange = useCallback((fieldId: string, busy: boolean) => {
+    setPendingFields((prev) => {
+      const isPending = Boolean(prev[fieldId]);
+      if (busy) {
+        if (isPending) return prev;
+        return { ...prev, [fieldId]: true };
+      }
+      if (!isPending) return prev;
+      const next = { ...prev };
+      delete next[fieldId];
+      return next;
+    });
+  }, []);
 
   function update(id: string, value: string | string[]) {
     if (locked) return;
@@ -49,13 +82,14 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
 
   function handleSubmit() {
     if (locked || !onSubmit) return;
+    if (hasPending) return;
     const missing = missingRequired();
     if (missing) {
       // Soft inline guard — surface via aria but don't alert; the disabled
       // state of the submit button covers most cases.
       return;
     }
-    onSubmit(formatFormAnswers(form, answers), answers);
+    onSubmit(formatFormAnswers(form, answers), buildReferenceImageAttachments(form, answers));
   }
 
   const required = form.questions.filter((q) => q.required);
@@ -63,6 +97,7 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
     const v = answers[q.id];
     return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
   });
+  const hasPending = Object.values(pendingFields).some(Boolean);
 
   return (
     <div className={`question-form${locked ? ' question-form-locked' : ''}`}>
@@ -162,6 +197,20 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                   onChange={(e) => update(q.id, e.target.value)}
                 />
               ) : null}
+              {q.type === 'reference-images' ? (
+                <ReferenceImagesField
+                  fieldId={q.id}
+                  value={Array.isArray(value) ? value : []}
+                  disabled={locked}
+                  placeholder={q.placeholder}
+                  projectId={projectId}
+                  projectFiles={projectFiles}
+                  onRefreshProjectFiles={onRefreshProjectFiles}
+                  onEnsureProject={onEnsureProject}
+                  onBusyChange={handleFieldBusyChange}
+                  onChange={(next) => update(q.id, next)}
+                />
+              ) : null}
               {q.type === 'direction-cards' && q.cards && q.cards.length > 0 ? (
                 <div className="qf-direction-cards">
                   {q.cards.map((card) => (
@@ -194,13 +243,236 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
             type="button"
             className="primary"
             onClick={handleSubmit}
-            disabled={!ready}
-            title={ready ? t('qf.submitTitle') : t('qf.submitDisabledTitle')}
+            disabled={!ready || hasPending}
+            title={
+              hasPending
+                ? t('qf.submitPendingTitle')
+                : ready
+                  ? t('qf.submitTitle')
+                  : t('qf.submitDisabledTitle')
+            }
           >
             {form.submitLabel ?? t('qf.submitDefault')}
           </button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ReferenceImagesField({
+  fieldId,
+  value,
+  disabled,
+  placeholder,
+  projectId,
+  projectFiles,
+  onRefreshProjectFiles,
+  onEnsureProject,
+  onBusyChange,
+  onChange,
+}: {
+  fieldId: string;
+  value: string[];
+  disabled: boolean;
+  placeholder?: string;
+  projectId?: string | null;
+  projectFiles?: ProjectFile[];
+  onRefreshProjectFiles?: () => Promise<void> | void;
+  onEnsureProject?: () => Promise<string | null>;
+  onBusyChange?: (fieldId: string, busy: boolean) => void;
+  onChange: (next: string[]) => void;
+}) {
+  const t = useT();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [extraFiles, setExtraFiles] = useState<ProjectFile[]>([]);
+  const [linkValue, setLinkValue] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const availableImages = useMemo(() => {
+    const merged = mergeProjectFiles(projectFiles ?? [], extraFiles);
+    return merged
+      .filter((file) => file.kind === 'image')
+      .sort((a, b) => b.mtime - a.mtime);
+  }, [extraFiles, projectFiles]);
+  const busy = uploading || importing;
+
+  useEffect(() => {
+    onBusyChange?.(fieldId, busy);
+    return () => {
+      onBusyChange?.(fieldId, false);
+    };
+  }, [busy, fieldId, onBusyChange]);
+
+  async function ensureProjectId(): Promise<string | null> {
+    if (projectId) return projectId;
+    if (onEnsureProject) return await onEnsureProject();
+    return null;
+  }
+
+  async function handleFilePicked(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0 || disabled) return;
+    setUploading(true);
+    const ensuredProjectId = await ensureProjectId();
+    if (!ensuredProjectId) {
+      setUploading(false);
+      setError(t('qf.refNeedProject'));
+      return;
+    }
+    setError(null);
+    try {
+      const uploaded = (
+        await Promise.all(files.map((file) => uploadProjectFile(ensuredProjectId, file)))
+      ).filter((file): file is ProjectFile => file !== null);
+      if (uploaded.length === 0) {
+        setError(t('qf.refUploadFailed'));
+        return;
+      }
+      setExtraFiles((current) => mergeProjectFiles(current, uploaded));
+      onChange(uniqueStringList([...value, ...uploaded.map((file) => file.name)]));
+      try {
+        await onRefreshProjectFiles?.();
+      } catch {
+        /* ignore refresh failures; the local field already knows about the file */
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleImportLink() {
+    const raw = linkValue.trim();
+    if (!raw || disabled) return;
+    setImporting(true);
+    const ensuredProjectId = await ensureProjectId();
+    if (!ensuredProjectId) {
+      setImporting(false);
+      setError(t('qf.refNeedProject'));
+      return;
+    }
+    setError(null);
+    try {
+      const imported = await importProjectImageUrl(ensuredProjectId, raw);
+      setExtraFiles((current) => mergeProjectFiles(current, [imported]));
+      onChange(uniqueStringList([...value, imported.name]));
+      setLinkValue('');
+      try {
+        await onRefreshProjectFiles?.();
+      } catch {
+        /* ignore refresh failures; the local field already knows about the file */
+      }
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const selected = value.map((name) => availableImages.find((file) => file.name === name) ?? null);
+
+  return (
+    <div className="qf-reference-images">
+      <div className="qf-reference-actions">
+        <button
+          type="button"
+          className="ghost qf-reference-upload"
+          disabled={disabled || uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? t('qf.refUploading') : t('qf.refUpload')}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          disabled={disabled || uploading}
+          onChange={handleFilePicked}
+        />
+      </div>
+      <div className="qf-reference-import">
+        <input
+          type="text"
+          className="qf-input"
+          value={linkValue}
+          disabled={disabled || importing}
+          placeholder={placeholder ?? t('qf.refUrlPlaceholder')}
+          onChange={(event) => setLinkValue(event.target.value)}
+        />
+        <button
+          type="button"
+          className="ghost qf-reference-import-btn"
+          disabled={disabled || importing || linkValue.trim().length === 0}
+          onClick={() => void handleImportLink()}
+        >
+          {importing ? t('qf.refImporting') : t('qf.refImport')}
+        </button>
+      </div>
+      {value.length > 0 ? (
+        <div className="qf-reference-group">
+          <div className="qf-reference-group-label">{t('qf.refSelected')}</div>
+          <div className="qf-options">
+            {selected.map((file, index) => {
+              const name = value[index] ?? '';
+              const selectedOn = true;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  className={`qf-chip${selectedOn ? ' qf-chip-on' : ''}`}
+                  disabled={disabled}
+                  onClick={() => onChange(value.filter((entry) => entry !== name))}
+                  title={name}
+                >
+                  <span>{file?.name ?? name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+      <div className="qf-reference-group">
+        <div className="qf-reference-group-label">{t('qf.refExisting')}</div>
+        {availableImages.length > 0 ? (
+          <div className="qf-reference-file-grid">
+            {availableImages.map((file) => {
+              const selectedOn = value.includes(file.name);
+              return (
+                <button
+                  key={file.name}
+                  type="button"
+                  className={`qf-reference-file${selectedOn ? ' qf-reference-file-on' : ''}`}
+                  disabled={disabled}
+                  onClick={() =>
+                    onChange(
+                      selectedOn
+                        ? value.filter((entry) => entry !== file.name)
+                        : uniqueStringList([...value, file.name]),
+                    )
+                  }
+                >
+                  {projectId ? (
+                    <img src={projectRawUrl(projectId, file.name)} alt={file.name} />
+                  ) : (
+                    <span className="qf-reference-file-thumb" aria-hidden>
+                      {file.name.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="qf-reference-file-name">{file.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="qf-help">{t('qf.refNoImages')}</div>
+        )}
+      </div>
+      {error ? <div className="qf-inline-error">{error}</div> : null}
     </div>
   );
 }
@@ -282,7 +554,7 @@ function buildInitialState(
       out[q.id] = q.defaultValue;
       continue;
     }
-    if (q.type === 'checkbox') {
+    if (q.type === 'checkbox' || q.type === 'reference-images') {
       out[q.id] = [];
     } else {
       out[q.id] = '';
@@ -320,7 +592,7 @@ export function parseSubmittedAnswers(
     if (!id) continue;
     const q = form.questions.find((x) => x.id === id);
     if (!q) continue;
-    if (q.type === 'checkbox') {
+    if (q.type === 'checkbox' || q.type === 'reference-images') {
       answers[id] = value
         .split(',')
         .map((s) => s.trim())
@@ -330,4 +602,47 @@ export function parseSubmittedAnswers(
     }
   }
   return Object.keys(answers).length > 0 ? answers : null;
+}
+
+function mergeProjectFiles(existing: ProjectFile[], incoming: ProjectFile[]): ProjectFile[] {
+  const merged = new Map<string, ProjectFile>();
+  for (const file of [...existing, ...incoming]) {
+    merged.set(file.name, file);
+  }
+  return [...merged.values()];
+}
+
+function uniqueStringList(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function buildReferenceImageAttachments(
+  form: QuestionForm,
+  answers: Record<string, string | string[]>,
+): ChatAttachment[] {
+  const seen = new Set<string>();
+  const out: ChatAttachment[] = [];
+  for (const question of form.questions) {
+    if (question.type !== 'reference-images') continue;
+    const value = answers[question.id];
+    const paths = Array.isArray(value) ? uniqueStringList(value) : [];
+    for (const filePath of paths) {
+      if (seen.has(filePath)) continue;
+      seen.add(filePath);
+      out.push({
+        path: filePath,
+        name: filePath.split('/').pop() || filePath,
+        kind: 'image',
+      });
+    }
+  }
+  return out;
 }
