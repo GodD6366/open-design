@@ -1,4 +1,4 @@
-import type { StorefrontState } from './types';
+import type { AssetTask, StorefrontState } from './types';
 
 const DEFAULT_ACTION_BUTTON_SELECTION = ['到店自取', '外卖点单'];
 
@@ -129,4 +129,28 @@ export async function generateStorefrontAssets(
   });
   const json = await jsonOrThrow<{ state: StorefrontState }>(resp);
   return normalizeStorefrontState(json.state);
+}
+
+export async function enqueueStorefrontAssets(
+  projectId: string,
+  forceRegenerate = false,
+): Promise<{ tasks: AssetTask[]; state: StorefrontState }> {
+  const resp = await fetch('/api/storefront/generate-assets/enqueue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId,
+      forceRegenerate,
+    }),
+  });
+  const json = await jsonOrThrow<{ tasks: AssetTask[]; state: StorefrontState }>(resp);
+  return { tasks: json.tasks, state: normalizeStorefrontState(json.state) };
+}
+
+export async function fetchStorefrontAssetTasks(
+  projectId: string,
+): Promise<AssetTask[]> {
+  const resp = await fetch(`/api/storefront/generate-tasks/${encodeURIComponent(projectId)}`);
+  const json = await jsonOrThrow<{ tasks: AssetTask[] }>(resp);
+  return json.tasks;
 }

@@ -46,12 +46,15 @@ import {
 import {
   applyStorefrontSchemaText,
   buildStorefrontAgentPrompt,
+  enqueueAssetTasks,
   finalizeGeneratedSchema,
   generateStorefrontAssets,
+  getAssetTaskStatus,
   loadStorefrontPromptContext,
   loadStorefrontState,
   saveStorefrontBrief,
   storefrontSkillDir,
+  clearSchemaImageSlot,
 } from './storefront.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -822,6 +825,10 @@ export async function startServer({ port = 7456 } = {}) {
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      const project = getProject(db, req.params.id);
+      if (project?.metadata?.kind === 'storefront') {
+        await clearSchemaImageSlot(PROJECTS_DIR, req.params.id, req.params.name);
+      }
       res.json({ ok: true });
     } catch (err) {
       const code = err && err.code === 'ENOENT' ? 404 : 400;
@@ -1189,6 +1196,44 @@ export async function startServer({ port = 7456 } = {}) {
     } catch (err) {
       const code = err?.statusCode ?? 400;
       res.status(code).json({ error: String(err?.message || err) });
+    }
+  });
+
+  app.post('/api/storefront/generate-assets/enqueue', async (req, res) => {
+    try {
+      const { projectId, ...rest } = req.body || {};
+      if (typeof projectId !== 'string' || !projectId) {
+        return res.status(400).json({ error: 'projectId required' });
+      }
+      const project = getProject(db, projectId);
+      if (!project) return res.status(404).json({ error: 'project not found' });
+      if (project.metadata?.kind !== 'storefront') {
+        return res.status(400).json({ error: 'project is not a storefront project' });
+      }
+      const result = await enqueueAssetTasks(
+        PROJECTS_DIR,
+        projectId,
+        STOREFRONT_SKILL_DIR,
+        rest,
+      );
+      updateProject(db, projectId, {});
+      res.json(result);
+    } catch (err) {
+      const code = err?.statusCode ?? 400;
+      res.status(code).json({ error: String(err?.message || err) });
+    }
+  });
+
+  app.get('/api/storefront/generate-tasks/:projectId', async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      if (typeof projectId !== 'string' || !projectId) {
+        return res.status(400).json({ error: 'projectId required' });
+      }
+      const tasks = getAssetTaskStatus(projectId);
+      res.json({ tasks });
+    } catch (err) {
+      res.status(400).json({ error: String(err?.message || err) });
     }
   });
 

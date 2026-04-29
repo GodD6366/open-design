@@ -449,17 +449,21 @@ function Tab({
       ) : null}
       <span className="ws-tab-label">{label}</span>
       {closable && onClose ? (
-        <button
-          type="button"
+        <span
+          role="button"
+          tabIndex={0}
           className="ws-tab-close"
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onClose(); }
+          }}
           title={t('workspace.closeTab')}
         >
           <Icon name="close" size={11} />
-        </button>
+        </span>
       ) : null}
     </button>
   );

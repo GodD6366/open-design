@@ -1,0 +1,633 @@
+const MODULES = ["top_slider", "user_assets", "banner", "goods", "shop_info"];
+
+const DEFAULT_MODULES = [...MODULES];
+const DEFAULT_ACTION_BUTTON_SELECTION = ["到店自取", "外卖点单"];
+
+const MODULE_LABELS = {
+  top_slider: "顶部主视觉轮播",
+  user_assets: "客户资产功能入口",
+  banner: "首页入口型 Banner",
+  goods: "商品展示",
+  shop_info: "品牌信息长图展示",
+};
+
+const RATIOS = {
+  top_slider: "3:4",
+  banner: "75:30",
+  goods: "4:3",
+  shop_info: "9:16",
+};
+
+const PROMPT_TYPES = {
+  top_slider: "carousel_banner",
+  banner: "banner",
+  goods: "goods",
+  shop_info: "shop_info",
+};
+
+const STRUCTURES = {
+  top_slider: "poster_hero",
+  banner: "landscape_entry_banner",
+  goods: "product_showcase",
+  shop_info: "vertical_shop_story",
+};
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isHomepageModuleType(value) {
+  return MODULES.includes(value);
+}
+
+function assertHomepageModules(modules) {
+  if (!Array.isArray(modules) || modules.length === 0) {
+    throw new Error("modules 必须是非空数组。");
+  }
+
+  const seen = new Set();
+  for (const moduleType of modules) {
+    if (!isHomepageModuleType(moduleType)) {
+      throw new Error(`不支持的模块: ${String(moduleType)}`);
+    }
+    if (seen.has(moduleType)) {
+      throw new Error(`模块重复: ${moduleType}`);
+    }
+    seen.add(moduleType);
+  }
+}
+
+function parseCsv(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string"))];
+}
+
+function normalizeActionButtons(value) {
+  const selected = uniqueStrings(
+    Array.isArray(value?.selected)
+      ? value.selected.map((item) =>
+          typeof item === "string" ? item.trim() : "",
+        ).filter(Boolean)
+      : Array.isArray(value)
+        ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
+        : [],
+  );
+  const custom =
+    typeof value?.custom === "string"
+      ? value.custom.trim()
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+
+  if (!selected.length && !custom) {
+    return {
+      selected: [...DEFAULT_ACTION_BUTTON_SELECTION],
+      custom: "",
+    };
+  }
+
+  return {
+    selected,
+    custom,
+  };
+}
+
+function splitActionButtonCustom(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+
+  return uniqueStrings(
+    value
+      .split(/[、/,，\n]+/g)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+}
+
+function actionButtonLabels(actionButtons) {
+  const normalized = normalizeActionButtons(actionButtons);
+  const labels = uniqueStrings([
+    ...normalized.selected,
+    ...splitActionButtonCustom(normalized.custom),
+  ]);
+  return labels.length > 0 ? labels : [...DEFAULT_ACTION_BUTTON_SELECTION];
+}
+
+function inferIndustry(prompt) {
+  if (/咖啡|拿铁|espresso|latte|coffee/i.test(prompt)) return "咖啡";
+  if (/烘焙|面包|蛋糕|甜品|dessert|bakery/i.test(prompt)) return "烘焙甜品";
+  if (/服饰|女装|男装|穿搭|apparel|fashion/i.test(prompt)) return "服饰零售";
+  if (/美妆|护肤|彩妆|beauty|skincare/i.test(prompt)) return "美妆护肤";
+  if (/餐|饭|菜|茶|饮品|food|restaurant/i.test(prompt)) return "餐饮";
+  return "";
+}
+
+function inferBrandName(prompt) {
+  const parenthesized = prompt.match(
+    /[（(]([A-Za-z0-9][A-Za-z0-9 ._-]{1,40})[）)]/,
+  );
+  if (parenthesized) return parenthesized[1].trim();
+
+  const labeled = prompt.match(/(?:品牌名|品牌|店铺名|店名)[:：]\s*([^，。\n]+)/);
+  if (labeled) return labeled[1].trim();
+
+  return "";
+}
+
+function inferPrimaryColor(prompt) {
+  const hex = prompt.match(/#[0-9a-fA-F]{6}/)?.[0];
+  if (hex) return hex;
+  if (/绿色|清新|fresh|green/i.test(prompt)) return "#38A169";
+  if (/红色|热烈|red/i.test(prompt)) return "#D63C32";
+  if (/黑金|高级黑|dark/i.test(prompt)) return "#1F1F1F";
+  if (/蓝色|科技|blue|tech/i.test(prompt)) return "#2563EB";
+  return "";
+}
+
+function inferTone(prompt) {
+  const matches = [];
+  if (/高品质|高端|精品|premium/i.test(prompt)) matches.push("高品质");
+  if (/清新|绿色|fresh/i.test(prompt)) matches.push("清新");
+  if (/温暖|治愈|warm/i.test(prompt)) matches.push("温暖");
+  if (/科技|简洁|tech|minimal/i.test(prompt)) matches.push("简洁科技");
+  return matches.join("、");
+}
+
+function moduleContentFor(type, prompt, context) {
+  const style = context.style ?? {};
+  const buttons = actionButtonLabels(context.action_buttons);
+  switch (type) {
+    case "top_slider":
+      return `围绕${style.brand_name || "店铺品牌"}和核心商品生成完整主视觉海报，强调${style.tone || "品牌气质"}。`;
+    case "user_assets":
+      return `生成客户资产功能入口，优先覆盖${buttons.join("、")}等用户入口；按实际需求组织入口顺序和分组。`;
+    case "banner":
+      return /冲|送|优惠|活动|会员|充值|商城|预约/.test(prompt)
+        ? "生成首页横向入口 Banner，承接用户提到的营销活动、会员充值、商城或预约入口。"
+        : "生成首页横向入口 Banner，用于品牌专题、营销活动或服务入口导流。";
+    case "goods":
+      return "生成商品营销卡片，画面内必须包含购买行动点、商品卖点和短 CTA。";
+    case "shop_info":
+      return "生成品牌信息长图，优先表达品牌故事、原料理念、门店信息或首页收尾品牌页。";
+    default:
+      return "";
+  }
+}
+
+function buildInitialHomepageRequirements(prompt, overrides = {}) {
+  const modules = Array.isArray(overrides.modules) && overrides.modules.length
+    ? overrides.modules
+    : DEFAULT_MODULES;
+  assertHomepageModules(modules);
+
+  const style = {
+    industry:
+      typeof overrides.industry === "string" && overrides.industry.trim()
+        ? overrides.industry.trim()
+        : inferIndustry(prompt),
+    brand_name:
+      typeof overrides.brand_name === "string" && overrides.brand_name.trim()
+        ? overrides.brand_name.trim()
+        : inferBrandName(prompt),
+    primary_color:
+      typeof overrides.primary_color === "string" && overrides.primary_color.trim()
+        ? overrides.primary_color.trim()
+        : inferPrimaryColor(prompt),
+    tone:
+      typeof overrides.tone === "string" && overrides.tone.trim()
+        ? overrides.tone.trim()
+        : inferTone(prompt),
+    avoid: Array.isArray(overrides.avoid)
+      ? overrides.avoid.filter((item) => typeof item === "string")
+      : [],
+  };
+  const actionButtons = normalizeActionButtons(overrides.action_buttons);
+
+  const moduleContent = Object.fromEntries(
+    modules.map((moduleType) => [
+      moduleType,
+      typeof overrides.module_content?.[moduleType] === "string" &&
+      overrides.module_content[moduleType].trim()
+        ? overrides.module_content[moduleType].trim()
+        : moduleContentFor(moduleType, prompt, {
+            style,
+            action_buttons: actionButtons,
+          }),
+    ]),
+  );
+
+  return {
+    status: overrides.status === "confirmed" ? "confirmed" : "needs_confirmation",
+    source_prompt: prompt,
+    modules,
+    module_content: moduleContent,
+    style,
+    brand_logo:
+      typeof overrides.brand_logo === "string" ? overrides.brand_logo.trim() : "",
+    action_buttons: actionButtons,
+    other_requirements:
+      typeof overrides.other_requirements === "string"
+        ? overrides.other_requirements.trim()
+        : "",
+    counts: {
+      sliderCount: parsePositiveInteger(overrides.sliderCount, 2),
+      goodsCount: parsePositiveInteger(overrides.goodsCount, 3),
+    },
+    confirmation_questions: [
+      "确认 modules 是否就是本次要生成的模块，删除不需要的模块。",
+      "确认 module_content 是否准确表达每个模块的内容目标。",
+      "确认 style 中的行业、品牌名、主色、风格和禁忌表达。",
+      "确认无误后将 status 改为 confirmed，再进入 schema 生成。",
+    ],
+  };
+}
+
+function normalizeHomepageModuleSpecs(value) {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("moduleSpecs 必须是非空数组。");
+  }
+
+  const seen = new Set();
+  return value.map((spec, index) => {
+    if (!spec || typeof spec !== "object" || !isHomepageModuleType(spec.type)) {
+      throw new Error(`moduleSpecs[${index}].type 不合法。`);
+    }
+
+    if (seen.has(spec.type)) {
+      throw new Error(`moduleSpecs 不允许重复模块: ${spec.type}`);
+    }
+    seen.add(spec.type);
+
+    const itemCount =
+      typeof spec.itemCount === "number" &&
+      Number.isInteger(spec.itemCount) &&
+      spec.itemCount > 0
+        ? spec.itemCount
+        : undefined;
+
+    return {
+      type: spec.type,
+      content:
+        typeof spec.content === "string" && spec.content.trim()
+          ? spec.content.trim()
+          : MODULE_LABELS[spec.type],
+      itemCount,
+    };
+  });
+}
+
+function moduleTypesFor(specs) {
+  return specs ? specs.map((spec) => spec.type) : DEFAULT_MODULES;
+}
+
+function getRequestedItemCount(specs, type, fallback) {
+  return specs?.find((spec) => spec.type === type)?.itemCount ?? fallback;
+}
+
+function buildPromptFromRequirements(requirements) {
+  const style = requirements.style ?? {};
+  const moduleContent = requirements.module_content ?? {};
+  const actionButtons = normalizeActionButtons(requirements.action_buttons);
+  const lines = [
+    requirements.source_prompt || "",
+    "",
+    "已确认风格:",
+    `- 行业: ${style.industry || ""}`,
+    `- 品牌名: ${style.brand_name || ""}`,
+    `- 店铺 Logo: ${requirements.brand_logo || ""}`,
+    `- 主色: ${style.primary_color || ""}`,
+    `- 风格: ${style.tone || ""}`,
+    `- 禁忌: ${Array.isArray(style.avoid) ? style.avoid.join("、") : ""}`,
+    `- 功能按钮: ${Array.isArray(actionButtons.selected) ? actionButtons.selected.join("、") : ""}`,
+    `- 按钮补充: ${actionButtons.custom || ""}`,
+    `- 其他要求: ${requirements.other_requirements || ""}`,
+    "",
+    "已确认模块内容:",
+    ...requirements.modules.map(
+      (moduleType) => `- ${moduleType}: ${moduleContent[moduleType] || ""}`,
+    ),
+  ];
+
+  return lines.join("\n").trim();
+}
+
+function buildModuleSpecs(modules, moduleContent, sliderCount, goodsCount) {
+  assertHomepageModules(modules);
+
+  return modules.map((moduleType) => {
+    const spec = {
+      type: moduleType,
+      content: moduleContent?.[moduleType] || "",
+    };
+
+    if (moduleType === "top_slider") {
+      spec.itemCount = sliderCount;
+    }
+    if (moduleType === "goods") {
+      spec.itemCount = goodsCount;
+    }
+
+    return spec;
+  });
+}
+
+function expectedModulesFromRequirements(requirements) {
+  if (!requirements) {
+    return DEFAULT_MODULES;
+  }
+
+  assertHomepageModules(requirements.modules);
+  return requirements.modules;
+}
+
+function fail(errors, message) {
+  errors.push(message);
+}
+
+function validateModuleOrder(schema, expectedModules, errors) {
+  if (!Array.isArray(schema.modules)) {
+    fail(errors, "schema.modules 必须是数组。");
+    return [];
+  }
+
+  const actual = schema.modules.map((module) => module?.type);
+  if (actual.length !== expectedModules.length) {
+    fail(
+      errors,
+      `预期 ${expectedModules.length} 个模块，实际 ${actual.length} 个: ${actual.join(", ")}`,
+    );
+  }
+
+  for (const [index, expected] of expectedModules.entries()) {
+    if (actual[index] !== expected) {
+      fail(
+        errors,
+        `第 ${index + 1} 个模块必须是 ${expected}，实际是 ${actual[index] || "缺失"}。`,
+      );
+    }
+  }
+
+  return actual.filter((value) => typeof value === "string");
+}
+
+function validateImagePromptSchema(module, item, index, errors) {
+  const promptSchema = item.image_prompt_schema;
+  const path = `${module.type}.data.items[${index}].image_prompt_schema`;
+
+  if (!isRecord(promptSchema)) {
+    fail(errors, `${path} 必须是对象。`);
+    return;
+  }
+
+  if (promptSchema.type !== PROMPT_TYPES[module.type]) {
+    fail(errors, `${path}.type 必须是 ${PROMPT_TYPES[module.type]}。`);
+  }
+
+  if (!isRecord(promptSchema.layout)) {
+    fail(errors, `${path}.layout 必须是对象。`);
+  } else {
+    if (promptSchema.layout.ratio !== RATIOS[module.type]) {
+      fail(errors, `${path}.layout.ratio 必须是 ${RATIOS[module.type]}。`);
+    }
+    if (promptSchema.layout.structure !== STRUCTURES[module.type]) {
+      fail(
+        errors,
+        `${path}.layout.structure 必须是 ${STRUCTURES[module.type]}。`,
+      );
+    }
+  }
+
+  if (!isRecord(promptSchema.promotion)) {
+    fail(errors, `${path}.promotion 必须是对象。`);
+  } else if (
+    module.type === "goods" &&
+    typeof promptSchema.promotion.cta !== "string"
+  ) {
+    fail(errors, `${path}.promotion.cta 对 goods 必须是非空字符串。`);
+  } else if (module.type === "goods" && !promptSchema.promotion.cta.trim()) {
+    fail(errors, `${path}.promotion.cta 对 goods 不能为空。`);
+  }
+
+  if (module.type === "top_slider") {
+    if (promptSchema.promotion?.cta !== "") {
+      fail(errors, `${path}.promotion.cta 对 top_slider 必须为空。`);
+    }
+    if (
+      !Array.isArray(promptSchema.content?.tags) ||
+      promptSchema.content.tags.length
+    ) {
+      fail(errors, `${path}.content.tags 对 top_slider 必须是 []。`);
+    }
+  }
+
+  if (module.type === "shop_info") {
+    const promotion = promptSchema.promotion ?? {};
+    for (const key of ["price", "original_price", "discount", "badge", "cta"]) {
+      if (promotion[key] !== "") {
+        fail(errors, `${path}.promotion.${key} 对 shop_info 必须为空。`);
+      }
+    }
+    if (
+      !Array.isArray(promptSchema.content?.tags) ||
+      promptSchema.content.tags.length
+    ) {
+      fail(errors, `${path}.content.tags 对 shop_info 必须是 []。`);
+    }
+  }
+}
+
+function validateImageModule(module, errors) {
+  if (!isRecord(module.data)) {
+    fail(errors, `${module.type}.data 必须是对象。`);
+    return;
+  }
+
+  if (!Array.isArray(module.data.items) || !module.data.items.length) {
+    fail(errors, `${module.type}.data.items 必须是非空数组。`);
+    return;
+  }
+
+  if (module.type === "banner") {
+    if (module.data.mode !== "single") {
+      fail(errors, "banner.data.mode 必须是 single。");
+    }
+    if (module.data.items.length !== 1) {
+      fail(errors, "banner.data.items 必须正好包含 1 项。");
+    }
+  }
+
+  for (const [index, item] of module.data.items.entries()) {
+    if (!isRecord(item)) {
+      fail(errors, `${module.type}.data.items[${index}] 必须是对象。`);
+      continue;
+    }
+
+    if (item.aspect_ratio !== RATIOS[module.type]) {
+      fail(
+        errors,
+        `${module.type}.data.items[${index}].aspect_ratio 必须是 ${RATIOS[module.type]}。`,
+      );
+    }
+
+    if (module.type === "banner") {
+      if (item.asset_type !== "png") {
+        fail(errors, "banner.data.items[0].asset_type 必须是 png。");
+      }
+      if (typeof item.entry_purpose !== "string" || !item.entry_purpose.trim()) {
+        fail(errors, "banner.data.items[0].entry_purpose 不能为空。");
+      }
+    }
+
+    validateImagePromptSchema(module, item, index, errors);
+  }
+}
+
+function validateUserAssets(module, errors) {
+  const schema = module.data?.body_image_schema;
+
+  if (!isRecord(schema)) {
+    fail(errors, "user_assets.data.body_image_schema 必须是对象。");
+    return;
+  }
+
+  for (const legacyKey of ["primaryColor", "divider", "aspectRatio", "tone", "items"]) {
+    if (legacyKey in schema) {
+      fail(errors, `user_assets body_image_schema 不允许使用旧字段 ${legacyKey}。`);
+    }
+  }
+
+  if (schema.type !== "mobile_ui_entry_panel") {
+    fail(errors, 'user_assets body_image_schema.type 必须是 "mobile_ui_entry_panel"。');
+  }
+
+  const slots = schema.layout?.slots;
+  if (!Array.isArray(slots) || slots.length < 1) {
+    fail(errors, "user_assets body_image_schema.layout.slots 至少需要 1 项。");
+    return;
+  }
+
+  const mapping = schema.content?.slots_mapping;
+  if (!isRecord(mapping)) {
+    fail(errors, "user_assets body_image_schema.content.slots_mapping 必须是对象。");
+    return;
+  }
+
+  for (const slot of slots) {
+    if (!isRecord(slot) || typeof slot.id !== "string" || !slot.id.trim()) {
+      fail(errors, "user_assets body_image_schema.layout.slots 每项都需要 id。");
+      continue;
+    }
+
+    const item = mapping[slot.id];
+    if (
+      !isRecord(item) ||
+      typeof item.icon !== "string" ||
+      !item.icon.trim() ||
+      typeof item.title !== "string" ||
+      !item.title.trim() ||
+      typeof item.subtitle !== "string"
+    ) {
+      fail(
+        errors,
+        `user_assets slots_mapping.${slot.id} 必须包含 icon、title、subtitle 字符串。`,
+      );
+    }
+  }
+}
+
+function validateHomepageSchema(schema, requirements) {
+  const errors = [];
+  const expectedModules = expectedModulesFromRequirements(requirements);
+
+  if (!isRecord(schema)) {
+    return {
+      isValid: false,
+      errors: ["schema 必须是对象。"],
+      expectedModules,
+      actualModules: [],
+    };
+  }
+
+  if (schema.version !== "1.0.0") {
+    fail(errors, 'schema.version 必须是 "1.0.0"。');
+  }
+  if (schema.layout_mode !== "overlay") {
+    fail(errors, 'schema.layout_mode 必须是 "overlay"。');
+  }
+  if (schema.design_context?.page_width !== 375) {
+    fail(errors, "schema.design_context.page_width 必须是 375。");
+  }
+
+  const actualModules = validateModuleOrder(schema, expectedModules, errors);
+
+  for (const pageModule of Array.isArray(schema.modules) ? schema.modules : []) {
+    if (!MODULES.includes(pageModule?.type)) {
+      fail(errors, `不支持的模块类型: ${String(pageModule?.type)}`);
+      continue;
+    }
+
+    if (pageModule.type === "user_assets") {
+      validateUserAssets(pageModule, errors);
+    } else {
+      validateImageModule(pageModule, errors);
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    expectedModules,
+    actualModules,
+  };
+}
+
+function assertHomepageSchemaValid(schema, requirements) {
+  const report = validateHomepageSchema(schema, requirements);
+  if (!report.isValid) {
+    throw new Error(report.errors.join("\n"));
+  }
+
+  return report;
+}
+
+export {
+  DEFAULT_MODULES,
+  MODULES,
+  MODULE_LABELS,
+  PROMPT_TYPES,
+  RATIOS,
+  STRUCTURES,
+  assertHomepageModules,
+  assertHomepageSchemaValid,
+  buildInitialHomepageRequirements,
+  buildModuleSpecs,
+  buildPromptFromRequirements,
+  expectedModulesFromRequirements,
+  getRequestedItemCount,
+  isHomepageModuleType,
+  normalizeHomepageModuleSpecs,
+  parseCsv,
+  parsePositiveInteger,
+  validateHomepageSchema,
+  moduleTypesFor,
+};

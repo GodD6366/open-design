@@ -93,6 +93,13 @@ export interface StorefrontLogEntry {
   message: string;
 }
 
+export interface AssetTask {
+  id: string;
+  fileName: string;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  error?: string | null;
+}
+
 export interface StorefrontState {
   projectId: string;
   requirements: StorefrontRequirements;

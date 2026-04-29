@@ -987,6 +987,8 @@ export function StorefrontPhonePreview({ projectId, schema }: Props) {
   const resolved = resolvePageLayout(schema);
   const context = resolved.design_context;
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const deviceRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const immersiveHero = heroHasImage(resolved);
   const navProgress = clamp(scrollTop / 92, 0, 1);
@@ -1023,52 +1025,86 @@ export function StorefrontPhonePreview({ projectId, schema }: Props) {
     return () => node.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const stage = stageRef.current;
+    const device = deviceRef.current;
+    if (!stage || !device) return;
+    const container = stage.parentElement;
+    const scaleBox = device.parentElement;
+    const PHONE_W = 390;
+    const PHONE_H = 844;
+    const HORIZONTAL_PADDING = 32;
+    const VERTICAL_PADDING = 32;
+    const update = () => {
+      const bounds = container?.getBoundingClientRect() ?? stage.getBoundingClientRect();
+      const availableW = Math.max(0, bounds.width - HORIZONTAL_PADDING);
+      const availableH = Math.max(0, bounds.height - VERTICAL_PADDING);
+      const scale = Math.min(1, availableW / PHONE_W, availableH / PHONE_H);
+      device.style.transform = `scale(${scale})`;
+      if (scaleBox) {
+        scaleBox.style.width = `${PHONE_W * scale}px`;
+        scaleBox.style.height = `${PHONE_H * scale}px`;
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    if (container) observer.observe(container);
+    window.addEventListener('resize', update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
   return (
-    <div className="storefront-phone-stage">
-      <div className="storefront-phone-device">
-        <span className="storefront-phone-rail storefront-phone-rail-left-1" aria-hidden />
-        <span className="storefront-phone-rail storefront-phone-rail-left-2" aria-hidden />
-        <span className="storefront-phone-rail storefront-phone-rail-left-3" aria-hidden />
-        <span className="storefront-phone-rail storefront-phone-rail-right-1" aria-hidden />
-        <span className="storefront-phone-island" aria-hidden />
-        <div className="storefront-phone-screen">
-          <div className="storefront-phone-overlay" style={{ background: overlayBackground }}>
-            <div className="storefront-phone-statusbar" style={{ color: chromeColor }}>
-              <span>9:41</span>
-              <span className="storefront-phone-status-right">
-                <StatusSignalIcon color={chromeColor} />
-                <StatusWifiIcon color={chromeColor} />
-                <StatusBatteryBadge />
-              </span>
-            </div>
-            <div className="storefront-phone-capsule-wrap" style={{ boxShadow: navShadow }}>
-              <MiniProgramCapsule lightChrome={lightChrome} borderColor={chromeBorder} />
-            </div>
-          </div>
-          <div ref={scrollRef} className="storefront-phone-scroll">
-            <div
-              style={{
-                background: context.color_palette.bg,
-                width: '100%',
-                maxWidth: context.page_width,
-                borderRadius: context.radius,
-                overflow: 'hidden',
-                margin: '0 auto',
-              }}
-            >
-              <div style={{ position: 'relative' }}>
-                {resolved.modules.map((module) => (
-                  <ModuleRenderer
-                    key={module.id}
-                    projectId={projectId}
-                    module={module}
-                    designContext={context}
-                  />
-                ))}
+    <div className="storefront-phone-stage" ref={stageRef}>
+      <div className="storefront-phone-scale-box">
+        <div className="storefront-phone-device" ref={deviceRef}>
+          <span className="storefront-phone-rail storefront-phone-rail-left-1" aria-hidden />
+          <span className="storefront-phone-rail storefront-phone-rail-left-2" aria-hidden />
+          <span className="storefront-phone-rail storefront-phone-rail-left-3" aria-hidden />
+          <span className="storefront-phone-rail storefront-phone-rail-right-1" aria-hidden />
+          <span className="storefront-phone-island" aria-hidden />
+          <div className="storefront-phone-screen">
+            <div className="storefront-phone-overlay" style={{ background: overlayBackground }}>
+              <div className="storefront-phone-statusbar" style={{ color: chromeColor }}>
+                <span>9:41</span>
+                <span className="storefront-phone-status-right">
+                  <StatusSignalIcon color={chromeColor} />
+                  <StatusWifiIcon color={chromeColor} />
+                  <StatusBatteryBadge />
+                </span>
+              </div>
+              <div className="storefront-phone-capsule-wrap" style={{ boxShadow: navShadow }}>
+                <MiniProgramCapsule lightChrome={lightChrome} borderColor={chromeBorder} />
               </div>
             </div>
+            <div ref={scrollRef} className="storefront-phone-scroll">
+              <div
+                style={{
+                  background: context.color_palette.bg,
+                  width: '100%',
+                  maxWidth: context.page_width,
+                  borderRadius: context.radius,
+                  overflow: 'hidden',
+                  margin: '0 auto',
+                }}
+              >
+                <div style={{ position: 'relative' }}>
+                  {resolved.modules.map((module) => (
+                    <ModuleRenderer
+                      key={module.id}
+                      projectId={projectId}
+                      module={module}
+                      designContext={context}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="storefront-phone-home-indicator" aria-hidden />
           </div>
-          <div className="storefront-phone-home-indicator" aria-hidden />
         </div>
       </div>
     </div>

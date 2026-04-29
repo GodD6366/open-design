@@ -34,7 +34,7 @@ import type {
   ProjectFile,
   SkillSummary,
 } from '../types';
-import { fetchStorefrontState, applyStorefrontSchema, generateStorefrontAssets } from '../storefront/api';
+import { fetchStorefrontState, applyStorefrontSchema, enqueueStorefrontAssets, fetchStorefrontAssetTasks } from '../storefront/api';
 import { StorefrontPhonePreview } from '../storefront/StorefrontPhonePreview';
 import {
   STOREFRONT_PREVIEW_FILE,
@@ -43,7 +43,7 @@ import {
   STOREFRONT_SCHEMA_FILE,
   STOREFRONT_SCREEN_FILE,
 } from '../storefront/constants';
-import type { StorefrontState } from '../storefront/types';
+import type { AssetTask, StorefrontState } from '../storefront/types';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
@@ -134,6 +134,7 @@ export function StorefrontProjectView({
   const [runtimeState, setRuntimeState] = useState<StorefrontState | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeBusy, setRuntimeBusy] = useState<string | null>(null);
+  const [generateQueue, setGenerateQueue] = useState<AssetTask[]>([]);
   const [schemaEditor, setSchemaEditor] = useState('');
   const [schemaDirty, setSchemaDirty] = useState(false);
   const [openTabsState, setOpenTabsState] = useState<OpenTabsState>({
@@ -509,19 +510,51 @@ export function StorefrontProjectView({
     setRuntimeBusy('generate-assets');
     setRuntimeError(null);
     try {
-      const next = await generateStorefrontAssets(project.id, false);
-      hydrateRuntimeState(next);
-      await refreshProjectFiles();
-      onTouchProject();
+      const result = await enqueueStorefrontAssets(project.id, false);
+      if (result.tasks.length === 0) {
+        hydrateRuntimeState(result.state);
+        setRuntimeBusy(null);
+        return;
+      }
+      setGenerateQueue(result.tasks);
+      // Queue processes in background; polling effect below will handle progress.
     } catch (err) {
       const message = localizeStorefrontText(String(err instanceof Error ? err.message : err));
-      await refreshProjectFiles();
-      await refreshRuntimeState();
       setRuntimeError(message);
-    } finally {
       setRuntimeBusy(null);
     }
-  }, [hydrateRuntimeState, onTouchProject, project.id, refreshProjectFiles, refreshRuntimeState]);
+  }, [hydrateRuntimeState, project.id]);
+
+  // Poll generate queue progress every 5 seconds
+  useEffect(() => {
+    if (generateQueue.length === 0) return;
+    const pendingOrRunning = generateQueue.filter((t) => t.status === 'pending' || t.status === 'running');
+    if (pendingOrRunning.length === 0) {
+      // All tasks finished – refresh UI once and clear
+      void refreshProjectFiles();
+      void refreshRuntimeState();
+      onTouchProject();
+      setGenerateQueue([]);
+      setRuntimeBusy(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const tasks = await fetchStorefrontAssetTasks(project.id);
+        if (cancelled) return;
+        setGenerateQueue(tasks);
+      } catch {
+        // Swallow poll errors silently; will retry next tick
+      }
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [generateQueue, project.id, refreshProjectFiles, refreshRuntimeState, onTouchProject]);
 
   const projectMeta = useMemo(() => {
     const skillName = skills.find((skill) => skill.id === project.skillId)?.name;
@@ -614,7 +647,9 @@ export function StorefrontProjectView({
                 onClick={() => void handleGenerateAssets()}
                 disabled={runtimeBusy !== null || runtimeLoading || streaming}
               >
-                生成素材
+                {generateQueue.length > 0
+                  ? `生成中 ${generateQueue.filter((t) => t.status === 'done').length}/${generateQueue.length}`
+                  : '生成素材'}
               </button>
               <button
                 type="button"

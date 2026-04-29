@@ -6,7 +6,7 @@ import {
   MODULES as HOMEPAGE_MODULES,
   buildInitialHomepageRequirements,
   validateHomepageSchema,
-} from '../../workspace/src/lib/homepage-agent/shared.js';
+} from './lib/homepage-agent-shared.js';
 
 export const STOREFRONT_BRIEF_FILE = 'storefront.brief.json';
 export const STOREFRONT_REQUIREMENTS_FILE = 'storefront.requirements.json';
@@ -452,6 +452,35 @@ export async function applyStorefrontSchemaText(projectsRoot, projectId, skillRo
   await persistSchema(projectDir, projectId, normalized, requirements, styleGuide);
   await writeRuntimeState(projectDir, 'schema-ready', 'info', 'storefront.schema.json applied and preview recompiled.');
   return loadStorefrontState(projectsRoot, projectId, skillRoot);
+}
+
+export async function clearSchemaImageSlot(projectsRoot, projectId, fileName) {
+  const projectDir = await ensureProject(projectsRoot, projectId);
+  const schemaPath = path.join(projectDir, STOREFRONT_SCHEMA_FILE);
+  const schemaText = await readTextMaybe(schemaPath);
+  const schema = tryParseJson(schemaText);
+  if (!isPlainObject(schema) || !Array.isArray(schema.modules)) return;
+
+  let changed = false;
+  for (const module of schema.modules) {
+    if (module.type === 'user_assets') {
+      if (module.data?.body_image === fileName) {
+        module.data.body_image = '';
+        changed = true;
+      }
+    } else if (Array.isArray(module.data?.items)) {
+      for (const item of module.data.items) {
+        if (item.image === fileName) {
+          item.image = '';
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    await fs.writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, 'utf8');
+  }
 }
 
 export async function finalizeGeneratedSchema(projectsRoot, projectId, skillRoot) {
@@ -1253,6 +1282,9 @@ function createDefaultUserAssetsImageSchema(accent, styleGuide, requirements) {
         no_border: true,
         no_divider: true,
         no_outline: true,
+        fill_to_edge: true,
+        no_margin: true,
+        no_padding: true,
       },
     },
     layout: userAssetsDefaults.layout,
@@ -1281,11 +1313,14 @@ function createDefaultUserAssetsImageSchema(accent, styleGuide, requirements) {
       'no_extra_cards',
       'no_floating_elements',
       'no_circle_entries',
+      'fill_canvas_edge_to_edge',
+      'icon_height_200px',
     ],
     output: {
       aspect_ratio: 'dynamic',
       format: 'image',
       target: 'mobile_ui',
+      icon_height_px: 200,
     },
   };
 }
@@ -1319,6 +1354,7 @@ function resolvePresetUserAssetsDefaults(styleGuide, accent, requirements) {
       alignment: {
         horizontal: stringOr(preset?.layout?.alignment?.horizontal, 'full_bleed'),
         edge: stringOr(preset?.layout?.alignment?.edge, 'no_padding'),
+        fill_to_edge: true,
       },
       spacing: {
         mode: stringOr(preset?.layout?.spacing?.mode, 'whitespace_only'),
@@ -2913,17 +2949,25 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
     }
 
     if (!Array.isArray(module.data.items)) continue;
+    let firstGoodsFileName = null;
     module.data.items.forEach((item, index) => {
       if (!forceRegenerate && stringOr(item.image)) return;
+      const fileName = `${IMAGE_FILE_PREFIX[module.type]}-${index + 1}.png`;
+      const isSubsequentGoods = module.type === 'goods' && index > 0 && firstGoodsFileName !== null;
       tasks.push({
-        fileName: `${IMAGE_FILE_PREFIX[module.type]}-${index + 1}.png`,
-        prompt: buildImagePrompt(module.type, item, styleGuide),
+        fileName,
+        prompt: isSubsequentGoods ? null : buildImagePrompt(module.type, item, styleGuide),
+        buildPromptFn: isSubsequentGoods
+          ? (refUrl) => buildImagePrompt(module.type, {
+              ...item,
+              reference_images: [refUrl, ...(Array.isArray(item.reference_images) ? item.reference_images : [])],
+            }, styleGuide)
+          : null,
+        dependsOnFileName: isSubsequentGoods ? firstGoodsFileName : null,
         size: resolveSizeFromAspectRatio(item.aspect_ratio),
-        assign: (fileName) => {
-          item.image = fileName;
-          item.no_cache = false;
-        },
+        assign: (fn) => { item.image = fn; item.no_cache = false; },
       });
+      if (module.type === 'goods' && index === 0) firstGoodsFileName = fileName;
     });
   }
 
@@ -2997,6 +3041,153 @@ function buildStyleGenerationNotes(styleGuide, moduleType) {
     }
   }
   return uniqueStrings(notes.filter(Boolean));
+}
+
+// ---------------------------------------------------------------------------
+// Image generation queue – max 3 concurrent tasks per process
+// ---------------------------------------------------------------------------
+
+const assetQueue = {
+  tasks: new Map(),        // id -> { id, projectId, fileName, status, error, run, assign, schema, projectDir, projectsRoot, requirements, styleGuide }
+  running: new Set(),      // running task ids
+  maxConcurrency: 3,
+};
+
+function generateTaskId() {
+  return `at_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function queueTryProcess() {
+  while (assetQueue.running.size < assetQueue.maxConcurrency) {
+    const next = [...assetQueue.tasks.values()].find((t) => {
+      if (t.status !== 'pending' || assetQueue.running.has(t.id)) return false;
+      if (t.dependsOnFileName) {
+        const dep = [...assetQueue.tasks.values()].find(
+          (d) => d.projectId === t.projectId && d.fileName === t.dependsOnFileName,
+        );
+        if (dep && dep.status !== 'done') return false;
+      }
+      return true;
+    });
+    if (!next) break;
+
+    assetQueue.running.add(next.id);
+    next.status = 'running';
+    console.log(`[storefront] 开始生图: ${next.fileName} (并发: ${assetQueue.running.size}/${assetQueue.maxConcurrency})\n提示词: ${JSON.stringify(next.prompt ?? '(依赖前置任务)').slice(0, 300)}`);
+    runAssetTask(next).finally(() => {
+      assetQueue.running.delete(next.id);
+      queueTryProcess();
+    });
+  }
+}
+
+async function runAssetTask(task) {
+  try {
+    if (task.buildPromptFn) {
+      const refUrl = `/api/projects/${encodeURIComponent(task.projectId)}/files/${encodeURIComponent(task.dependsOnFileName)}`;
+      task.prompt = task.buildPromptFn(refUrl);
+    }
+    const existingFile = task.skipIfExists
+      ? await statMaybe(path.join(task.projectDir, task.fileName))
+      : null;
+    if (!existingFile) {
+      const imageConfig = resolveImageConfig(task.imageConfigOptions);
+      const generated = await generatePromptImage(task.prompt, task.size, imageConfig);
+      await writeProjectFile(task.projectsRoot, task.projectId, task.fileName, generated.buffer, {
+        overwrite: true,
+      });
+    }
+    task.assign(task.fileName);
+    task.status = 'done';
+    console.log(`[storefront] 生图完成: ${task.fileName}`);
+    await persistSchema(task.projectDir, task.projectId, task.schema, task.requirements, task.styleGuide);
+    await writeRuntimeState(task.projectDir, 'assets-ready', 'info', `${task.fileName}: generated`);
+  } catch (error) {
+    task.status = 'failed';
+    task.error = error instanceof Error ? error.message : String(error);
+    console.error(`[storefront] 生图失败: ${task.fileName} — ${task.error}`);
+    await writeRuntimeState(task.projectDir, 'assets-ready', 'error', `${task.fileName}: ${task.error}`);
+  }
+}
+
+export function getAssetTaskStatus(projectId) {
+  const out = [];
+  for (const task of assetQueue.tasks.values()) {
+    if (task.projectId !== projectId) continue;
+    out.push({ id: task.id, fileName: task.fileName, status: task.status, error: task.error ?? null });
+  }
+  return out;
+}
+
+export function cleanupAssetTasks(projectId) {
+  for (const [id, task] of assetQueue.tasks) {
+    if (task.projectId === projectId && task.status !== 'pending' && task.status !== 'running') {
+      assetQueue.tasks.delete(id);
+    }
+  }
+}
+
+export async function enqueueAssetTasks(projectsRoot, projectId, skillRoot, options = {}) {
+  const projectDir = await ensureProject(projectsRoot, projectId);
+  const [requirements, schemaText] = await Promise.all([
+    readRequirementsForProject(projectDir),
+    readTextMaybe(path.join(projectDir, STOREFRONT_SCHEMA_FILE)),
+  ]);
+  const styleGuide = await readStyleGuideForProject(projectDir, requirements);
+
+  const raw = tryParseJson(schemaText);
+  if (!isPlainObject(raw)) {
+    const err = new Error('Generate a valid storefront.schema.json before generating assets.');
+    err.statusCode = 422;
+    throw err;
+  }
+
+  const schema = normalizeStorefrontSchema(raw, requirements, styleGuide);
+  const validationErrors = validateStorefrontSchema(schema, requirements);
+  if (validationErrors.length > 0) {
+    const err = new Error(validationErrors.join('\n'));
+    err.statusCode = 422;
+    throw err;
+  }
+
+  const collected = collectAssetTasks(schema, styleGuide, Boolean(options.forceRegenerate));
+  if (collected.length === 0) {
+    await writeRuntimeState(projectDir, 'assets-ready', 'info', 'No pending storefront image slots required generation.');
+    return { tasks: [], state: await loadStorefrontState(projectsRoot, projectId, skillRoot) };
+  }
+
+  // Clean up finished tasks for this project before enqueuing new ones
+  cleanupAssetTasks(projectId);
+
+  const enqueued = [];
+  for (const task of collected) {
+    const id = generateTaskId();
+    assetQueue.tasks.set(id, {
+      id,
+      projectId,
+      fileName: task.fileName,
+      prompt: task.prompt,
+      size: task.size,
+      assign: task.assign,
+      schema,
+      projectDir,
+      projectsRoot,
+      requirements,
+      styleGuide,
+      skipIfExists: !options.forceRegenerate,
+      imageConfigOptions: options,
+      status: 'pending',
+      error: null,
+    });
+    enqueued.push({ id, fileName: task.fileName, status: 'pending' });
+  }
+
+  await writeRuntimeState(projectDir, 'assets-generating', 'info', `Enqueued ${enqueued.length} image task(s).`);
+
+  // Kick the queue
+  queueTryProcess();
+
+  return { tasks: enqueued, state: await loadStorefrontState(projectsRoot, projectId, skillRoot) };
 }
 
 function resolveImageConfig(options) {

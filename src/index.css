@@ -4901,6 +4901,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 .storefront-runtime-pane {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -4914,6 +4916,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .storefront-runtime-tab-pane {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .storefront-runtime-head {
@@ -5035,21 +5038,31 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background:
     radial-gradient(circle at top, rgba(201, 140, 90, 0.18), transparent 24%),
     linear-gradient(180deg, #f3ede4 0%, #ede7de 100%);
-  min-height: 560px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
 }
 
 .storefront-phone-stage {
   display: grid;
   place-items: center;
-  min-height: 560px;
-  padding: 28px 20px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 16px;
+}
+
+.storefront-phone-scale-box {
+  position: relative;
+  width: 390px;
+  height: 844px;
 }
 
 .storefront-phone-device {
   position: relative;
   width: 390px;
   height: 844px;
+  transform-origin: top left;
   border-radius: 56px;
   padding: 12px;
   background:
