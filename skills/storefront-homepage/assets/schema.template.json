@@ -282,9 +282,9 @@
       "layout": {
         "offsetY": 0,
         "zIndex": 1,
-        "paddingX": 16,
+        "paddingX": 0,
         "paddingTop": 0,
-        "paddingBottom": 6
+        "paddingBottom": 0
       },
       "editable": {
         "data": true,

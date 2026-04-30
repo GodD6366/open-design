@@ -99,6 +99,11 @@ const MODULE_RUNTIME_COPY: Record<
     alt: '店铺信息',
     pendingLabel: '店铺信息运行时生图中...',
   },
+  image_ad: {
+    label: '参考广告块',
+    alt: '参考广告块',
+    pendingLabel: '参考广告块运行时生图中...',
+  },
 };
 
 const USER_ASSETS_DEFAULTS = {
@@ -515,7 +520,7 @@ function resolvePageLayout(schema: StorefrontSchema): StorefrontSchema {
       module.type === 'top_slider' && index === 0
         ? { offsetY: 0, zIndex: 1, paddingX: 0, paddingTop: 0, paddingBottom: 0 }
         : module.type === 'banner'
-          ? { offsetY: 0, zIndex: 1, paddingX: 16, paddingTop: 0, paddingBottom: 6 }
+          ? { offsetY: 0, zIndex: 1, paddingX: 0, paddingTop: 0, paddingBottom: 0 }
         : module.type === 'user_assets'
           ? {
               offsetY:
@@ -1571,7 +1576,6 @@ function UserAssetsModule({
       <div
         style={{
           flex: '0 0 auto',
-          height: bodyHeight,
           borderRadius: 6,
           backgroundColor: designContext.color_palette.card_bg,
           overflow: 'hidden',
@@ -1588,7 +1592,7 @@ function UserAssetsModule({
           <img
             src={bodyImageUrl}
             alt={stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt)}
-            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center' }}
+            style={{ display: 'block', width: '100%', objectFit: 'contain', objectPosition: 'center' }}
           />
         ) : (
           <UserAssetsPendingArt

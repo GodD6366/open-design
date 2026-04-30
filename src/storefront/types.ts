@@ -5,13 +5,22 @@ export type StorefrontModuleType =
   | 'user_assets'
   | 'banner'
   | 'goods'
-  | 'shop_info';
+  | 'shop_info'
+  | 'image_ad';
+
+export interface StorefrontModuleSpec {
+  type: StorefrontModuleType;
+  content: string;
+  itemCount?: number;
+  aspectRatio?: string;
+}
 
 export interface StorefrontRequirements {
   status: 'needs_confirmation' | 'confirmed';
   source_prompt: string;
-  modules: StorefrontModuleType[];
-  module_content: Partial<Record<StorefrontModuleType, string>>;
+  module_specs: StorefrontModuleSpec[];
+  modules?: StorefrontModuleType[];
+  module_content?: Partial<Record<StorefrontModuleType, string>>;
   style: {
     industry: string;
     brand_name: string;

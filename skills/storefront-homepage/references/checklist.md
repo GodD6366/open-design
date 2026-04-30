@@ -1,6 +1,9 @@
 # Checklist
 
 - `storefront.requirements.json` is valid JSON and `status` is `confirmed`.
+- `storefront.requirements.json.module_specs` is the primary ordered source of
+  truth, and compatibility fields `modules` / `module_content` are aligned
+  with it.
 - `storefront.style-guide.json` is valid JSON when the project depends on a template or reusable style sample.
 - `storefront.schema.json` is valid JSON.
 - Top-level schema fields are exactly `page_id`, `version`, `layout_mode`, `design_context`, `modules`.
@@ -18,6 +21,11 @@
 - `hotzone` is only used for more than 5 entries or explicit hotzone/freeform requests.
 - `user_assets.data.entries[*].title` preserves the confirmed button wording, and each entry has `id`, `slot_id`, `icon`, `title`, `subtitle`, `image_prompt_schema`.
 - `user_assets` only describes function icons, titles, and subtitles; icons follow page style while the background remains plain white with no complex background.
+- repeated `image_ad` modules remain in order, and each one keeps its analyzed
+  `aspectRatio`.
+- local `reference_images` stay as project filenames and are available for
+  downstream image-edit generation in `top_slider` / `banner` / `goods` /
+  `shop_info` / `image_ad` / `user_assets`.
 - Legacy `body_image/body_alt/body_image_schema` only remain as compatibility fields when old projects already carry them.
 - Schema copy, palette, and prompt intent stay aligned with the active style guide or inferred industry preset.
 - No HTML artifacts were created.

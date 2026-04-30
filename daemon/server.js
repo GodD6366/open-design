@@ -58,14 +58,9 @@ import {
 } from './db.js';
 import {
   applyStorefrontSchemaText,
-  buildStorefrontAgentPrompt,
   enqueueAssetTasks,
-  finalizeGeneratedSchema,
-  generateStorefrontAssets,
   getAssetTaskStatus,
-  loadStorefrontPromptContext,
   loadStorefrontState,
-  saveStorefrontBrief,
   STOREFRONT_PREVIEW_FILE,
   STOREFRONT_SCREEN_FILE,
   storefrontSkillDir,
@@ -202,47 +197,6 @@ function loadDotEnv(rootDir) {
       }
     }
   }
-}
-
-async function runAgentOnce(def, prompt, cwd, extraAllowedDirs = []) {
-  const args = def.buildArgs(prompt, [], extraAllowedDirs);
-  return await new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-    let finished = false;
-    let child;
-    try {
-      child = spawn(def.bin, args, {
-        env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-        cwd,
-      });
-    } catch (err) {
-      reject(err);
-      return;
-    }
-    const timeout = setTimeout(() => {
-      if (!finished && child && !child.killed) child.kill('SIGTERM');
-    }, 180_000);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-    });
-    child.on('error', (err) => {
-      clearTimeout(timeout);
-      finished = true;
-      reject(err);
-    });
-    child.on('close', (code, signal) => {
-      clearTimeout(timeout);
-      finished = true;
-      resolve({ code, signal, stdout, stderr });
-    });
-  });
 }
 
 function imageKindFromUrl(rawUrl) {
@@ -1422,87 +1376,6 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     }
   });
 
-  app.post('/api/storefront/brief', async (req, res) => {
-    try {
-      const { projectId, brief } = req.body || {};
-      if (typeof projectId !== 'string' || !projectId) {
-        return res.status(400).json({ error: 'projectId required' });
-      }
-      const project = getProject(db, projectId);
-      if (!project) return res.status(404).json({ error: 'project not found' });
-      if (!isShopHomePageProject(project)) {
-        return res.status(400).json({ error: 'project is not a shopHomePage project' });
-      }
-      const state = await saveStorefrontBrief(
-        PROJECTS_DIR,
-        projectId,
-        STOREFRONT_SKILL_DIR,
-        brief,
-      );
-      updateProject(db, projectId, {});
-      res.json({ state });
-    } catch (err) {
-      const code = err?.statusCode ?? 400;
-      res.status(code).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.post('/api/storefront/generate-schema', async (req, res) => {
-    try {
-      const { projectId, agentId } = req.body || {};
-      if (typeof projectId !== 'string' || !projectId) {
-        return res.status(400).json({ error: 'projectId required' });
-      }
-      if (typeof agentId !== 'string' || !agentId) {
-        return res.status(400).json({ error: 'agentId required' });
-      }
-      const project = getProject(db, projectId);
-      if (!project) return res.status(404).json({ error: 'project not found' });
-      if (!isShopHomePageProject(project)) {
-        return res.status(400).json({ error: 'project is not a shopHomePage project' });
-      }
-      const def = getAgentDef(agentId);
-      if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
-      if (!def.bin) return res.status(400).json({ error: 'agent has no binary' });
-      const projectDir = await ensureProject(PROJECTS_DIR, projectId);
-      const promptParts = await loadStorefrontPromptContext(STOREFRONT_SKILL_DIR);
-      let validationErrors = [];
-      let lastStderr = '';
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const prompt = buildStorefrontAgentPrompt(promptParts, validationErrors);
-        const result = await runAgentOnce(
-          def,
-          prompt,
-          projectDir,
-          [STOREFRONT_SKILL_DIR],
-        );
-        lastStderr = result.stderr;
-        const finalized = await finalizeGeneratedSchema(
-          PROJECTS_DIR,
-          projectId,
-          STOREFRONT_SKILL_DIR,
-        );
-        if (finalized.ok) {
-          updateProject(db, projectId, {});
-          return res.json({ state: finalized.value });
-        }
-        validationErrors = finalized.errors;
-      }
-      const detail = validationErrors.length > 0
-        ? `\n${validationErrors.join('\n')}`
-        : '';
-      const stderrBlock = lastStderr.trim()
-        ? `\n\nAgent stderr:\n${lastStderr.trim()}`
-        : '';
-      res.status(422).json({
-        error: `Schema validation failed after 3 attempts.${detail}${stderrBlock}`,
-      });
-    } catch (err) {
-      const code = err?.statusCode ?? 500;
-      res.status(code).json({ error: String(err?.message || err) });
-    }
-  });
-
   app.post('/api/storefront/apply-schema', async (req, res) => {
     try {
       const { projectId, schemaText } = req.body || {};
@@ -1522,31 +1395,6 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
         projectId,
         STOREFRONT_SKILL_DIR,
         schemaText,
-      );
-      updateProject(db, projectId, {});
-      res.json({ state });
-    } catch (err) {
-      const code = err?.statusCode ?? 400;
-      res.status(code).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.post('/api/storefront/generate-assets', async (req, res) => {
-    try {
-      const { projectId, ...rest } = req.body || {};
-      if (typeof projectId !== 'string' || !projectId) {
-        return res.status(400).json({ error: 'projectId required' });
-      }
-      const project = getProject(db, projectId);
-      if (!project) return res.status(404).json({ error: 'project not found' });
-      if (!isShopHomePageProject(project)) {
-        return res.status(400).json({ error: 'project is not a shopHomePage project' });
-      }
-      const state = await generateStorefrontAssets(
-        PROJECTS_DIR,
-        projectId,
-        STOREFRONT_SKILL_DIR,
-        rest,
       );
       updateProject(db, projectId, {});
       res.json({ state });

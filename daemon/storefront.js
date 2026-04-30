@@ -3,8 +3,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ensureProject, listFiles, writeProjectFile } from './projects.js';
 import {
+  DEFAULT_MODULES as HOMEPAGE_DEFAULT_MODULES,
   MODULES as HOMEPAGE_MODULES,
   buildInitialHomepageRequirements,
+  getRequestedAspectRatio,
+  getRequestedItemCount,
+  normalizeHomepageModuleSpecs,
   validateHomepageSchema,
 } from './lib/homepage-agent-shared.js';
 import {
@@ -26,8 +30,7 @@ const REQUIREMENTS_TEMPLATE_FILE = path.join('assets', 'requirements.template.js
 const STYLE_GUIDE_TEMPLATE_FILE = path.join('assets', 'style-guide.template.json');
 const SCHEMA_TEMPLATE_FILE = path.join('assets', 'schema.template.json');
 const SKILL_FILE = 'SKILL.md';
-const DEFAULT_MODULES = [...HOMEPAGE_MODULES];
-
+const DEFAULT_MODULES = [...HOMEPAGE_DEFAULT_MODULES];
 const DEFAULT_DESIGN_CONTEXT = {
   theme: 'storefront_overlay',
   color_palette: {
@@ -71,6 +74,11 @@ const MODULE_RUNTIME_COPY = {
     label: '门店信息',
     alt: '店铺信息',
     pendingLabel: '店铺信息运行时生图中...',
+  },
+  image_ad: {
+    label: '参考广告块',
+    alt: '参考广告块',
+    pendingLabel: '参考广告块运行时生图中...',
   },
 };
 
@@ -344,6 +352,7 @@ const IMAGE_RATIO_MAP = {
   banner: '75:30',
   goods: '4:3',
   shop_info: '9:16',
+  image_ad: '1:1',
 };
 
 const IMAGE_STRUCTURE_MAP = {
@@ -351,6 +360,7 @@ const IMAGE_STRUCTURE_MAP = {
   banner: 'landscape_entry_banner',
   goods: 'product_showcase',
   shop_info: 'vertical_shop_story',
+  image_ad: 'reference_image_ad',
 };
 
 const IMAGE_PROMPT_TYPE_MAP = {
@@ -358,6 +368,7 @@ const IMAGE_PROMPT_TYPE_MAP = {
   banner: 'banner',
   goods: 'goods',
   shop_info: 'shop_info',
+  image_ad: 'image_ad',
 };
 
 const BRAND_PROMPT_MODULES = new Set(['top_slider', 'shop_info']);
@@ -368,6 +379,7 @@ const IMAGE_FILE_PREFIX = {
   banner: 'banner',
   goods: 'goods',
   shop_info: 'shop-info',
+  image_ad: 'image-ad',
 };
 
 function imagePromptAllowsBrand(moduleType) {
@@ -476,65 +488,6 @@ export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
   };
 }
 
-export async function saveStorefrontBrief(projectsRoot, projectId, skillRoot, rawBrief) {
-  const projectDir = await ensureProject(projectsRoot, projectId);
-  const templates = await loadSkillTemplates(skillRoot);
-  const requirements = legacyBriefToRequirements(rawBrief);
-  const { styleGuide, styleGuideText } = await loadStyleGuideForProject(
-    projectDir,
-    requirements,
-    templates.styleGuideText,
-    { syncFile: true },
-  );
-  const schemaPath = path.join(projectDir, STOREFRONT_SCHEMA_FILE);
-  const hasSchema = await statMaybe(schemaPath);
-  const seedSchema = createSeedSchema(requirements, styleGuide);
-
-  await Promise.all([
-    fs.writeFile(
-      path.join(projectDir, STOREFRONT_BRIEF_FILE),
-      `${JSON.stringify(rawBrief ?? {}, null, 2)}\n`,
-      'utf8',
-    ),
-    fs.writeFile(
-      path.join(projectDir, STOREFRONT_REQUIREMENTS_FILE),
-      `${JSON.stringify(requirements, null, 2)}\n`,
-      'utf8',
-    ),
-    writeTextIfChanged(
-      path.join(projectDir, STOREFRONT_STYLE_GUIDE_FILE),
-      styleGuideText,
-    ),
-    hasSchema
-      ? Promise.resolve()
-      : fs.writeFile(
-          schemaPath,
-          `${JSON.stringify(seedSchema, null, 2)}\n`,
-          'utf8',
-        ),
-  ]);
-  await ensurePreviewArtifacts(
-    projectDir,
-    projectId,
-    hasSchema
-      ? normalizeStorefrontSchema(tryParseJson(await readTextMaybe(schemaPath)) ?? {}, requirements, styleGuide)
-      : seedSchema,
-    requirements,
-    [],
-    styleGuide,
-  );
-
-  await writeRuntimeState(
-    projectDir,
-    'requirements-ready',
-    'info',
-    'Legacy storefront brief was converted into storefront.requirements.json.',
-  );
-
-  await ensureStorefrontSeedFiles(projectDir, templates);
-  return loadStorefrontState(projectsRoot, projectId, skillRoot);
-}
-
 export async function applyStorefrontSchemaText(projectsRoot, projectId, skillRoot, schemaText) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const requirements = await readRequirementsForProject(projectDir);
@@ -594,200 +547,6 @@ export async function clearSchemaImageSlot(projectsRoot, projectId, fileName) {
   if (changed) {
     await fs.writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, 'utf8');
   }
-}
-
-export async function finalizeGeneratedSchema(projectsRoot, projectId, skillRoot) {
-  const projectDir = await ensureProject(projectsRoot, projectId);
-  const [requirements, schemaText] = await Promise.all([
-    readRequirementsForProject(projectDir),
-    readTextMaybe(path.join(projectDir, STOREFRONT_SCHEMA_FILE)),
-  ]);
-  const styleGuide = await readStyleGuideForProject(projectDir, requirements);
-
-  const raw = tryParseJson(schemaText);
-  if (!isPlainObject(raw)) {
-    return {
-      ok: false,
-      errors: ['storefront.schema.json is not valid JSON after the agent run.'],
-    };
-  }
-
-  const normalized = normalizeStorefrontSchema(raw, requirements, styleGuide);
-  const validationErrors = validateStorefrontSchema(normalized, requirements);
-  if (validationErrors.length > 0) {
-    return {
-      ok: false,
-      errors: validationErrors,
-    };
-  }
-
-  await persistSchema(projectDir, projectId, normalized, requirements, styleGuide);
-  await writeRuntimeState(projectDir, 'schema-ready', 'info', 'Schema generated and preview recompiled.');
-  return {
-    ok: true,
-    value: await loadStorefrontState(projectsRoot, projectId, skillRoot),
-  };
-}
-
-export async function generateStorefrontAssets(
-  projectsRoot,
-  projectId,
-  skillRoot,
-  options = {},
-) {
-  const projectDir = await ensureProject(projectsRoot, projectId);
-  const [requirements, schemaText] = await Promise.all([
-    readRequirementsForProject(projectDir),
-    readTextMaybe(path.join(projectDir, STOREFRONT_SCHEMA_FILE)),
-  ]);
-  const styleGuide = await readStyleGuideForProject(projectDir, requirements);
-
-  const raw = tryParseJson(schemaText);
-  if (!isPlainObject(raw)) {
-    const err = new Error('Generate a valid storefront.schema.json before generating assets.');
-    err.statusCode = 422;
-    throw err;
-  }
-
-  const schema = normalizeStorefrontSchema(raw, requirements, styleGuide);
-  const validationErrors = validateStorefrontSchema(schema, requirements);
-  if (validationErrors.length > 0) {
-    const err = new Error(validationErrors.join('\n'));
-    err.statusCode = 422;
-    throw err;
-  }
-
-  const tasks = collectAssetTasks(schema, styleGuide, Boolean(options.forceRegenerate));
-  if (tasks.length === 0) {
-    await writeRuntimeState(projectDir, 'assets-ready', 'info', 'No pending storefront image slots required generation.');
-    return loadStorefrontState(projectsRoot, projectId, skillRoot);
-  }
-
-  const imageConfig = resolveImageConfig(options);
-  const taskLogs = [];
-  for (const task of tasks) {
-    try {
-      let prompt = task.prompt;
-      if (task.buildPromptFn) {
-        const refUrl = `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(task.dependsOnFileName)}`;
-        prompt = task.buildPromptFn(refUrl);
-        task.prompt = prompt;
-      }
-      const inputImagePaths = task.buildInputImagePathsFn
-        ? task.buildInputImagePathsFn(projectDir)
-        : Array.isArray(task.inputImagePaths)
-          ? task.inputImagePaths
-          : [];
-      const existingFile = !options.forceRegenerate
-        ? await statMaybe(path.join(projectDir, task.fileName))
-        : null;
-      if (!existingFile) {
-        const generated = await generatePromptImage(prompt, task.size, imageConfig, inputImagePaths);
-        await writeProjectFile(projectsRoot, projectId, task.fileName, generated.buffer, {
-          overwrite: true,
-        });
-      }
-      task.assign(task.fileName);
-      taskLogs.push(`${task.fileName}: generated`);
-      await persistSchema(projectDir, projectId, schema, requirements, styleGuide);
-      await writeRuntimeState(projectDir, 'assets-ready', 'info', `${task.fileName}: generated`);
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      taskLogs.push(`${task.fileName}: ${err.message}`);
-      await writeRuntimeState(projectDir, 'assets-ready', 'error', `${task.fileName}: ${err.message}`);
-      throw err;
-    }
-  }
-
-  await writeRuntimeState(
-    projectDir,
-    'assets-ready',
-    'info',
-    `Generated ${tasks.length} storefront asset(s).\n${taskLogs.join('\n')}`,
-  );
-  return loadStorefrontState(projectsRoot, projectId, skillRoot);
-}
-
-export async function loadStorefrontPromptContext(skillRoot) {
-  const [
-    skill,
-    requirementsTemplate,
-    styleGuideTemplate,
-    schemaTemplate,
-    requirementsContract,
-    styleGuideContract,
-    schemaContract,
-    previewContract,
-    checklist,
-  ] = await Promise.all([
-    readTextMaybe(path.join(skillRoot, SKILL_FILE)),
-    readTextMaybe(path.join(skillRoot, REQUIREMENTS_TEMPLATE_FILE)),
-    readTextMaybe(path.join(skillRoot, STYLE_GUIDE_TEMPLATE_FILE)),
-    readTextMaybe(path.join(skillRoot, SCHEMA_TEMPLATE_FILE)),
-    readTextMaybe(path.join(skillRoot, 'references', 'requirements-contract.md')),
-    readTextMaybe(path.join(skillRoot, 'references', 'style-guide-contract.md')),
-    readTextMaybe(path.join(skillRoot, 'references', 'schema-contract.md')),
-    readTextMaybe(path.join(skillRoot, 'references', 'preview-contract.md')),
-    readTextMaybe(path.join(skillRoot, 'references', 'checklist.md')),
-  ]);
-
-  return {
-    skill: skill ?? '',
-    requirementsTemplate: requirementsTemplate ?? '',
-    styleGuideTemplate: styleGuideTemplate ?? '',
-    schemaTemplate: schemaTemplate ?? '',
-    requirementsContract: requirementsContract ?? '',
-    styleGuideContract: styleGuideContract ?? '',
-    schemaContract: schemaContract ?? '',
-    previewContract: previewContract ?? '',
-    checklist: checklist ?? '',
-  };
-}
-
-export function buildStorefrontAgentPrompt(context, validationErrors = []) {
-  const repairs = validationErrors.length > 0
-    ? `\nValidation errors from the previous attempt:\n${validationErrors.map((error) => `- ${error}`).join('\n')}\n`
-    : '';
-
-  return [
-    'You are generating a storefront homepage schema for Open Design.',
-    'Work only inside the current project directory.',
-    'Read these project-local files first:',
-    '- storefront.requirements.json',
-    '- storefront.style-guide.json',
-    '- storefront.schema.json',
-    '',
-    'Then overwrite storefront.schema.json in place so it matches the confirmed requirements.',
-    'Do not emit <artifact>. Do not create index.html. Do not write any preview HTML.',
-    'You may also update storefront.requirements.json and storefront.style-guide.json if confirmed requirements or template-style references need to be synchronized, but keep their contracts stable.',
-    repairs.trim(),
-    context.skill?.trim() ? `## Skill\n${context.skill.trim()}` : '',
-    context.requirementsContract?.trim()
-      ? `## Requirements contract\n${context.requirementsContract.trim()}`
-      : '',
-    context.styleGuideContract?.trim()
-      ? `## Style-guide contract\n${context.styleGuideContract.trim()}`
-      : '',
-    context.schemaContract?.trim()
-      ? `## Schema contract\n${context.schemaContract.trim()}`
-      : '',
-    context.previewContract?.trim()
-      ? `## Preview/runtime assumptions\n${context.previewContract.trim()}`
-      : '',
-    context.checklist?.trim() ? `## Checklist\n${context.checklist.trim()}` : '',
-    context.requirementsTemplate?.trim()
-      ? `## Seed requirements template\n${context.requirementsTemplate.trim()}`
-      : '',
-    context.styleGuideTemplate?.trim()
-      ? `## Seed style-guide template\n${context.styleGuideTemplate.trim()}`
-      : '',
-    context.schemaTemplate?.trim()
-      ? `## Seed schema template\n${context.schemaTemplate.trim()}`
-      : '',
-    'Output only a short confirmation line after the file write is done.',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
 }
 
 async function ensureStorefrontSeedFiles(projectDir, templates) {
@@ -937,6 +696,7 @@ function resolveStylePresetId(rawPresetId, rawStyleGuide, requirements) {
     stringOr(rawStyleGuide?.analysis?.icon_style),
     stringOr(rawStyleGuide?.analysis?.background_style),
     stringOr(rawStyleGuide?.analysis?.layout_style),
+    ...moduleSpecContents(requirements),
     ...Object.values(requirements?.module_content ?? {}),
   ]
     .filter(Boolean)
@@ -969,16 +729,65 @@ function toPublicStyleGuide(styleGuide) {
   };
 }
 
+function normalizeAspectRatioHint(value, fallback = '1:1') {
+  return typeof value === 'string' && /^\d+:\d+$/.test(value.trim()) ? value.trim() : fallback;
+}
+
+function deriveModuleContentFromSpecs(specs) {
+  const out = {};
+  for (const spec of specs) {
+    if (typeof spec?.type !== 'string' || spec.type in out) continue;
+    out[spec.type] = stringOr(spec.content);
+  }
+  return out;
+}
+
+function moduleSpecsFor(requirements) {
+  const specs = normalizeHomepageModuleSpecs(requirements?.module_specs);
+  if (specs && specs.length > 0) {
+    return specs;
+  }
+
+  const modules = Array.isArray(requirements?.modules) ? requirements.modules : DEFAULT_MODULES;
+  const moduleContent = requirements?.module_content ?? {};
+  return modules
+    .filter((moduleType) => HOMEPAGE_MODULES.includes(moduleType))
+    .map((moduleType) => {
+      const spec = {
+        type: moduleType,
+        content: stringOr(moduleContent[moduleType]),
+      };
+      if (moduleType === 'top_slider') {
+        spec.itemCount = toPositiveInteger(requirements?.counts?.sliderCount, 2);
+      } else if (moduleType === 'goods') {
+        spec.itemCount = toPositiveInteger(requirements?.counts?.goodsCount, 3);
+      } else if (moduleType === 'image_ad') {
+        spec.aspectRatio = normalizeAspectRatioHint(moduleContent?.image_ad, '1:1');
+      }
+      return spec;
+    });
+}
+
+function moduleSpecContents(requirements) {
+  return moduleSpecsFor(requirements)
+    .map((spec) => stringOr(spec.content))
+    .filter(Boolean);
+}
+
+function moduleSpecForType(requirements, moduleType, occurrenceIndex = 0) {
+  const specs = moduleSpecsFor(requirements).filter((spec) => spec.type === moduleType);
+  return specs[occurrenceIndex] ?? null;
+}
+
 function coerceRequirements(raw) {
-  if (raw && typeof raw === 'object' && Array.isArray(raw.modules) && raw.style) {
-    const modules = uniqueStrings(raw.modules).filter((moduleType) =>
-      DEFAULT_MODULES.includes(moduleType),
-    );
+  if (raw && typeof raw === 'object' && raw.style) {
+    const specs = moduleSpecsFor(raw);
     return {
       status: raw.status === 'confirmed' ? 'confirmed' : 'needs_confirmation',
       source_prompt: stringOr(raw.source_prompt, '店铺首页'),
-      modules: modules.length > 0 ? modules : DEFAULT_MODULES,
-      module_content: normalizeModuleContent(raw.module_content),
+      module_specs: specs,
+      modules: specs.map((spec) => spec.type),
+      module_content: deriveModuleContentFromSpecs(specs),
       style: {
         industry: stringOr(raw.style?.industry),
         brand_name: stringOr(raw.style?.brand_name),
@@ -992,8 +801,8 @@ function coerceRequirements(raw) {
       action_buttons: normalizeActionButtons(raw.action_buttons),
       other_requirements: stringOr(raw.other_requirements),
       counts: {
-        sliderCount: toPositiveInteger(raw.counts?.sliderCount, 2),
-        goodsCount: toPositiveInteger(raw.counts?.goodsCount, 3),
+        sliderCount: getRequestedItemCount(specs, 'top_slider', toPositiveInteger(raw.counts?.sliderCount, 2)),
+        goodsCount: getRequestedItemCount(specs, 'goods', toPositiveInteger(raw.counts?.goodsCount, 3)),
       },
       confirmation_questions: Array.isArray(raw.confirmation_questions)
         ? raw.confirmation_questions.filter((item) => typeof item === 'string')
@@ -1035,14 +844,6 @@ function legacyBriefToRequirements(rawBrief) {
     brand_logo: stringOr(brief.brandLogo),
     other_requirements: '',
   });
-}
-
-function normalizeModuleContent(input) {
-  const out = {};
-  for (const moduleType of DEFAULT_MODULES) {
-    out[moduleType] = stringOr(input?.[moduleType]);
-  }
-  return out;
 }
 
 function normalizeActionButtons(value) {
@@ -1314,8 +1115,9 @@ function createSeedSchema(requirements, styleGuide) {
     },
   };
 
-  const modules = req.modules.map((moduleType) =>
-    createSeedModule(moduleType, req, designContext, guide),
+  const specs = moduleSpecsFor(req);
+  const modules = specs.map((spec, index) =>
+    createSeedModule(spec, index, req, designContext, guide),
   );
 
   return {
@@ -1327,9 +1129,10 @@ function createSeedSchema(requirements, styleGuide) {
   };
 }
 
-function createSeedModule(moduleType, requirements, designContext, styleGuide) {
+function createSeedModule(spec, moduleIndex, requirements, designContext, styleGuide) {
+  const moduleType = spec.type;
   const base = {
-    id: `${moduleType}_1`,
+    id: `${moduleType}_${moduleIndex + 1}`,
     type: moduleType,
     source: 'ai',
     variant: 'default',
@@ -1377,9 +1180,9 @@ function createSeedModule(moduleType, requirements, designContext, styleGuide) {
 
   const itemCount =
     moduleType === 'top_slider'
-      ? requirements.counts.sliderCount
+      ? spec.itemCount ?? requirements.counts.sliderCount
       : moduleType === 'goods'
-        ? requirements.counts.goodsCount
+        ? spec.itemCount ?? requirements.counts.goodsCount
         : 1;
   const mode =
     moduleType === 'banner'
@@ -1398,15 +1201,16 @@ function createSeedModule(moduleType, requirements, designContext, styleGuide) {
           ? 3000
           : undefined,
       items: Array.from({ length: itemCount }, (_, index) =>
-        createSeedImageItem(moduleType, index, requirements, designContext, styleGuide),
+        createSeedImageItem(spec, index, requirements, designContext, styleGuide),
       ),
     },
   };
 }
 
-function createSeedImageItem(moduleType, index, requirements, designContext, styleGuide) {
+function createSeedImageItem(spec, index, requirements, designContext, styleGuide) {
+  const moduleType = spec.type;
   const promptSchema = createDefaultImagePromptSchema(
-    moduleType,
+    spec,
     requirements,
     designContext,
     styleGuide,
@@ -1430,16 +1234,20 @@ function createSeedImageItem(moduleType, index, requirements, designContext, sty
   return base;
 }
 
-function createDefaultImagePromptSchema(moduleType, requirements, designContext, styleGuide, index = 0) {
+function createDefaultImagePromptSchema(spec, requirements, designContext, styleGuide, index = 0) {
+  const moduleType = spec.type;
   const brandName = requirements.style.brand_name || '店铺品牌';
-  const moduleContent = requirements.module_content?.[moduleType] || '';
+  const moduleContent = stringOr(spec.content, requirements.module_content?.[moduleType] || '');
   const accent = designContext.color_palette.accent;
   const backgroundColor =
     moduleType === 'goods'
       ? designContext.color_palette.card_subtle
       : designContext.color_palette.bg;
   const type = IMAGE_PROMPT_TYPE_MAP[moduleType];
-  const ratio = IMAGE_RATIO_MAP[moduleType];
+  const ratio =
+    moduleType === 'image_ad'
+      ? normalizeAspectRatioHint(spec.aspectRatio, IMAGE_RATIO_MAP.image_ad)
+      : IMAGE_RATIO_MAP[moduleType];
   const structure = IMAGE_STRUCTURE_MAP[moduleType];
   const itemLabel = index > 0 ? ` ${index + 1}` : '';
   const title =
@@ -1449,7 +1257,9 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
         ? '活动入口'
         : moduleType === 'goods'
           ? `主推商品${itemLabel}`
-          : '品牌故事';
+          : moduleType === 'image_ad'
+            ? `参考广告块${itemLabel}`
+            : '品牌故事';
   const subtitle =
     moduleType === 'top_slider'
       ? 'SPRING FEATURE'
@@ -1457,7 +1267,9 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
         ? 'DISCOVER'
         : moduleType === 'goods'
           ? 'LIMITED PICK'
-          : 'ABOUT THE BRAND';
+          : moduleType === 'image_ad'
+            ? 'REFERENCE BLOCK'
+            : 'ABOUT THE BRAND';
   const description = moduleContent || `${brandName} 店铺首页模块`;
   const styleTone = resolvePromptStyleTone(requirements, styleGuide);
 
@@ -1469,6 +1281,8 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
         ? 'promotion'
         : moduleType === 'shop_info'
           ? 'brand'
+          : moduleType === 'image_ad'
+            ? 'promotion'
           : 'product',
     layout: {
       ratio,
@@ -1498,6 +1312,8 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
           ? `商品 ${index + 1}`
           : moduleType === 'banner'
             ? '活动入口'
+            : moduleType === 'image_ad'
+              ? '参考广告块'
             : brandName,
       category: inferCategory(requirements.style.industry),
       visual_type: moduleType === 'banner' ? 'graphic' : 'photo',
@@ -1506,6 +1322,8 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
           ? 'composition'
           : moduleType === 'banner'
             ? 'landscape_entry'
+            : moduleType === 'image_ad'
+              ? 'composition'
             : 'single',
       elements: moduleContent ? [moduleContent] : [],
     },
@@ -1551,6 +1369,11 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
               prefer_graphic_blocks: true,
               no_product_showcase_background: true,
             }
+          : moduleType === 'image_ad'
+            ? {
+                no_logo: true,
+                keep_reference_composition: true,
+              }
           : {}),
       ...modulePolicyConstraints(moduleType),
     },
@@ -1832,10 +1655,21 @@ function normalizeDesignContext(value, accent, requirements, styleGuide) {
 }
 
 function normalizeModule(module, index, designContext, requirements, styleGuide) {
-  if (!isPlainObject(module) || !DEFAULT_MODULES.includes(module.type)) {
+  if (!isPlainObject(module) || !HOMEPAGE_MODULES.includes(module.type)) {
     return null;
   }
   const type = module.type;
+  const orderedSpecs = moduleSpecsFor(requirements);
+  const spec =
+    orderedSpecs[index]?.type === type
+      ? orderedSpecs[index]
+      : moduleSpecForType(
+          requirements,
+          type,
+          orderedSpecs
+            .slice(0, index + 1)
+            .filter((entry) => entry.type === type).length - 1,
+        ) ?? { type, content: stringOr(requirements?.module_content?.[type]) };
   const base = {
     id: stringOr(module.id, `${type}_${index + 1}`),
     type,
@@ -1854,7 +1688,7 @@ function normalizeModule(module, index, designContext, requirements, styleGuide)
 
   return {
     ...base,
-    data: normalizeImageModuleData(type, module.data, requirements, designContext, styleGuide),
+    data: normalizeImageModuleData(spec, module.data, requirements, designContext, styleGuide),
   };
 }
 
@@ -1884,24 +1718,25 @@ function normalizeEditable(value) {
       };
 }
 
-function normalizeImageModuleData(type, value, requirements, designContext, styleGuide) {
+function normalizeImageModuleData(spec, value, requirements, designContext, styleGuide) {
+  const type = spec.type;
   const req = coerceRequirements(requirements);
   const mode = normalizeImageModuleMode(value?.mode, type, value?.items);
   const itemSeedCount =
     type === 'top_slider'
-      ? req.counts.sliderCount
+      ? spec.itemCount ?? req.counts.sliderCount
       : type === 'goods'
-        ? req.counts.goodsCount
+        ? spec.itemCount ?? req.counts.goodsCount
         : 1;
   const items = Array.isArray(value?.items)
     ? value.items
         .filter(isPlainObject)
-        .map((item, index) => normalizeImageItem(type, item, index, req, designContext, styleGuide))
+        .map((item, index) => normalizeImageItem(spec, item, index, req, designContext, styleGuide))
     : [];
   const normalizedItems = items.length > 0
     ? items
     : Array.from({ length: Math.max(1, itemSeedCount) }, (_, index) =>
-        createSeedImageItem(type, index, req, designContext, styleGuide),
+        createSeedImageItem(spec, index, req, designContext, styleGuide),
       );
 
   const result = {
@@ -1919,8 +1754,9 @@ function normalizeImageModuleData(type, value, requirements, designContext, styl
   return result;
 }
 
-function normalizeImageItem(type, item, index, requirements, designContext, styleGuide) {
-  const fallback = createSeedImageItem(type, index, requirements, designContext, styleGuide);
+function normalizeImageItem(spec, item, index, requirements, designContext, styleGuide) {
+  const type = spec.type;
+  const fallback = createSeedImageItem(spec, index, requirements, designContext, styleGuide);
   const promptSchema = isPlainObject(item.image_prompt_schema)
     ? item.image_prompt_schema
     : fallback.image_prompt_schema;
@@ -1935,7 +1771,10 @@ function normalizeImageItem(type, item, index, requirements, designContext, styl
     ),
     no_cache: item.no_cache === true,
     alt: stringOr(item.alt, fallback.alt),
-    aspect_ratio: stringOr(item.aspect_ratio, IMAGE_RATIO_MAP[type]),
+    aspect_ratio:
+      type === 'image_ad'
+        ? normalizeAspectRatioHint(item.aspect_ratio, fallback.aspect_ratio)
+        : stringOr(item.aspect_ratio, IMAGE_RATIO_MAP[type]),
   };
 
   if (type === 'banner') {
@@ -3040,7 +2879,10 @@ function renderModuleInner(projectId, module, designContext) {
     const topHeight = Math.max(80, Math.floor((height - 12) / 2));
     const first = items[0];
     const second = items[1];
-    return `<div style="display:flex;flex-direction:column;gap:12px${hasImageAsset(first) && hasImageAsset(second) ? '' : `;min-height:${height}px`}">
+
+    // gap:12px
+
+    return `<div style="display:flex;flex-direction:column;${hasImageAsset(first) && hasImageAsset(second) ? '' : `;min-height:${height}px`}">
       <div class="sf-image-card" ${imageCardStyleAttr(first, topHeight)}>${renderImageItem(projectId, module.type, first, topHeight)}</div>
       <div class="sf-image-card" ${imageCardStyleAttr(second, topHeight)}>${renderImageItem(projectId, module.type, second, topHeight)}</div>
     </div>`;
@@ -3375,9 +3217,6 @@ function computeModuleLayout(module, index, modules, schema) {
   if (module.type === 'top_slider' && index === 0) {
     return { offsetY: 0, zIndex: 1, paddingX: 0, paddingTop: 0, paddingBottom: 0 };
   }
-  if (module.type === 'banner') {
-    return { offsetY: 0, zIndex: 1, paddingX: 16, paddingTop: 0, paddingBottom: 6 };
-  }
   if (module.type === 'user_assets') {
     const shouldOverlap =
       schema.layout_mode === 'overlay' &&
@@ -3557,6 +3396,13 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
           : null,
         dependsOnFileName: isSubsequentGoods ? firstGoodsFileName : null,
         size: resolveSizeFromAspectRatio(item.aspect_ratio),
+        inputImagePaths: [],
+        buildInputImagePathsFn: (projectDir) =>
+          collectImageItemReferenceImagePaths(
+            item,
+            isSubsequentGoods ? firstGoodsFileName : null,
+            projectDir,
+          ),
         assign: (fn) => { item.image = fn; item.no_cache = false; },
       });
       if (module.type === 'goods' && index === 0) firstGoodsFileName = fileName;
@@ -3585,6 +3431,13 @@ function buildImagePrompt(moduleType, item, styleGuide) {
       Array.isArray(item.reference_images) && item.reference_images.length > 0
         ? '已提供参考图：请沿用参考图中的商品主体、包装或摆盘方式、摄影风格、材质质感和整体气质。'
         : '未提供参考图：可以根据提示词自由发挥商品主体、场景和购买引导，但必须保持强转化视觉。',
+    ];
+  } else if (moduleType === 'image_ad') {
+    promptSchema.generation_notes = [
+      ...styleNotes,
+      Array.isArray(item.reference_images) && item.reference_images.length > 0
+        ? '该广告块来自参考图中的未映射视觉块：保留参考图里的构图比例、主体层级、背景处理和视觉语气，不要改写成通用商品卡或标准横幅。'
+        : '该广告块用于承接参考页中的独立视觉块，保持强视觉表达，不要退化成普通商品卡。',
     ];
   } else if (styleNotes.length > 0) {
     promptSchema.generation_notes = styleNotes;
@@ -3633,6 +3486,19 @@ function collectUserAssetsReferenceImagePaths(entry, firstEntryFileName, project
     paths.push(path.join(projectDir, firstEntryFileName));
   }
   for (const referenceImage of Array.isArray(entry?.reference_images) ? entry.reference_images : []) {
+    const fileName = stringOr(referenceImage);
+    if (!fileName || /^(https?:|data:|blob:)/i.test(fileName) || !projectDir) continue;
+    paths.push(path.join(projectDir, fileName));
+  }
+  return [...new Set(paths)];
+}
+
+function collectImageItemReferenceImagePaths(item, priorGeneratedFileName, projectDir) {
+  const paths = [];
+  if (priorGeneratedFileName && projectDir) {
+    paths.push(path.join(projectDir, priorGeneratedFileName));
+  }
+  for (const referenceImage of Array.isArray(item?.reference_images) ? item.reference_images : []) {
     const fileName = stringOr(referenceImage);
     if (!fileName || /^(https?:|data:|blob:)/i.test(fileName) || !projectDir) continue;
     paths.push(path.join(projectDir, fileName));

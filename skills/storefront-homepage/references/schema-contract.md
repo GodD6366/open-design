@@ -23,9 +23,11 @@
 - `banner`
 - `goods`
 - `shop_info`
+- `image_ad`
 
 The modules array must contain exactly the confirmed modules from
-`storefront.requirements.json`, in that exact order.
+`storefront.requirements.json.module_specs`, in that exact order. Only
+`image_ad` may repeat.
 
 ## Image-module rules
 
@@ -59,6 +61,11 @@ The modules array must contain exactly the confirmed modules from
   - `image_prompt_schema.layout.structure` = `vertical_shop_story`
   - `content.tags` must be `[]`
   - `promotion.price`, `original_price`, `discount`, `badge`, `cta` must be empty strings
+- `image_ad`
+  - `aspect_ratio` follows the matching `requirements.module_specs[*].aspectRatio`
+  - `image_prompt_schema.type` = `image_ad`
+  - `image_prompt_schema.layout.structure` = `reference_image_ad`
+  - the visual should preserve the analyzed reference-block composition and not collapse into a generic goods/banner recipe
 
 ## User-assets rules
 
@@ -82,3 +89,5 @@ The modules array must contain exactly the confirmed modules from
 - do not introduce shop logo, brand corner mark, watermark, or shop slogan into the entry-panel image
 - do not use legacy keys such as `primaryColor`, `divider`, `aspectRatio`, `tone`, `items`
 - legacy `body_image`, `body_alt`, and `body_image_schema` are compatibility fields only, not the primary generated structure
+- all image-bearing modules may keep local `reference_images` so downstream
+  asset generation can use image-edit mode instead of text-only generation

@@ -1,12 +1,24 @@
 {
   "status": "needs_confirmation",
   "source_prompt": "店铺首页",
-  "modules": ["top_slider", "user_assets", "banner", "goods", "shop_info"],
+  "module_specs": [
+    {
+      "type": "top_slider",
+      "content": ""
+    },
+    {
+      "type": "user_assets",
+      "content": ""
+    },
+    {
+      "type": "shop_info",
+      "content": ""
+    }
+  ],
+  "modules": ["top_slider", "user_assets", "shop_info"],
   "module_content": {
     "top_slider": "",
     "user_assets": "",
-    "banner": "",
-    "goods": "",
     "shop_info": ""
   },
   "style": {
@@ -27,8 +39,7 @@
     "goodsCount": 3
   },
   "confirmation_questions": [
-    "确认 modules 是否就是本次要生成的模块，删除不需要的模块。",
-    "确认 module_content 是否准确表达每个模块的内容目标。",
+    "确认 module_specs 的顺序、模块类型、内容目标和 image_ad 比例提示。",
     "确认 style 中的行业、品牌名、主色、风格和禁忌表达。",
     "确认无误后将 status 改为 confirmed，再进入 schema 生成。"
   ]

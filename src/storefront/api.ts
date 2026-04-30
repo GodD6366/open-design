@@ -1,6 +1,61 @@
-import type { AssetTask, StorefrontState } from './types';
+import type {
+  AssetTask,
+  StorefrontModuleSpec,
+  StorefrontModuleType,
+  StorefrontState,
+} from './types';
 
 const DEFAULT_ACTION_BUTTON_SELECTION = ['到店自取', '外卖点单'];
+
+function normalizeAspectRatio(value: unknown, fallback = '1:1'): string {
+  return typeof value === 'string' && /^\d+:\d+$/.test(value.trim()) ? value.trim() : fallback;
+}
+
+function normalizeModuleSpecs(
+  input: StorefrontState['requirements'] | undefined,
+): StorefrontModuleSpec[] {
+  if (Array.isArray(input?.module_specs) && input.module_specs.length > 0) {
+    return input.module_specs
+      .filter((spec): spec is StorefrontModuleSpec => Boolean(spec && typeof spec === 'object'))
+      .map((spec) => ({
+        type: spec.type,
+        content: typeof spec.content === 'string' ? spec.content : '',
+        itemCount: typeof spec.itemCount === 'number' ? spec.itemCount : undefined,
+        aspectRatio:
+          spec.type === 'image_ad'
+            ? normalizeAspectRatio(spec.aspectRatio, '1:1')
+            : undefined,
+      }));
+  }
+
+  const modules = Array.isArray(input?.modules) ? input.modules : [];
+  const moduleContent = input?.module_content ?? {};
+  return modules.map((type) => ({
+    type,
+    content: typeof moduleContent[type] === 'string' ? moduleContent[type] : '',
+    itemCount:
+      type === 'top_slider'
+        ? input?.counts?.sliderCount ?? 2
+        : type === 'goods'
+          ? input?.counts?.goodsCount ?? 3
+          : undefined,
+    aspectRatio: type === 'image_ad' ? '1:1' : undefined,
+  }));
+}
+
+function deriveModules(specs: StorefrontModuleSpec[]): StorefrontModuleType[] {
+  return specs.map((spec) => spec.type);
+}
+
+function deriveModuleContent(specs: StorefrontModuleSpec[]): Partial<Record<StorefrontModuleType, string>> {
+  const content: Partial<Record<StorefrontModuleType, string>> = {};
+  specs.forEach((spec) => {
+    if (!(spec.type in content)) {
+      content[spec.type] = spec.content;
+    }
+  });
+  return content;
+}
 
 function normalizeActionButtons(input: StorefrontState['requirements']['action_buttons'] | undefined) {
   const selected = Array.isArray(input?.selected)
@@ -19,11 +74,13 @@ function normalizeActionButtons(input: StorefrontState['requirements']['action_b
 function normalizeStorefrontRequirements(
   input: StorefrontState['requirements'] | undefined,
 ): StorefrontState['requirements'] {
+  const module_specs = normalizeModuleSpecs(input);
   return {
     status: input?.status === 'confirmed' ? 'confirmed' : 'needs_confirmation',
     source_prompt: input?.source_prompt ?? '',
-    modules: Array.isArray(input?.modules) ? input.modules : [],
-    module_content: input?.module_content ?? {},
+    module_specs,
+    modules: deriveModules(module_specs),
+    module_content: deriveModuleContent(module_specs),
     style: {
       industry: input?.style?.industry ?? '',
       brand_name: input?.style?.brand_name ?? '',
@@ -110,22 +167,6 @@ export async function applyStorefrontSchema(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId, schemaText }),
-  });
-  const json = await jsonOrThrow<{ state: StorefrontState }>(resp);
-  return normalizeStorefrontState(json.state);
-}
-
-export async function generateStorefrontAssets(
-  projectId: string,
-  forceRegenerate = false,
-): Promise<StorefrontState> {
-  const resp = await fetch('/api/storefront/generate-assets', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      projectId,
-      forceRegenerate,
-    }),
   });
   const json = await jsonOrThrow<{ state: StorefrontState }>(resp);
   return normalizeStorefrontState(json.state);

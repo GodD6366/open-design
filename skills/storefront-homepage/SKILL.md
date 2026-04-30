@@ -60,6 +60,10 @@ storefront-homepage/
 ## Core rules
 
 1. Use the OD chat clarification flow: requirements first, visual second, schema after that.
+   - If the opening turn already includes local reference images and the
+     current daemon agent can inspect them, analyze them first in the first
+     clarification turn, prefill `参考图模块分析`, and preserve its ordered
+     `module_specs`.
 2. Do not create `index.html`.
 3. Do not emit `<artifact>`.
 4. Keep `storefront.requirements.json` aligned with the requirements contract.
@@ -71,6 +75,7 @@ storefront-homepage/
    - `banner`
    - `goods`
    - `shop_info`
+   - `image_ad`
 
 ## File workflow
 

@@ -34,7 +34,12 @@ import type {
   ProjectFile,
   SkillSummary,
 } from '../types';
-import { fetchStorefrontState, applyStorefrontSchema, enqueueStorefrontAssets, fetchStorefrontAssetTasks } from '../storefront/api';
+import {
+  fetchStorefrontState,
+  applyStorefrontSchema,
+  enqueueStorefrontAssets,
+  fetchStorefrontAssetTasks,
+} from '../storefront/api';
 import { StorefrontPhonePreview } from '../storefront/StorefrontPhonePreview';
 import {
   STOREFRONT_PREVIEW_FILE,
@@ -43,7 +48,10 @@ import {
   STOREFRONT_SCHEMA_FILE,
   STOREFRONT_SCREEN_FILE,
 } from '../storefront/constants';
-import type { AssetTask, StorefrontState } from '../storefront/types';
+import type {
+  AssetTask,
+  StorefrontState,
+} from '../storefront/types';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
@@ -389,6 +397,7 @@ export function StorefrontProjectView({
           handlers.onError(new Error('请先在顶部选择一个本地 Agent。'));
           return;
         }
+        const choice = config.agentModels?.[config.agentId];
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -397,6 +406,8 @@ export function StorefrontProjectView({
           handlers,
           projectId: project.id,
           attachments: attachments.map((attachment) => attachment.path),
+          model: choice?.model ?? null,
+          reasoning: choice?.reasoning ?? null,
         });
         return;
       }

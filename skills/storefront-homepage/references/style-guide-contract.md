@@ -31,6 +31,10 @@ generation must follow a concrete visual template or reusable industry preset.
   the filename in `reference_images` when possible.
 - If the user gives a reference image URL, download it into the project first,
   then record only the local filename in `reference_images`.
+- When visual-stage reference images exist, `analysis.source_summary`,
+  `analysis.icon_style`, `analysis.background_style`, and
+  `analysis.layout_style` should capture reusable cues from that page, not
+  only a generic tone label.
 - `preset_id = bakery-handdrawn-cream` means:
   - icon / wordmark style is hand-drawn doodle, black marker-like strokes,
     slightly uneven, playful, not corporate

@@ -1,7 +1,21 @@
-const MODULES = ["top_slider", "user_assets", "banner", "goods", "shop_info"];
+const MODULES = [
+  "top_slider",
+  "user_assets",
+  "banner",
+  "goods",
+  "shop_info",
+  "image_ad",
+];
 
-const DEFAULT_MODULES = [...MODULES];
+const DEFAULT_MODULES = [
+  "top_slider",
+  "user_assets",
+  "shop_info",
+];
+
 const DEFAULT_ACTION_BUTTON_SELECTION = ["到店自取", "外卖点单"];
+const REPEATABLE_MODULE_TYPES = new Set(["image_ad"]);
+const BRAND_PROMPT_MODULES = new Set(["top_slider", "shop_info"]);
 
 const MODULE_LABELS = {
   top_slider: "顶部主视觉轮播",
@@ -9,6 +23,7 @@ const MODULE_LABELS = {
   banner: "首页入口型 Banner",
   goods: "商品展示",
   shop_info: "品牌信息长图展示",
+  image_ad: "参考图兜底广告块",
 };
 
 const RATIOS = {
@@ -16,6 +31,7 @@ const RATIOS = {
   banner: "75:30",
   goods: "4:3",
   shop_info: "9:16",
+  image_ad: "1:1",
 };
 
 const PROMPT_TYPES = {
@@ -23,6 +39,7 @@ const PROMPT_TYPES = {
   banner: "banner",
   goods: "goods",
   shop_info: "shop_info",
+  image_ad: "image_ad",
 };
 
 const STRUCTURES = {
@@ -30,9 +47,8 @@ const STRUCTURES = {
   banner: "landscape_entry_banner",
   goods: "product_showcase",
   shop_info: "vertical_shop_story",
+  image_ad: "reference_image_ad",
 };
-
-const BRAND_PROMPT_MODULES = new Set(["top_slider", "shop_info"]);
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -49,8 +65,20 @@ function hasDisplayableBrand(brand) {
   );
 }
 
+function isAspectRatioString(value) {
+  return typeof value === "string" && /^\d+:\d+$/.test(value.trim());
+}
+
+function normalizeAspectRatioHint(value, fallback = "1:1") {
+  return isAspectRatioString(value) ? value.trim() : fallback;
+}
+
 function isHomepageModuleType(value) {
   return MODULES.includes(value);
+}
+
+function isRepeatableModuleType(value) {
+  return REPEATABLE_MODULE_TYPES.has(value);
 }
 
 function assertHomepageModules(modules) {
@@ -63,7 +91,7 @@ function assertHomepageModules(modules) {
     if (!isHomepageModuleType(moduleType)) {
       throw new Error(`不支持的模块: ${String(moduleType)}`);
     }
-    if (seen.has(moduleType)) {
+    if (!isRepeatableModuleType(moduleType) && seen.has(moduleType)) {
       throw new Error(`模块重复: ${moduleType}`);
     }
     seen.add(moduleType);
@@ -198,17 +226,128 @@ function moduleContentFor(type, prompt, context) {
       return "生成商品营销卡片，画面内必须包含购买行动点、商品卖点和短 CTA。";
     case "shop_info":
       return "生成品牌信息长图，优先表达品牌故事、原料理念、门店信息或首页收尾品牌页。";
+    case "image_ad":
+      return "承接参考页中暂时无法映射到既有模块的视觉块，保留参考图中的比例、构图关系和核心视觉元素。";
     default:
       return "";
   }
 }
 
-function buildInitialHomepageRequirements(prompt, overrides = {}) {
-  const modules = Array.isArray(overrides.modules) && overrides.modules.length
-    ? overrides.modules
-    : DEFAULT_MODULES;
-  assertHomepageModules(modules);
+function normalizeHomepageModuleSpecs(value) {
+  if (value === undefined) {
+    return null;
+  }
 
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("moduleSpecs 必须是非空数组。");
+  }
+
+  const seen = new Set();
+  return value.map((spec, index) => {
+    if (!spec || typeof spec !== "object" || !isHomepageModuleType(spec.type)) {
+      throw new Error(`moduleSpecs[${index}].type 不合法。`);
+    }
+
+    if (!isRepeatableModuleType(spec.type) && seen.has(spec.type)) {
+      throw new Error(`moduleSpecs 不允许重复模块: ${spec.type}`);
+    }
+    seen.add(spec.type);
+
+    const itemCount =
+      typeof spec.itemCount === "number" &&
+      Number.isInteger(spec.itemCount) &&
+      spec.itemCount > 0
+        ? spec.itemCount
+        : undefined;
+
+    return {
+      type: spec.type,
+      content:
+        typeof spec.content === "string" && spec.content.trim()
+          ? spec.content.trim()
+          : "",
+      itemCount,
+      aspectRatio:
+        spec.type === "image_ad"
+          ? normalizeAspectRatioHint(spec.aspectRatio, RATIOS.image_ad)
+          : undefined,
+    };
+  });
+}
+
+function moduleSpecsFromLegacy(
+  modules,
+  moduleContent,
+  prompt,
+  context,
+  counts,
+) {
+  const orderedModules =
+    Array.isArray(modules) && modules.length > 0 ? modules : DEFAULT_MODULES;
+  assertHomepageModules(orderedModules);
+
+  return orderedModules.map((moduleType) => {
+    const spec = {
+      type: moduleType,
+      content:
+        typeof moduleContent?.[moduleType] === "string" &&
+        moduleContent[moduleType].trim()
+          ? moduleContent[moduleType].trim()
+          : moduleContentFor(moduleType, prompt, context),
+    };
+
+    if (moduleType === "top_slider") {
+      spec.itemCount = counts.sliderCount;
+    } else if (moduleType === "goods") {
+      spec.itemCount = counts.goodsCount;
+    } else if (moduleType === "image_ad") {
+      spec.aspectRatio = RATIOS.image_ad;
+    }
+
+    return spec;
+  });
+}
+
+function completeModuleSpecs(specs, prompt, context, counts) {
+  return specs.map((spec) => {
+    const next = {
+      type: spec.type,
+      content:
+        typeof spec.content === "string" && spec.content.trim()
+          ? spec.content.trim()
+          : moduleContentFor(spec.type, prompt, context),
+    };
+
+    if (spec.type === "top_slider") {
+      next.itemCount = parsePositiveInteger(spec.itemCount, counts.sliderCount);
+    } else if (spec.type === "goods") {
+      next.itemCount = parsePositiveInteger(spec.itemCount, counts.goodsCount);
+    } else if (spec.type === "image_ad") {
+      next.aspectRatio = normalizeAspectRatioHint(
+        spec.aspectRatio,
+        RATIOS.image_ad,
+      );
+    }
+
+    return next;
+  });
+}
+
+function buildModuleContentFromSpecs(specs) {
+  const content = {};
+  for (const spec of specs) {
+    if (typeof spec.content === "string" && spec.content.trim() && !(spec.type in content)) {
+      content[spec.type] = spec.content.trim();
+    }
+  }
+  return content;
+}
+
+function buildInitialHomepageRequirements(prompt, overrides = {}) {
+  const counts = {
+    sliderCount: parsePositiveInteger(overrides.sliderCount, 2),
+    goodsCount: parsePositiveInteger(overrides.goodsCount, 3),
+  };
   const style = {
     industry:
       typeof overrides.industry === "string" && overrides.industry.trim()
@@ -231,25 +370,32 @@ function buildInitialHomepageRequirements(prompt, overrides = {}) {
       : [],
   };
   const actionButtons = normalizeActionButtons(overrides.action_buttons);
-
-  const moduleContent = Object.fromEntries(
-    modules.map((moduleType) => [
-      moduleType,
-      typeof overrides.module_content?.[moduleType] === "string" &&
-      overrides.module_content[moduleType].trim()
-        ? overrides.module_content[moduleType].trim()
-        : moduleContentFor(moduleType, prompt, {
-            style,
-            action_buttons: actionButtons,
-          }),
-    ]),
+  const context = {
+    style,
+    action_buttons: actionButtons,
+  };
+  const normalizedSpecs =
+    normalizeHomepageModuleSpecs(overrides.module_specs) ??
+    moduleSpecsFromLegacy(
+      overrides.modules,
+      overrides.module_content,
+      prompt,
+      context,
+      counts,
+    );
+  const module_specs = completeModuleSpecs(
+    normalizedSpecs,
+    prompt,
+    context,
+    counts,
   );
 
   return {
     status: overrides.status === "confirmed" ? "confirmed" : "needs_confirmation",
     source_prompt: prompt,
-    modules,
-    module_content: moduleContent,
+    module_specs,
+    modules: moduleTypesFor(module_specs),
+    module_content: buildModuleContentFromSpecs(module_specs),
     style,
     brand_logo:
       typeof overrides.brand_logo === "string" ? overrides.brand_logo.trim() : "",
@@ -258,55 +404,13 @@ function buildInitialHomepageRequirements(prompt, overrides = {}) {
       typeof overrides.other_requirements === "string"
         ? overrides.other_requirements.trim()
         : "",
-    counts: {
-      sliderCount: parsePositiveInteger(overrides.sliderCount, 2),
-      goodsCount: parsePositiveInteger(overrides.goodsCount, 3),
-    },
+    counts,
     confirmation_questions: [
-      "确认 modules 是否就是本次要生成的模块，删除不需要的模块。",
-      "确认 module_content 是否准确表达每个模块的内容目标。",
+      "确认 module_specs 的顺序、模块类型、内容目标和 image_ad 比例提示。",
       "确认 style 中的行业、品牌名、主色、风格和禁忌表达。",
       "确认无误后将 status 改为 confirmed，再进入 schema 生成。",
     ],
   };
-}
-
-function normalizeHomepageModuleSpecs(value) {
-  if (value === undefined) {
-    return null;
-  }
-
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error("moduleSpecs 必须是非空数组。");
-  }
-
-  const seen = new Set();
-  return value.map((spec, index) => {
-    if (!spec || typeof spec !== "object" || !isHomepageModuleType(spec.type)) {
-      throw new Error(`moduleSpecs[${index}].type 不合法。`);
-    }
-
-    if (seen.has(spec.type)) {
-      throw new Error(`moduleSpecs 不允许重复模块: ${spec.type}`);
-    }
-    seen.add(spec.type);
-
-    const itemCount =
-      typeof spec.itemCount === "number" &&
-      Number.isInteger(spec.itemCount) &&
-      spec.itemCount > 0
-        ? spec.itemCount
-        : undefined;
-
-    return {
-      type: spec.type,
-      content:
-        typeof spec.content === "string" && spec.content.trim()
-          ? spec.content.trim()
-          : MODULE_LABELS[spec.type],
-      itemCount,
-    };
-  });
 }
 
 function moduleTypesFor(specs) {
@@ -314,13 +418,23 @@ function moduleTypesFor(specs) {
 }
 
 function getRequestedItemCount(specs, type, fallback) {
-  return specs?.find((spec) => spec.type === type)?.itemCount ?? fallback;
+  const match = specs?.find(
+    (spec) => spec.type === type && typeof spec.itemCount === "number",
+  );
+  return match?.itemCount ?? fallback;
+}
+
+function getRequestedAspectRatio(specs, type, fallback, occurrenceIndex = 0) {
+  if (!specs) return fallback;
+  const matches = specs.filter((spec) => spec.type === type);
+  const target = matches[occurrenceIndex];
+  return normalizeAspectRatioHint(target?.aspectRatio, fallback);
 }
 
 function buildPromptFromRequirements(requirements) {
   const style = requirements.style ?? {};
-  const moduleContent = requirements.module_content ?? {};
   const actionButtons = normalizeActionButtons(requirements.action_buttons);
+  const specs = normalizeHomepageModuleSpecs(requirements.module_specs) ?? [];
   const lines = [
     requirements.source_prompt || "",
     "",
@@ -335,38 +449,39 @@ function buildPromptFromRequirements(requirements) {
     `- 按钮补充: ${actionButtons.custom || ""}`,
     `- 其他要求: ${requirements.other_requirements || ""}`,
     "",
-    "已确认模块内容:",
-    ...requirements.modules.map(
-      (moduleType) => `- ${moduleType}: ${moduleContent[moduleType] || ""}`,
-    ),
+    "已确认模块规格:",
+    ...specs.map((spec, index) => {
+      const suffix = [];
+      if (typeof spec.itemCount === "number") suffix.push(`items=${spec.itemCount}`);
+      if (spec.type === "image_ad" && spec.aspectRatio) {
+        suffix.push(`ratio=${spec.aspectRatio}`);
+      }
+      const hint = suffix.length ? ` [${suffix.join(", ")}]` : "";
+      return `- ${index + 1}. ${spec.type}${hint}: ${spec.content || ""}`;
+    }),
   ];
 
   return lines.join("\n").trim();
 }
 
 function buildModuleSpecs(modules, moduleContent, sliderCount, goodsCount) {
-  assertHomepageModules(modules);
-
-  return modules.map((moduleType) => {
-    const spec = {
-      type: moduleType,
-      content: moduleContent?.[moduleType] || "",
-    };
-
-    if (moduleType === "top_slider") {
-      spec.itemCount = sliderCount;
-    }
-    if (moduleType === "goods") {
-      spec.itemCount = goodsCount;
-    }
-
-    return spec;
-  });
+  return moduleSpecsFromLegacy(
+    modules,
+    moduleContent,
+    "",
+    { style: {}, action_buttons: normalizeActionButtons(undefined) },
+    { sliderCount, goodsCount },
+  );
 }
 
 function expectedModulesFromRequirements(requirements) {
   if (!requirements) {
     return DEFAULT_MODULES;
+  }
+
+  const specs = normalizeHomepageModuleSpecs(requirements.module_specs);
+  if (specs && specs.length > 0) {
+    return moduleTypesFor(specs);
   }
 
   assertHomepageModules(requirements.modules);
@@ -416,15 +531,22 @@ function validateImagePromptSchema(module, item, index, errors) {
     fail(errors, `${path}.type 必须是 ${PROMPT_TYPES[module.type]}。`);
   }
 
-  if (!BRAND_PROMPT_MODULES.has(module.type) && hasDisplayableBrand(promptSchema.brand)) {
+  if (
+    !BRAND_PROMPT_MODULES.has(module.type) &&
+    hasDisplayableBrand(promptSchema.brand)
+  ) {
     fail(errors, `${path}.brand 对 ${module.type} 不应包含店铺 Logo、品牌角标或店铺 slogan。`);
   }
 
   if (!isRecord(promptSchema.layout)) {
     fail(errors, `${path}.layout 必须是对象。`);
   } else {
-    if (promptSchema.layout.ratio !== RATIOS[module.type]) {
-      fail(errors, `${path}.layout.ratio 必须是 ${RATIOS[module.type]}。`);
+    const expectedRatio =
+      module.type === "image_ad"
+        ? normalizeAspectRatioHint(item.aspect_ratio, RATIOS.image_ad)
+        : RATIOS[module.type];
+    if (promptSchema.layout.ratio !== expectedRatio) {
+      fail(errors, `${path}.layout.ratio 必须是 ${expectedRatio}。`);
     }
     if (promptSchema.layout.structure !== STRUCTURES[module.type]) {
       fail(
@@ -514,10 +636,18 @@ function validateImageModule(module, errors) {
       continue;
     }
 
-    if (item.aspect_ratio !== RATIOS[module.type]) {
+    const expectedRatio =
+      module.type === "image_ad"
+        ? normalizeAspectRatioHint(item.aspect_ratio, RATIOS.image_ad)
+        : RATIOS[module.type];
+    if (
+      module.type === "image_ad"
+        ? !isAspectRatioString(item.aspect_ratio)
+        : item.aspect_ratio !== expectedRatio
+    ) {
       fail(
         errors,
-        `${module.type}.data.items[${index}].aspect_ratio 必须是 ${RATIOS[module.type]}。`,
+        `${module.type}.data.items[${index}].aspect_ratio 必须是 ${expectedRatio}。`,
       );
     }
 
@@ -525,7 +655,10 @@ function validateImageModule(module, errors) {
       if (item.asset_type !== "png") {
         fail(errors, "banner.data.items[0].asset_type 必须是 png。");
       }
-      if (typeof item.entry_purpose !== "string" || !item.entry_purpose.trim()) {
+      if (
+        typeof item.entry_purpose !== "string" ||
+        !item.entry_purpose.trim()
+      ) {
         fail(errors, "banner.data.items[0].entry_purpose 不能为空。");
       }
     }
@@ -691,6 +824,7 @@ export {
   buildModuleSpecs,
   buildPromptFromRequirements,
   expectedModulesFromRequirements,
+  getRequestedAspectRatio,
   getRequestedItemCount,
   isHomepageModuleType,
   normalizeHomepageModuleSpecs,
