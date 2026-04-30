@@ -128,119 +128,150 @@
         "nickname": "店铺会员",
         "upgrade_tip": "优化首页功能入口组织，提升到店与下单转化。",
         "progress_percent": 33,
-        "body_image": "",
-        "body_image_no_cache": false,
-        "body_alt": "客户资产功能入口图",
-        "body_image_schema": {
-          "type": "mobile_ui_entry_panel",
-          "instruction": {
-            "strict_mode": true,
-            "canvas_rules": {
-              "background": "pure_white",
-              "no_border": true,
-              "no_divider": true,
-              "no_outline": true,
-              "fill_to_edge": true,
-              "no_margin": true,
-              "no_padding": true
+        "card_layout": {
+          "template_type": 1,
+          "slots": [
+            {
+              "id": "left",
+              "role": "sub_action",
+              "size": "medium",
+              "position": "left"
+            },
+            {
+              "id": "right",
+              "role": "sub_action",
+              "size": "medium",
+              "position": "right"
             }
-          },
-          "layout": {
-            "structure": "grid",
-            "distribution": "auto_balance",
-            "alignment": {
-              "horizontal": "full_bleed",
-              "edge": "no_padding"
-            },
-            "spacing": {
-              "mode": "whitespace_only",
-              "density": "comfortable"
-            },
-            "grouping": {
-              "enabled": true,
-              "visual_method": "spacing_only"
-            },
-            "slots": [
-              {
-                "id": "left",
-                "role": "sub_action",
-                "size": "medium",
-                "position": "left"
+          ]
+        },
+        "entries": [
+          {
+            "id": "left",
+            "slot_id": "left",
+            "icon": "sparkles",
+            "title": "到店自取",
+            "subtitle": "功能入口",
+            "image": "",
+            "alt": "到店自取",
+            "reference_images": [],
+            "image_prompt_schema": {
+              "type": "user_asset_entry",
+              "version": "1.0",
+              "template": "entry_card",
+              "layout": {
+                "template_type": 1,
+                "slot_id": "left",
+                "ratio": "300:220",
+                "structure": "storefront_entry_card",
+                "card_size_px": {
+                  "width": 300,
+                  "height": 220
+                }
               },
-              {
-                "id": "right",
-                "role": "sub_action",
-                "size": "medium",
-                "position": "right"
-              }
-            ]
-          },
-          "visual_style": {
-            "design_principle": "minimal_ui",
-            "brand_tone": "premium",
-            "color_system": {
-              "primary": "#C98C5A",
-              "usage": {
-                "icon": true,
-                "accent": true,
-                "background": false
-              }
-            },
-            "icon": {
-              "style": "flat_duotone",
-              "shape": "rounded",
-              "stroke": "none"
-            },
-            "block": {
-              "radius": 22,
-              "shadow": "soft"
-            },
-            "typography": {
-              "title_case": "chinese",
-              "subtitle_case": "uppercase"
-            }
-          },
-          "content": {
-            "mode": "dynamic_binding",
-            "source": "slots_mapping",
-            "fields": ["icon", "title", "subtitle"],
-            "slots_mapping": {
-              "left": {
+              "style": {
+                "background_type": "solid",
+                "background_color": "#FFFFFF",
+                "primary_color": "#C98C5A",
+                "accent_color": "#C98C5A",
+                "text_color": "#2F2F34",
+                "style_tone": "storefront",
+                "visual_feel": "storefront_entry_card"
+              },
+              "content": {
+                "title": "到店自取",
+                "subtitle": "功能入口",
+                "description": "客户资产功能入口"
+              },
+              "entry": {
                 "icon": "sparkles",
                 "title": "到店自取",
-                "subtitle": "功能入口"
+                "subtitle": "功能入口",
+                "role": "sub_action",
+                "size": "medium",
+                "slot_id": "left"
               },
-              "right": {
-                "icon": "sparkles",
-                "title": "外卖点单",
-                "subtitle": "功能入口"
+              "constraints": {
+                "pure_white_background": true,
+                "no_border": true,
+                "no_divider": true,
+                "no_outline": true,
+                "no_extra_cards": true,
+                "no_floating_elements": true,
+                "no_circle_entries": true,
+                "no_logo": true,
+                "no_brand_mark": true,
+                "no_shop_slogan": true,
+                "follow_page_icon_style": true,
+                "lock_card_size": true
               }
             }
           },
-          "constraints": [
-            "pure_white_background",
-            "no_border",
-            "no_divider",
-            "no_outline",
-            "no_extra_cards",
-            "no_floating_elements",
-            "no_circle_entries",
-            "icon_style_follow_page",
-            "white_background_only",
-            "no_complex_background",
-            "no_background_pattern",
-            "no_gradient_background",
-            "no_photography_background",
-            "no_logo",
-            "no_brand_mark",
-            "no_shop_slogan"
-          ],
-          "output": {
-            "aspect_ratio": "dynamic",
-            "format": "image",
-            "target": "mobile_ui"
+          {
+            "id": "right",
+            "slot_id": "right",
+            "icon": "sparkles",
+            "title": "外卖点单",
+            "subtitle": "功能入口",
+            "image": "",
+            "alt": "外卖点单",
+            "reference_images": [],
+            "image_prompt_schema": {
+              "type": "user_asset_entry",
+              "version": "1.0",
+              "template": "entry_card",
+              "layout": {
+                "template_type": 1,
+                "slot_id": "right",
+                "ratio": "300:220",
+                "structure": "storefront_entry_card",
+                "card_size_px": {
+                  "width": 300,
+                  "height": 220
+                }
+              },
+              "style": {
+                "background_type": "solid",
+                "background_color": "#FFFFFF",
+                "primary_color": "#C98C5A",
+                "accent_color": "#C98C5A",
+                "text_color": "#2F2F34",
+                "style_tone": "storefront",
+                "visual_feel": "storefront_entry_card"
+              },
+              "content": {
+                "title": "外卖点单",
+                "subtitle": "功能入口",
+                "description": "客户资产功能入口"
+              },
+              "entry": {
+                "icon": "sparkles",
+                "title": "外卖点单",
+                "subtitle": "功能入口",
+                "role": "sub_action",
+                "size": "medium",
+                "slot_id": "right"
+              },
+              "constraints": {
+                "pure_white_background": true,
+                "no_border": true,
+                "no_divider": true,
+                "no_outline": true,
+                "no_extra_cards": true,
+                "no_floating_elements": true,
+                "no_circle_entries": true,
+                "no_logo": true,
+                "no_brand_mark": true,
+                "no_shop_slogan": true,
+                "follow_page_icon_style": true,
+                "lock_card_size": true
+              }
+            }
           }
-        }
+        ],
+        "body_image": "",
+        "body_image_no_cache": false,
+        "body_alt": "客户资产功能入口图"
       }
     },
     {

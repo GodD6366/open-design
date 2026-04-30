@@ -12,8 +12,12 @@
 - `banner` has exactly 1 item and `asset_type = png`.
 - `banner` and `goods` image prompt schemas do not carry displayable `brand`, logo placement, shop logo, brand mark, watermark, or shop slogan instructions.
 - `banner` keeps lightweight entry copy: no tags, price, discount, badge, CTA, coupon wall, or product-card photography background.
-- `user_assets.body_image_schema` keeps the `mobile_ui_entry_panel` DSL intact.
-- When `user_assets` uses the asymmetric 3-entry layout, its canonical slot positions are `left_large`, `right_top`, `right_bottom`, while existing legacy `left/right_top/right_bottom` projects still preview correctly.
+- `user_assets.data.card_layout` and `user_assets.data.entries` are present and mutually aligned.
+- `user_assets.data.card_layout.template_type` is one of `7/1/2/3/6/5/hotzone`, and fixed layouts use canonical slot ids.
+- Default 3-entry output is `template_type = 3`; only use `template_type = 2` when the confirmed request text explicitly implies `左一右二 / 一大两小 / 主次入口`.
+- `hotzone` is only used for more than 5 entries or explicit hotzone/freeform requests.
+- `user_assets.data.entries[*].title` preserves the confirmed button wording, and each entry has `id`, `slot_id`, `icon`, `title`, `subtitle`, `image_prompt_schema`.
 - `user_assets` only describes function icons, titles, and subtitles; icons follow page style while the background remains plain white with no complex background.
+- Legacy `body_image/body_alt/body_image_schema` only remain as compatibility fields when old projects already carry them.
 - Schema copy, palette, and prompt intent stay aligned with the active style guide or inferred industry preset.
 - No HTML artifacts were created.

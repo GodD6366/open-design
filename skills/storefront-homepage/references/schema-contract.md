@@ -62,14 +62,23 @@ The modules array must contain exactly the confirmed modules from
 
 ## User-assets rules
 
-- `body_image_schema.type` must be `mobile_ui_entry_panel`
-- `body_image_schema.layout.slots` must contain at least 2 slots
-- the canonical asymmetric 3-entry layout uses `layout.structure = asymmetric_entry_grid`, `distribution = one_large_two_stacked`, and slot positions `left_large`, `right_top`, `right_bottom`
-- existing saved schemas may still use the legacy asymmetric alias `left`, `right_top`, `right_bottom`; runtime compatibility must remain intact
-- `body_image_schema.content.slots_mapping` must cover every slot id
-- every slot mapping must contain `icon`, `title`, `subtitle`
-- entry-panel image content is limited to function icons, titles, and subtitles; icon style follows the page style
+- `user_assets.data` is authored around `card_layout` and `entries`
+- `card_layout.template_type` must be one of `7`, `1`, `2`, `3`, `6`, `5`, `hotzone`
+- fixed-layout slot ids must stay canonical:
+  - `7 -> single`
+  - `1 -> left/right`
+  - `2 -> left_large/right_top/right_bottom`
+  - `3 -> left_1/center_1/right_1`
+  - `6 -> top_left/top_right/bottom_left/bottom_right`
+  - `5 -> top_left/top_right/bottom_left/bottom_center/bottom_right`
+- `hotzone` uses `slot_1 ... slot_n` and should only be used for more than 5 entries or explicit hotzone/freeform requests
+- default layout inference is `1 -> 7`, `2 -> 1`, `3 -> 3`, `4 -> 6`, `5 -> 5`, `>5 -> hotzone`; only use `2` for 3 entries when the request text explicitly implies `左一右二 / 一大两小 / 主次入口`
+- `entries.length` must equal `card_layout.slots.length`
+- every entry must contain `id`, `slot_id`, `icon`, `title`, `subtitle`, `image_prompt_schema`
+- keep confirmed button wording in `entries[*].title`; do not normalize it into hidden categories
+- each entry image prompt only describes one entry card; fixed layouts respect card size, hotzone may be freer
+- existing saved schemas may still carry legacy `body_image_schema` / `slots_mapping` data, including the asymmetric alias `left/right_top/right_bottom`; runtime compatibility must remain intact
 - background must stay plain white; do not use gradients, patterns, scenic illustration, photography, paper texture, or other complex backgrounds
 - do not introduce shop logo, brand corner mark, watermark, or shop slogan into the entry-panel image
 - do not use legacy keys such as `primaryColor`, `divider`, `aspectRatio`, `tone`, `items`
-- the rendered entry-panel image stays slot-driven and may be non-square; do not force a square output when the layout implies a wider canvas
+- legacy `body_image`, `body_alt`, and `body_image_schema` are compatibility fields only, not the primary generated structure

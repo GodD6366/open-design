@@ -85,12 +85,97 @@ const USER_ASSETS_DEFAULTS = {
   pendingLabel: '客户资产运行时生图中...',
 };
 
-const USER_ASSETS_CANVAS_WIDTH = 632;
-const USER_ASSETS_ROW_HEIGHT = 220;
-const USER_ASSETS_ROW_GAP = 16;
+const USER_ASSETS_TEMPLATE_TYPES = {
+  SINGLE: 7,
+  ONE_ROW_TWO: 1,
+  LEFT_ONE_RIGHT_TWO: 2,
+  ONE_ROW_THREE: 3,
+  TWO_ROW_FIVE: 5,
+  TWO_ROW_FOUR: 6,
+  HOTZONE: 'hotzone',
+};
+
+const USER_ASSETS_GRID_GAP = 11;
+const USER_ASSETS_TEMPLATE_TYPE_LABELS = {
+  7: '单张横图',
+  1: '一行两个',
+  2: '左一右二',
+  3: '一行三个',
+  5: '二行五个',
+  6: '二行四个',
+  hotzone: '热区自由布局',
+};
+
+const USER_ASSETS_SLOT_SIZE_SPECS = {
+  wide: { width: 611, height: 216, ratio: '611:216' },
+  large: { width: 300, height: 456, ratio: '300:456' },
+  medium: { width: 300, height: 220, ratio: '300:220' },
+  small: { width: 196, height: 220, ratio: '196:220' },
+  free: { width: 196, height: 220, ratio: '196:220' },
+};
+
+const USER_ASSETS_LAYOUT_SPECS = {
+  '7': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.SINGLE,
+    slots: [{ id: 'single', role: 'main_action', size: 'wide', position: 'single' }],
+    canvasWidth: 611,
+    canvasHeight: 216,
+  },
+  '1': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO,
+    slots: [
+      { id: 'left', role: 'sub_action', size: 'medium', position: 'left' },
+      { id: 'right', role: 'sub_action', size: 'medium', position: 'right' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 220,
+  },
+  '3': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE,
+    slots: [
+      { id: 'left_1', role: 'sub_action', size: 'small', position: 'left_1' },
+      { id: 'center_1', role: 'sub_action', size: 'small', position: 'center_1' },
+      { id: 'right_1', role: 'sub_action', size: 'small', position: 'right_1' },
+    ],
+    canvasWidth: 610,
+    canvasHeight: 220,
+  },
+  '2': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO,
+    slots: [
+      { id: 'left_large', role: 'main_action', size: 'large', position: 'left_large' },
+      { id: 'right_top', role: 'sub_action', size: 'medium', position: 'right_top' },
+      { id: 'right_bottom', role: 'sub_action', size: 'medium', position: 'right_bottom' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 456,
+  },
+  '6': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR,
+    slots: [
+      { id: 'top_left', role: 'sub_action', size: 'medium', position: 'top_left' },
+      { id: 'top_right', role: 'sub_action', size: 'medium', position: 'top_right' },
+      { id: 'bottom_left', role: 'sub_action', size: 'medium', position: 'bottom_left' },
+      { id: 'bottom_right', role: 'sub_action', size: 'medium', position: 'bottom_right' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 451,
+  },
+  '5': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE,
+    slots: [
+      { id: 'top_left', role: 'sub_action', size: 'medium', position: 'top_left' },
+      { id: 'top_right', role: 'sub_action', size: 'medium', position: 'top_right' },
+      { id: 'bottom_left', role: 'sub_action', size: 'small', position: 'bottom_left' },
+      { id: 'bottom_center', role: 'sub_action', size: 'small', position: 'bottom_center' },
+      { id: 'bottom_right', role: 'sub_action', size: 'small', position: 'bottom_right' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 451,
+  },
+};
+
 const USER_ASSETS_PREVIEW_BODY_WIDTH = 311;
-const USER_ASSETS_ASYMMETRIC_LARGE_WIDTH = 316;
-const USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH = 300;
 
 const STOREFRONT_TONE_PRESETS = JSON.parse(
   readFileSync(new URL('../src/storefront/tone-presets.json', import.meta.url), 'utf8'),
@@ -119,13 +204,13 @@ const BAKERY_STYLE_GUIDE_PRESET = {
   reference_images: [],
   analysis: {
     source_summary:
-      'Extracted from a bakery storefront template: warm cream paper background, hand-drawn black doodle lettering and icons, playful toast-orange / butter-yellow accents, poster-like hero, and an asymmetric action-card composition.',
+      'Extracted from a bakery storefront template: warm cream paper background, hand-drawn black doodle lettering and icons, playful toast-orange / butter-yellow accents, and a poster-like storefront hierarchy.',
     icon_style:
       'Hand-drawn doodle icons and wordmarks, black marker-like strokes, slightly uneven outlines, playful and cute instead of corporate.',
     background_style:
       'Warm cream paper tone with large white rounded cards, very sparse orange/yellow accent marks, airy whitespace, and soft warm shadows.',
     layout_style:
-      'Oversized poster hero first, then a floating member/action card, then an asymmetric action grid with one dominant left tile and stacked right tiles.',
+      'Oversized poster hero first, then a floating member/action card, then clean supporting entry-card rows that still follow the confirmed layout mode.',
     tone_keywords: ['bakery', 'hand-drawn', 'cream', 'playful', 'poster', 'warm'],
   },
   generation_rules: {
@@ -161,27 +246,6 @@ const BAKERY_STYLE_GUIDE_PRESET = {
     user_assets: {
       greeting: '欢迎回来',
       upgrade_tip: '用手绘感入口承接会员、自取、配送与扫码下单。',
-      layout: {
-        structure: 'asymmetric_entry_grid',
-        distribution: 'one_large_two_stacked',
-        alignment: {
-          horizontal: 'full_bleed',
-          edge: 'no_padding',
-        },
-        spacing: {
-          mode: 'whitespace_only',
-          density: 'comfortable',
-        },
-        grouping: {
-          enabled: true,
-          visual_method: 'spacing_only',
-        },
-        slots: [
-          { id: 'left_large', role: 'main_action', size: 'large', position: 'left_large' },
-          { id: 'right_top', role: 'sub_action', size: 'medium', position: 'right_top' },
-          { id: 'right_bottom', role: 'sub_action', size: 'medium', position: 'right_bottom' },
-        ],
-      },
       visual_style: {
         design_principle: 'minimal_ui',
         brand_tone: 'friendly',
@@ -205,11 +269,6 @@ const BAKERY_STYLE_GUIDE_PRESET = {
           title_case: 'mixed',
           subtitle_case: 'mixed',
         },
-      },
-      slots_mapping: {
-        left_large: { icon: 'pick_up', title: 'PICK UP', subtitle: '到店自取' },
-        right_top: { icon: 'delivery', title: 'DELIVERY', subtitle: '外卖点单' },
-        right_bottom: { icon: 'scan_code', title: 'SCAN CODE', subtitle: '扫码下单' },
       },
     },
   },
@@ -305,7 +364,7 @@ const BRAND_PROMPT_MODULES = new Set(['top_slider', 'shop_info']);
 
 const IMAGE_FILE_PREFIX = {
   top_slider: 'top-slider',
-  user_assets: 'user-assets',
+  user_assets: 'user-assets-entry',
   banner: 'banner',
   goods: 'goods',
   shop_info: 'shop-info',
@@ -514,6 +573,14 @@ export async function clearSchemaImageSlot(projectsRoot, projectId, fileName) {
         module.data.body_image = '';
         changed = true;
       }
+      if (Array.isArray(module.data?.entries)) {
+        for (const entry of module.data.entries) {
+          if (entry?.image === fileName) {
+            entry.image = '';
+            changed = true;
+          }
+        }
+      }
     } else if (Array.isArray(module.data?.items)) {
       for (const item of module.data.items) {
         if (item.image === fileName) {
@@ -600,11 +667,22 @@ export async function generateStorefrontAssets(
   const taskLogs = [];
   for (const task of tasks) {
     try {
+      let prompt = task.prompt;
+      if (task.buildPromptFn) {
+        const refUrl = `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(task.dependsOnFileName)}`;
+        prompt = task.buildPromptFn(refUrl);
+        task.prompt = prompt;
+      }
+      const inputImagePaths = task.buildInputImagePathsFn
+        ? task.buildInputImagePathsFn(projectDir)
+        : Array.isArray(task.inputImagePaths)
+          ? task.inputImagePaths
+          : [];
       const existingFile = !options.forceRegenerate
         ? await statMaybe(path.join(projectDir, task.fileName))
         : null;
       if (!existingFile) {
-        const generated = await generatePromptImage(task.prompt, task.size, imageConfig);
+        const generated = await generatePromptImage(prompt, task.size, imageConfig, inputImagePaths);
         await writeProjectFile(projectsRoot, projectId, task.fileName, generated.buffer, {
           overwrite: true,
         });
@@ -1016,65 +1094,54 @@ function resolveActionButtonLabels(requirements) {
   return labels.length > 0 ? labels : [...DEFAULT_ACTION_BUTTON_SELECTION];
 }
 
-function createUserAssetsSlots(count) {
-  if (count <= 1) {
-    return [
-      { id: 'slot_1', role: 'main_action', size: 'medium', position: 'slot_1' },
-    ];
-  }
-  if (count === 2) {
-    return [
-      { id: 'left', role: 'sub_action', size: 'medium', position: 'left' },
-      { id: 'right', role: 'sub_action', size: 'medium', position: 'right' },
-    ];
-  }
-  if (count === 3) {
-    return [
-      { id: 'left_large', role: 'main_action', size: 'large', position: 'left_large' },
-      { id: 'right_top', role: 'sub_action', size: 'medium', position: 'right_top' },
-      { id: 'right_bottom', role: 'sub_action', size: 'medium', position: 'right_bottom' },
-    ];
-  }
-  if (count === 4) {
-    return [
-      { id: 'top_left', role: 'sub_action', size: 'medium', position: 'top_left' },
-      { id: 'top_right', role: 'sub_action', size: 'medium', position: 'top_right' },
-      { id: 'bottom_left', role: 'sub_action', size: 'medium', position: 'bottom_left' },
-      { id: 'bottom_right', role: 'sub_action', size: 'medium', position: 'bottom_right' },
-    ];
-  }
-  if (count === 5) {
-    return [
-      { id: 'top_left', role: 'sub_action', size: 'medium', position: 'top_left' },
-      { id: 'top_right', role: 'sub_action', size: 'medium', position: 'top_right' },
-      { id: 'bottom_left', role: 'sub_action', size: 'medium', position: 'bottom_left' },
-      { id: 'bottom_center', role: 'sub_action', size: 'medium', position: 'bottom_center' },
-      { id: 'bottom_right', role: 'sub_action', size: 'medium', position: 'bottom_right' },
-    ];
-  }
-  return Array.from({ length: count }, (_, index) => ({
-    id: `slot_${index + 1}`,
-    role: 'sub_action',
-    size: 'medium',
-    position: `slot_${index + 1}`,
-  }));
+function cloneUserAssetsSlots(slots) {
+  return slots.map((slot) => ({ ...slot }));
 }
 
-function createUserAssetsSlotsMapping(labels, slots) {
-  return Object.fromEntries(
-    slots.map((slot, index) => [
-      slot.id,
-      {
-        icon: 'sparkles',
-        title: stringOr(labels[index], `入口 ${index + 1}`),
-        subtitle: '功能入口',
-      },
-    ]),
-  );
+function normalizeUserAssetsTemplateType(value) {
+  if (value === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    return USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+  }
+  const numeric = Number(value);
+  if (
+    numeric === USER_ASSETS_TEMPLATE_TYPES.SINGLE ||
+    numeric === USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO ||
+    numeric === USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO ||
+    numeric === USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE ||
+    numeric === USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE ||
+    numeric === USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR
+  ) {
+    return numeric;
+  }
+  return null;
 }
 
-function userAssetsSlots(schema) {
+function userAssetsTemplateTypeLabel(templateType) {
+  return USER_ASSETS_TEMPLATE_TYPE_LABELS[String(templateType)] ?? '客户资产布局';
+}
+
+function createHotzoneSlots(count) {
+  return Array.from({ length: Math.max(1, count) }, (_, index) => {
+    const id = `slot_${index + 1}`;
+    return {
+      id,
+      role: 'sub_action',
+      size: 'free',
+      position: id,
+    };
+  });
+}
+
+function fixedUserAssetsLayoutSpec(templateType) {
+  return USER_ASSETS_LAYOUT_SPECS[String(templateType)] ?? null;
+}
+
+function userAssetsLegacySlots(schema) {
   return Array.isArray(schema?.layout?.slots) ? schema.layout.slots.filter(isPlainObject) : [];
+}
+
+function userAssetsCardLayoutSlots(layout) {
+  return Array.isArray(layout?.slots) ? layout.slots.filter(isPlainObject) : [];
 }
 
 function userAssetsSlotPosition(slot) {
@@ -1086,36 +1153,149 @@ function hasUserAssetsPositions(slots, ...entries) {
   return entries.every((entry) => ids.includes(entry));
 }
 
-function isAsymmetricThreeUserAssetsLayout(schema) {
-  const slots = userAssetsSlots(schema);
-  if (slots.length !== 3) return false;
-  if (!hasUserAssetsPositions(slots, 'right_top', 'right_bottom')) return false;
-  if (hasUserAssetsPositions(slots, 'left_large') || hasUserAssetsPositions(slots, 'left')) {
-    return true;
+function templateTypeFromSlots(slots) {
+  if (!Array.isArray(slots) || slots.length === 0) return null;
+  if (slots.length === 1) {
+    const position = userAssetsSlotPosition(slots[0]);
+    if (position === 'single' || position === 'slot_1') {
+      return USER_ASSETS_TEMPLATE_TYPES.SINGLE;
+    }
   }
-  const structure = stringOr(schema?.layout?.structure);
-  const distribution = stringOr(schema?.layout?.distribution);
-  return (
-    structure === 'asymmetric' ||
-    structure === 'asymmetric_entry_grid' ||
-    distribution === 'one_large_two_stacked'
-  );
+  if (hasUserAssetsPositions(slots, 'left', 'right') && slots.length === 2) {
+    return USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO;
+  }
+  if (hasUserAssetsPositions(slots, 'left_1', 'center_1', 'right_1') && slots.length === 3) {
+    return USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE;
+  }
+  if (slots.length === 3 && hasUserAssetsPositions(slots, 'right_top', 'right_bottom')) {
+    if (hasUserAssetsPositions(slots, 'left_large') || hasUserAssetsPositions(slots, 'left')) {
+      return USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO;
+    }
+  }
+  if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
+    return USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR;
+  }
+  if (
+    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
+    slots.length === 5
+  ) {
+    return USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE;
+  }
+  if (slots.every((slot, index) => userAssetsSlotPosition(slot) === `slot_${index + 1}`)) {
+    return USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+  }
+  return null;
 }
 
-function resolveAsymmetricUserAssetsSlots(schema) {
-  const slots = userAssetsSlots(schema);
-  if (!isAsymmetricThreeUserAssetsLayout(schema)) return null;
-  const rightTop = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_top');
-  const rightBottom = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_bottom');
-  const left = slots.find((slot) => {
-    const position = userAssetsSlotPosition(slot);
-    return position === 'left_large' || position === 'left';
-  }) ?? slots.find((slot) => {
-    const position = userAssetsSlotPosition(slot);
-    return position !== 'right_top' && position !== 'right_bottom';
+function isHotzoneLayoutHint(text) {
+  return /热区|自由布局|自由排布|自由发挥|freeform|hot ?zone/i.test(text);
+}
+
+function isAsymmetricLayoutHint(text) {
+  return /左一右二|一大两小|主次入口|主入口|大卡|左右主次|1大2小/i.test(text);
+}
+
+function resolveUserAssetsHintText(requirements) {
+  return [
+    stringOr(requirements?.source_prompt),
+    stringOr(requirements?.module_content?.user_assets),
+    stringOr(requirements?.other_requirements),
+    stringOr(requirements?.action_buttons?.custom),
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function resolveUserAssetsEntryCount(requirements, value, legacySchema) {
+  const labels = resolveActionButtonLabels(requirements);
+  const entryCount = Array.isArray(value?.entries) ? value.entries.filter(isPlainObject).length : 0;
+  const layoutCount = userAssetsCardLayoutSlots(value?.card_layout).length;
+  const legacyCount = Object.keys(legacySchema?.content?.slots_mapping ?? {}).length
+    || userAssetsLegacySlots(legacySchema).length;
+  return Math.max(labels.length, entryCount, layoutCount, legacyCount, 1);
+}
+
+function inferUserAssetsTemplateType(requirements, value, legacySchema, presetTemplateType = null) {
+  const direct = normalizeUserAssetsTemplateType(value?.card_layout?.template_type);
+  if (direct !== null) return direct;
+
+  const explicitLegacy = templateTypeFromSlots(userAssetsCardLayoutSlots(value?.card_layout));
+  if (explicitLegacy !== null) return explicitLegacy;
+
+  const legacyTemplateType = templateTypeFromSlots(userAssetsLegacySlots(legacySchema));
+  if (legacyTemplateType !== null) return legacyTemplateType;
+
+  if (presetTemplateType !== null) {
+    return presetTemplateType;
+  }
+
+  const count = resolveUserAssetsEntryCount(requirements, value, legacySchema);
+  const hintText = resolveUserAssetsHintText(requirements);
+
+  if (count > 5 || isHotzoneLayoutHint(hintText)) {
+    return USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+  }
+  if (count <= 1) {
+    return USER_ASSETS_TEMPLATE_TYPES.SINGLE;
+  }
+  if (count === 2) {
+    return USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO;
+  }
+  if (count === 3) {
+    return isAsymmetricLayoutHint(hintText)
+      ? USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO
+      : USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE;
+  }
+  if (count === 4) {
+    return USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR;
+  }
+  if (count === 5) {
+    return USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE;
+  }
+  return USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+}
+
+function createUserAssetsCardLayout(templateType, count) {
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    return {
+      template_type: USER_ASSETS_TEMPLATE_TYPES.HOTZONE,
+      slots: createHotzoneSlots(count),
+    };
+  }
+  const spec = fixedUserAssetsLayoutSpec(templateType);
+  return {
+    template_type: templateType,
+    slots: spec ? cloneUserAssetsSlots(spec.slots) : createHotzoneSlots(count),
+  };
+}
+
+function createUserAssetsSubtitle(title, index) {
+  const normalized = String(title ?? '').trim();
+  if (/^[A-Za-z0-9 _-]+$/.test(normalized) && normalized) {
+    return normalized.toUpperCase();
+  }
+  return `入口 ${index + 1}`;
+}
+
+function createUserAssetsEntriesFromLabels(labels, slots, designContext, styleGuide, requirements, templateType) {
+  return slots.map((slot, index) => {
+    const title = stringOr(labels[index], `入口 ${index + 1}`);
+    return createDefaultUserAssetsEntry(
+      {
+        id: slot.id,
+        slot_id: slot.id,
+        title,
+        subtitle: createUserAssetsSubtitle(title, index),
+        icon: 'sparkles',
+      },
+      slot,
+      designContext,
+      styleGuide,
+      requirements,
+      templateType,
+      index,
+    );
   });
-  if (!left || !rightTop || !rightBottom) return null;
-  return { left, rightTop, rightBottom };
 }
 
 function createSeedSchema(requirements, styleGuide) {
@@ -1173,6 +1353,15 @@ function createSeedModule(moduleType, requirements, designContext, styleGuide) {
       designContext.color_palette.accent,
       requirements,
     );
+    const actionLabels = resolveActionButtonLabels(requirements);
+    const entries = createUserAssetsEntriesFromLabels(
+      actionLabels,
+      userAssetsCardLayoutSlots(userAssetsDefaults.card_layout),
+      designContext,
+      styleGuide,
+      requirements,
+      userAssetsDefaults.card_layout.template_type,
+    );
     return {
       ...base,
       data: {
@@ -1180,14 +1369,8 @@ function createSeedModule(moduleType, requirements, designContext, styleGuide) {
         nickname: USER_ASSETS_DEFAULTS.nickname,
         upgrade_tip: userAssetsDefaults.upgrade_tip,
         progress_percent: 33,
-        body_image: '',
-        body_image_no_cache: false,
-        body_alt: USER_ASSETS_DEFAULTS.bodyAlt,
-        body_image_schema: createDefaultUserAssetsImageSchema(
-          designContext.color_palette.accent,
-          styleGuide,
-          requirements,
-        ),
+        card_layout: userAssetsDefaults.card_layout,
+        entries,
       },
     };
   }
@@ -1384,66 +1567,166 @@ function createDefaultImagePromptSchema(moduleType, requirements, designContext,
   return promptSchema;
 }
 
-function createDefaultUserAssetsImageSchema(accent, styleGuide, requirements) {
-  const userAssetsDefaults = resolvePresetUserAssetsDefaults(styleGuide, accent, requirements);
+function slotSizeSpecForUserAssetsSlot(slot) {
+  const key = stringOr(slot?.size, 'small');
+  return USER_ASSETS_SLOT_SIZE_SPECS[key] ?? USER_ASSETS_SLOT_SIZE_SPECS.small;
+}
+
+function createDefaultUserAssetsEntryPromptSchema(
+  entrySeed,
+  slot,
+  designContext,
+  styleGuide,
+  requirements,
+  templateType,
+  index = 0,
+) {
+  const sizeSpec = slotSizeSpecForUserAssetsSlot(slot);
+  const styleTone = resolvePromptStyleTone(requirements, styleGuide);
   return {
-    type: 'mobile_ui_entry_panel',
-    instruction: {
-      strict_mode: true,
-      canvas_rules: {
-        background: 'pure_white',
-        no_border: true,
-        no_divider: true,
-        no_outline: true,
-        fill_to_edge: true,
-        no_margin: true,
-        no_padding: true,
-      },
+    type: 'user_asset_entry',
+    version: '1.0',
+    template: templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE ? 'hotzone_entry' : 'entry_card',
+    layout: {
+      template_type: templateType,
+      slot_id: slot.id,
+      ratio: sizeSpec.ratio,
+      structure:
+        templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE ? 'hotzone_freeform' : 'storefront_entry_card',
+      card_size_px:
+        templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE
+          ? null
+          : { width: sizeSpec.width, height: sizeSpec.height },
     },
-    layout: userAssetsDefaults.layout,
-    visual_style: {
-      design_principle: userAssetsDefaults.visual_style.design_principle,
-      brand_tone: userAssetsDefaults.visual_style.brand_tone,
-      color_system: {
-        primary: accent,
-        usage: userAssetsDefaults.visual_style.color_system.usage,
-      },
-      icon: userAssetsDefaults.visual_style.icon,
-      block: userAssetsDefaults.visual_style.block,
-      typography: userAssetsDefaults.visual_style.typography,
+    style: {
+      background_type: 'solid',
+      background_color: '#FFFFFF',
+      primary_color: designContext.color_palette.accent,
+      accent_color: designContext.color_palette.accent,
+      text_color: designContext.color_palette.text_primary,
+      style_tone: styleTone,
+      visual_feel:
+        templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE
+          ? 'storefront_hotzone_entry'
+          : 'storefront_entry_card',
     },
     content: {
-      mode: 'dynamic_binding',
-      source: 'slots_mapping',
-      fields: ['icon', 'title', 'subtitle'],
-      slots_mapping: userAssetsDefaults.slots_mapping,
+      title: stringOr(entrySeed?.title, `入口 ${index + 1}`),
+      subtitle: stringOr(entrySeed?.subtitle, createUserAssetsSubtitle(entrySeed?.title, index)),
+      description: stringOr(requirements?.module_content?.user_assets, '客户资产功能入口'),
     },
-    constraints: [
-      'pure_white_background',
-      'no_border',
-      'no_divider',
-      'no_outline',
-      'no_extra_cards',
-      'no_floating_elements',
-      'no_circle_entries',
-      'fill_canvas_edge_to_edge',
-      'icon_height_200px',
-      'icon_style_follow_page',
-      'white_background_only',
-      'no_complex_background',
-      'no_background_pattern',
-      'no_gradient_background',
-      'no_photography_background',
-      'no_logo',
-      'no_brand_mark',
-      'no_shop_slogan',
-    ],
-    output: {
-      aspect_ratio: 'dynamic',
-      format: 'image',
-      target: 'mobile_ui',
-      icon_height_px: 200,
+    entry: {
+      icon: stringOr(entrySeed?.icon, 'sparkles'),
+      title: stringOr(entrySeed?.title, `入口 ${index + 1}`),
+      subtitle: stringOr(entrySeed?.subtitle, createUserAssetsSubtitle(entrySeed?.title, index)),
+      role: stringOr(slot?.role, 'sub_action'),
+      size: stringOr(slot?.size, 'small'),
+      slot_id: stringOr(slot?.id, `slot_${index + 1}`),
     },
+    constraints: {
+      pure_white_background: true,
+      no_border: true,
+      no_divider: true,
+      no_outline: true,
+      no_extra_cards: true,
+      no_floating_elements: templateType !== USER_ASSETS_TEMPLATE_TYPES.HOTZONE,
+      no_circle_entries: true,
+      no_logo: true,
+      no_brand_mark: true,
+      no_shop_slogan: true,
+      follow_page_icon_style: true,
+      lock_card_size: templateType !== USER_ASSETS_TEMPLATE_TYPES.HOTZONE,
+    },
+  };
+}
+
+function normalizeUserAssetsEntryPromptSchema(input, fallback) {
+  const layout = isPlainObject(input?.layout) ? input.layout : {};
+  const style = isPlainObject(input?.style) ? input.style : {};
+  const content = isPlainObject(input?.content) ? input.content : {};
+  const entry = isPlainObject(input?.entry) ? input.entry : {};
+  const constraints = isPlainObject(input?.constraints) ? input.constraints : {};
+
+  return {
+    type: stringOr(input?.type, fallback.type),
+    version: stringOr(input?.version, fallback.version),
+    template: stringOr(input?.template, fallback.template),
+    layout: {
+      ...fallback.layout,
+      ...layout,
+      ratio: stringOr(layout.ratio, fallback.layout.ratio),
+      structure: stringOr(layout.structure, fallback.layout.structure),
+      template_type:
+        normalizeUserAssetsTemplateType(layout.template_type) ?? fallback.layout.template_type,
+      slot_id: stringOr(layout.slot_id, fallback.layout.slot_id),
+    },
+    style: {
+      background_type: stringOr(style.background_type, fallback.style.background_type),
+      background_color: stringOr(style.background_color, fallback.style.background_color),
+      primary_color: sanitizeHexColor(style.primary_color, fallback.style.primary_color),
+      accent_color: sanitizeHexColor(style.accent_color, fallback.style.accent_color),
+      text_color: sanitizeHexColor(style.text_color, fallback.style.text_color),
+      style_tone: stringOr(style.style_tone, fallback.style.style_tone),
+      visual_feel: stringOr(style.visual_feel, fallback.style.visual_feel),
+    },
+    content: {
+      title: stringOr(content.title, fallback.content.title),
+      subtitle: stringOr(content.subtitle, fallback.content.subtitle),
+      description: stringOr(content.description, fallback.content.description),
+    },
+    entry: {
+      icon: stringOr(entry.icon, fallback.entry.icon),
+      title: stringOr(entry.title, fallback.entry.title),
+      subtitle: stringOr(entry.subtitle, fallback.entry.subtitle),
+      role: stringOr(entry.role, fallback.entry.role),
+      size: stringOr(entry.size, fallback.entry.size),
+      slot_id: stringOr(entry.slot_id, fallback.entry.slot_id),
+    },
+    constraints: {
+      ...fallback.constraints,
+      ...constraints,
+    },
+  };
+}
+
+function createDefaultUserAssetsEntry(
+  entrySeed,
+  slot,
+  designContext,
+  styleGuide,
+  requirements,
+  templateType,
+  index = 0,
+) {
+  const promptSchema = createDefaultUserAssetsEntryPromptSchema(
+    entrySeed,
+    slot,
+    designContext,
+    styleGuide,
+    requirements,
+    templateType,
+    index,
+  );
+  return {
+    id: stringOr(entrySeed?.id, `user_assets_entry_${index + 1}`),
+    slot_id: stringOr(entrySeed?.slot_id, slot.id),
+    title: stringOr(entrySeed?.title, promptSchema.entry.title),
+    subtitle: stringOr(entrySeed?.subtitle, promptSchema.entry.subtitle),
+    icon: stringOr(entrySeed?.icon, promptSchema.entry.icon),
+    image: stringOr(entrySeed?.image),
+    image_prompt_schema: normalizeUserAssetsEntryPromptSchema(
+      entrySeed?.image_prompt_schema,
+      promptSchema,
+    ),
+    reference_images: normalizeReferenceImages(
+      Array.isArray(entrySeed?.reference_images)
+        ? entrySeed.reference_images
+        : Array.isArray(styleGuide?.reference_images)
+          ? styleGuide.reference_images
+          : [],
+    ),
+    alt: stringOr(entrySeed?.alt, promptSchema.content.title),
+    no_cache: entrySeed?.no_cache === true,
   };
 }
 
@@ -1463,39 +1746,18 @@ function resolveDesignContextBase(styleGuide, requirements) {
 
 function resolvePresetUserAssetsDefaults(styleGuide, accent, requirements) {
   const preset = styleGuide?.schema_defaults?.user_assets;
-  const actionLabels = resolveActionButtonLabels(requirements);
-  const slots = createUserAssetsSlots(actionLabels.length);
-  const slotsMapping = createUserAssetsSlotsMapping(actionLabels, slots);
-  const useAsymmetricThreeLayout = actionLabels.length === 3;
-  const useFreeformLayout = actionLabels.length > 5;
+  const preferredTemplateType = normalizeUserAssetsTemplateType(preset?.card_layout?.template_type);
+  const cardLayout = normalizeUserAssetsCardLayout(
+    { card_layout: preset?.card_layout },
+    requirements,
+    null,
+    preferredTemplateType,
+  );
 
   return {
     greeting: stringOr(preset?.greeting, USER_ASSETS_DEFAULTS.greeting),
     upgrade_tip: stringOr(preset?.upgrade_tip, '完善会员等级和权益，提升复购效率。'),
-    layout: {
-      structure: stringOr(
-        preset?.layout?.structure,
-        useAsymmetricThreeLayout ? 'asymmetric_entry_grid' : useFreeformLayout ? 'freeform' : 'grid',
-      ),
-      distribution: stringOr(
-        preset?.layout?.distribution,
-        useAsymmetricThreeLayout ? 'one_large_two_stacked' : 'auto_balance',
-      ),
-      alignment: {
-        horizontal: stringOr(preset?.layout?.alignment?.horizontal, 'full_bleed'),
-        edge: stringOr(preset?.layout?.alignment?.edge, 'no_padding'),
-        fill_to_edge: true,
-      },
-      spacing: {
-        mode: stringOr(preset?.layout?.spacing?.mode, 'whitespace_only'),
-        density: stringOr(preset?.layout?.spacing?.density, 'comfortable'),
-      },
-      grouping: {
-        enabled: preset?.layout?.grouping?.enabled !== false,
-        visual_method: stringOr(preset?.layout?.grouping?.visual_method, 'spacing_only'),
-      },
-      slots,
-    },
+    card_layout: cardLayout,
     visual_style: {
       design_principle: stringOr(preset?.visual_style?.design_principle, 'minimal_ui'),
       brand_tone: stringOr(preset?.visual_style?.brand_tone, 'premium'),
@@ -1520,7 +1782,6 @@ function resolvePresetUserAssetsDefaults(styleGuide, accent, requirements) {
         subtitle_case: stringOr(preset?.visual_style?.typography?.subtitle_case, 'uppercase'),
       },
     },
-    slots_mapping: slotsMapping,
     accent,
   };
 }
@@ -1775,15 +2036,17 @@ function normalizePromptSchema(type, input, fallback) {
 }
 
 function normalizeUserAssetsData(value, designContext, styleGuide, requirements) {
-  const fallbackSchema = createDefaultUserAssetsImageSchema(
-    designContext.color_palette.accent,
-    styleGuide,
-    requirements,
-  );
   const userAssetsDefaults = resolvePresetUserAssetsDefaults(
     styleGuide,
     designContext.color_palette.accent,
     requirements,
+  );
+  const legacySchema = isPlainObject(value?.body_image_schema) ? value.body_image_schema : null;
+  const cardLayout = normalizeUserAssetsCardLayout(
+    value,
+    requirements,
+    legacySchema,
+    userAssetsDefaults.card_layout.template_type,
   );
   return {
     greeting: stringOr(value?.greeting, userAssetsDefaults.greeting),
@@ -1792,132 +2055,97 @@ function normalizeUserAssetsData(value, designContext, styleGuide, requirements)
     upgrade_tip: stringOr(value?.upgrade_tip, userAssetsDefaults.upgrade_tip),
     progress_percent: toNumber(value?.progress_percent, 33),
     height: toNumber(value?.height, 188),
+    card_layout: cardLayout,
+    entries: normalizeUserAssetsEntries(
+      value,
+      cardLayout,
+      designContext,
+      styleGuide,
+      requirements,
+    ),
     body_image: stringOr(value?.body_image),
     body_image_no_cache: value?.body_image_no_cache === true,
     body_alt: stringOr(value?.body_alt, USER_ASSETS_DEFAULTS.bodyAlt),
-    body_image_schema: isPlainObject(value?.body_image_schema)
-      ? normalizeUserAssetsSchema(value.body_image_schema, fallbackSchema)
-      : fallbackSchema,
+    body_image_schema: legacySchema ?? undefined,
   };
 }
 
-function normalizeUserAssetsSchema(input, fallback) {
-  const layout = isPlainObject(input.layout) ? input.layout : {};
-  const spacing = isPlainObject(layout.spacing) ? layout.spacing : {};
-  const alignment = isPlainObject(layout.alignment) ? layout.alignment : {};
-  const grouping = isPlainObject(layout.grouping) ? layout.grouping : {};
-  const visualStyle = isPlainObject(input.visual_style) ? input.visual_style : {};
-  const colorSystem = isPlainObject(visualStyle.color_system) ? visualStyle.color_system : {};
-  const usage = isPlainObject(colorSystem.usage) ? colorSystem.usage : {};
-  const icon = isPlainObject(visualStyle.icon) ? visualStyle.icon : {};
-  const block = isPlainObject(visualStyle.block) ? visualStyle.block : {};
-  const typography = isPlainObject(visualStyle.typography) ? visualStyle.typography : {};
-  const content = isPlainObject(input.content) ? input.content : {};
-  const slotsMapping = isPlainObject(content.slots_mapping) ? content.slots_mapping : {};
-  const output = isPlainObject(input.output) ? input.output : {};
+function normalizeUserAssetsCardLayout(value, requirements, legacySchema, preferredTemplateType = null) {
+  const templateType = inferUserAssetsTemplateType(
+    requirements,
+    value,
+    legacySchema,
+    preferredTemplateType,
+  );
+  const count = resolveUserAssetsEntryCount(requirements, value, legacySchema);
+  return createUserAssetsCardLayout(templateType, count);
+}
 
-  return {
-    type: stringOr(input.type, fallback.type),
-    instruction: fallback.instruction,
-    layout: {
-      structure: stringOr(layout.structure, fallback.layout.structure),
-      distribution: stringOr(layout.distribution, fallback.layout.distribution),
-      alignment: {
-        horizontal: stringOr(alignment.horizontal, fallback.layout.alignment.horizontal),
-        edge: stringOr(alignment.edge, fallback.layout.alignment.edge),
-      },
-      spacing: {
-        mode: stringOr(spacing.mode, fallback.layout.spacing.mode),
-        density: stringOr(spacing.density, fallback.layout.spacing.density),
-      },
-      grouping: {
-        enabled: grouping.enabled !== false,
-        visual_method: stringOr(grouping.visual_method, fallback.layout.grouping.visual_method),
-      },
-      slots: normalizeUserAssetsSlots(layout.slots, fallback.layout.slots),
-    },
-    visual_style: {
-      design_principle: stringOr(visualStyle.design_principle, fallback.visual_style.design_principle),
-      brand_tone: stringOr(visualStyle.brand_tone, fallback.visual_style.brand_tone),
-      color_system: {
-        primary: sanitizeHexColor(colorSystem.primary, fallback.visual_style.color_system.primary),
-        usage: {
-          icon: usage.icon !== false,
-          accent: usage.accent !== false,
-          background: false,
-        },
-      },
-      icon: {
-        style: stringOr(icon.style, fallback.visual_style.icon.style),
-        shape: stringOr(icon.shape, fallback.visual_style.icon.shape),
-        stroke: stringOr(icon.stroke, fallback.visual_style.icon.stroke),
-      },
-      block: {
-        radius: toNumber(block.radius, fallback.visual_style.block.radius),
-        shadow: stringOr(block.shadow, fallback.visual_style.block.shadow),
-      },
-      typography: {
-        title_case: stringOr(typography.title_case, fallback.visual_style.typography.title_case),
-        subtitle_case: stringOr(typography.subtitle_case, fallback.visual_style.typography.subtitle_case),
-      },
-    },
-    content: {
-      mode: stringOr(content.mode, fallback.content.mode),
-      source: stringOr(content.source, fallback.content.source),
-      fields: Array.isArray(content.fields)
-        ? content.fields.filter((value) => typeof value === 'string')
-        : fallback.content.fields,
-      slots_mapping: normalizeUserAssetsSlotsMapping(
-        slotsMapping,
-        normalizeUserAssetsSlots(layout.slots, fallback.layout.slots),
-        fallback.content.slots_mapping,
-      ),
-    },
-    constraints: uniqueStrings([
-      ...(Array.isArray(fallback.constraints) ? fallback.constraints : []),
-      ...(Array.isArray(input.constraints)
-        ? input.constraints.filter((value) => typeof value === 'string')
-        : []),
-      'icon_style_follow_page',
-      'white_background_only',
-      'no_complex_background',
-      'no_background_pattern',
-      'no_gradient_background',
-      'no_photography_background',
-    ]),
-    output: {
-      aspect_ratio: stringOr(output.aspect_ratio, fallback.output.aspect_ratio),
-      format: stringOr(output.format, fallback.output.format),
-      target: stringOr(output.target, fallback.output.target),
-    },
+function legacyUserAssetsMapping(schema) {
+  return isPlainObject(schema?.content?.slots_mapping) ? schema.content.slots_mapping : {};
+}
+
+function legacyUserAssetsSourceForSlot(mapping, slotId) {
+  const aliases = {
+    left_large: ['left_large', 'left', 'primary'],
+    right_top: ['right_top', 'secondary_1'],
+    right_bottom: ['right_bottom', 'secondary_2'],
+    left: ['left', 'primary'],
+    right: ['right', 'secondary_1'],
+    left_1: ['left_1', 'primary'],
+    center_1: ['center_1', 'secondary_1'],
+    right_1: ['right_1', 'secondary_2'],
+    top_left: ['top_left', 'primary'],
+    top_right: ['top_right', 'secondary_1'],
+    bottom_left: ['bottom_left', 'secondary_2'],
+    bottom_center: ['bottom_center', 'secondary_3'],
+    bottom_right: ['bottom_right', 'secondary_4'],
+    single: ['single', 'primary', 'slot_1'],
   };
+  const candidates = aliases[slotId] ?? [slotId];
+  for (const candidate of candidates) {
+    if (isPlainObject(mapping?.[candidate])) {
+      return mapping[candidate];
+    }
+  }
+  return null;
 }
 
-function normalizeUserAssetsSlots(slots, fallbackSlots) {
-  if (!Array.isArray(slots) || slots.length < 1) {
-    return fallbackSlots;
+function normalizeUserAssetsEntries(value, cardLayout, designContext, styleGuide, requirements) {
+  const slots = userAssetsCardLayoutSlots(cardLayout);
+  const labels = resolveActionButtonLabels(requirements);
+  const inputEntries = Array.isArray(value?.entries) ? value.entries.filter(isPlainObject) : [];
+  const legacyMapping = legacyUserAssetsMapping(value?.body_image_schema);
+  const entriesBySlotId = new Map();
+  for (const entry of inputEntries) {
+    const slotId = stringOr(entry.slot_id || entry.id);
+    if (slotId) {
+      entriesBySlotId.set(slotId, entry);
+    }
   }
-  return slots
-    .filter(isPlainObject)
-    .map((slot, index) => ({
-      id: stringOr(slot.id, `slot_${index + 1}`),
-      role: stringOr(slot.role, 'sub_action'),
-      size: stringOr(slot.size, 'medium'),
-      position: stringOr(slot.position, stringOr(slot.id, `slot_${index + 1}`)),
-    }));
-}
 
-function normalizeUserAssetsSlotsMapping(mapping, slots, fallbackMapping) {
-  const out = {};
-  for (const slot of slots) {
-    const source = isPlainObject(mapping?.[slot.id]) ? mapping[slot.id] : fallbackMapping?.[slot.id];
-    out[slot.id] = {
-      icon: stringOr(source?.icon, 'sparkles'),
-      title: stringOr(source?.title, '入口'),
-      subtitle: stringOr(source?.subtitle, '功能入口'),
-    };
-  }
-  return out;
+  return slots.map((slot, index) => {
+    const legacySource = legacyUserAssetsSourceForSlot(legacyMapping, slot.id);
+    const source =
+      entriesBySlotId.get(slot.id)
+      ?? legacySource
+      ?? {
+        id: slot.id,
+        slot_id: slot.id,
+        title: stringOr(labels[index], `入口 ${index + 1}`),
+        subtitle: createUserAssetsSubtitle(labels[index], index),
+        icon: 'sparkles',
+      };
+    return createDefaultUserAssetsEntry(
+      source,
+      slot,
+      designContext,
+      styleGuide,
+      requirements,
+      cardLayout.template_type,
+      index,
+    );
+  });
 }
 
 function validateStorefrontSchema(schema, requirements) {
@@ -1968,7 +2196,10 @@ function hasImmersiveHero(schema) {
 function hasGeneratedAssets(schema) {
   return schema.modules.some((module) => {
     if (module.type === 'user_assets') {
-      return Boolean(module.data?.body_image);
+      return Boolean(module.data?.body_image)
+        || (Array.isArray(module.data?.entries)
+          ? module.data.entries.some((entry) => Boolean(entry?.image))
+          : false);
     }
     return Array.isArray(module.data?.items)
       ? module.data.items.some((item) => Boolean(item.image))
@@ -2608,6 +2839,19 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
         object-fit: contain;
         object-position: center;
       }
+      .sf-user-assets-card {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 20px;
+        background: rgba(255,255,255,0.94);
+      }
+      .sf-user-assets-card__img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
       .sf-goods-stack {
         display: flex;
         flex-direction: column;
@@ -2817,10 +3061,13 @@ function imageCardStyleAttr(item, height) {
 function renderUserAssetsModule(projectId, module) {
   const data = module.data ?? {};
   const progress = Math.max(0, Math.min(100, toNumber(data.progress_percent, 33)));
-  const metrics = resolveUserAssetsLayoutMetrics(data.body_image_schema);
+  const metrics = resolveUserAssetsLayoutMetrics(data.card_layout);
+  const entries = Array.isArray(data.entries) ? data.entries.filter(isPlainObject) : [];
+  const hasEntries = entries.length > 0;
+  const hasEntryImages = entries.some((entry) => Boolean(resolveAssetUrl(projectId, entry.image)));
   const asset = resolveAssetUrl(projectId, data.body_image);
   const avatar = resolveAssetUrl(projectId, data.avatar || USER_ASSETS_DEFAULTS.avatar);
-  const bodyHeight = asset
+  const bodyHeight = (hasEntries || asset)
     ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * USER_ASSETS_PREVIEW_BODY_WIDTH)
     : clamp(Math.round(toNumber(data.height, 208) * 0.38), 72, 108);
   return `<div class="sf-user-assets" style="min-height:${Math.max(124, toNumber(data.height, 188))}px">
@@ -2839,9 +3086,11 @@ function renderUserAssetsModule(projectId, module) {
       ? `<div class="sf-user-assets__tip">${escapeHtml(data.upgrade_tip)}</div>`
       : ''}
     <div class="sf-user-assets__body" style="height:${bodyHeight}px">
-      ${asset
-        ? `<img src="${escapeAttr(asset)}" alt="${escapeAttr(stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt))}" class="sf-user-assets__body-image" />`
-        : renderUserAssetsPendingPlaceholder(data.body_image_schema)}
+      ${hasEntryImages
+        ? renderUserAssetsCardsLayout(projectId, data.card_layout, entries)
+        : asset
+          ? `<img src="${escapeAttr(asset)}" alt="${escapeAttr(stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt))}" class="sf-user-assets__body-image" />`
+          : renderUserAssetsPendingPlaceholder(data.card_layout, entries)}
     </div>
   </div>`;
 }
@@ -2954,22 +3203,13 @@ function renderImagePlaceholderArt(_variant) {
   return renderGenericPendingImageMark();
 }
 
-function userAssetsDetailFor(schema) {
-  const slots = Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
-  const structure = stringOr(schema?.layout?.structure);
-  const layoutLabel = structure === 'asymmetric' || structure === 'asymmetric_entry_grid'
-    ? '非对称入口布局'
-    : structure === 'grid'
-      ? '宫格入口布局'
-      : structure === 'horizontal'
-        ? '横向入口布局'
-        : structure === 'vertical'
-          ? '纵向入口布局'
-          : '入口布局预排';
-  return `${slots.length} 个入口 · ${layoutLabel}`;
+function userAssetsDetailFor(cardLayout) {
+  const slots = userAssetsCardLayoutSlots(cardLayout);
+  return `${slots.length} 个入口 · ${userAssetsTemplateTypeLabel(cardLayout?.template_type)}`;
 }
 
-function renderUserAssetsEntry(item, large = false) {
+function renderUserAssetsEntryShell(item, slot) {
+  const large = stringOr(slot?.size) === 'large' || stringOr(slot?.size) === 'wide';
   const title = shortenText(stringOr(item?.title, '功能入口'), large ? 10 : 8);
   const subtitle = shortenText(stringOr(item?.subtitle, 'ENTRY'), large ? 14 : 12);
   return `<div class="sf-user-assets-entry${large ? ' is-large' : ''}">
@@ -2981,69 +3221,109 @@ function renderUserAssetsEntry(item, large = false) {
   </div>`;
 }
 
-function renderUserAssetsPendingLayout(schema) {
-  const slots = userAssetsSlots(schema);
-  const mapping = isPlainObject(schema?.content?.slots_mapping) ? schema.content.slots_mapping : {};
-  const asymmetricSlots = resolveAsymmetricUserAssetsSlots(schema);
+function renderUserAssetsCard(projectId, entry, slot) {
+  const imageUrl = resolveAssetUrl(projectId, entry?.image);
+  if (imageUrl) {
+    const alt = stringOr(entry?.alt, stringOr(entry?.title, '客户资产入口'));
+    return `<div class="sf-user-assets-card"><img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(alt)}" class="sf-user-assets-card__img" /></div>`;
+  }
+  return renderUserAssetsEntryShell(entry, slot);
+}
 
-  if (asymmetricSlots) {
-    const { left, rightTop, rightBottom } = asymmetricSlots;
-    return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
+function renderHotzoneRows(projectId, slots, entriesBySlotId) {
+  const rowPattern = buildHotzoneRowPattern(slots.length || 1);
+  let cursor = 0;
+  return rowPattern.map((count) => {
+    const rowSlots = slots.slice(cursor, cursor + count);
+    cursor += count;
+    return `<div style="${styleAttr({
       display: 'grid',
-      gridTemplateColumns: `${USER_ASSETS_ASYMMETRIC_LARGE_WIDTH / USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH}fr 1fr`,
-      gap: `${USER_ASSETS_ROW_GAP}px`,
-      height: '100%',
-    })}">
-      <div>${renderUserAssetsEntry(left?.id ? mapping[left.id] : undefined, true)}</div>
-      <div style="display:grid;gap:16px">
-        ${renderUserAssetsEntry(rightTop?.id ? mapping[rightTop.id] : undefined)}
-        ${renderUserAssetsEntry(rightBottom?.id ? mapping[rightBottom.id] : undefined)}
-      </div>
-    </div>`;
+      gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`,
+      gap: `${USER_ASSETS_GRID_GAP}px`,
+    })}">${rowSlots.map((slot) => renderUserAssetsCard(projectId, entriesBySlotId.get(slot.id), slot)).join('')}</div>`;
+  }).join('');
+}
+
+function renderUserAssetsCardsLayout(projectId, cardLayout, entries) {
+  const templateType = normalizeUserAssetsTemplateType(cardLayout?.template_type);
+  const slots = userAssetsCardLayoutSlots(cardLayout);
+  const entriesBySlotId = new Map(
+    (Array.isArray(entries) ? entries : [])
+      .filter(isPlainObject)
+      .map((entry) => [stringOr(entry.slot_id || entry.id), entry]),
+  );
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.SINGLE) {
+    const slot = slots[0] ?? { id: 'single', size: 'wide' };
+    return renderUserAssetsCard(projectId, entriesBySlotId.get(stringOr(slot.id)), slot);
   }
 
-  if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO) {
     return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
       display: 'grid',
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-      gap: `${USER_ASSETS_ROW_GAP}px`,
+      gap: `${USER_ASSETS_GRID_GAP}px`,
+      height: '100%',
+    })}">${slots.map((slot) => renderUserAssetsCard(projectId, entriesBySlotId.get(slot.id), slot)).join('')}</div>`;
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE) {
+    return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+      gap: `${USER_ASSETS_GRID_GAP}px`,
+      height: '100%',
+    })}">${slots.map((slot) => renderUserAssetsCard(projectId, entriesBySlotId.get(slot.id), slot)).join('')}</div>`;
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO) {
+    const left = slots.find((slot) => slot.id === 'left_large');
+    const rightTop = slots.find((slot) => slot.id === 'right_top');
+    const rightBottom = slots.find((slot) => slot.id === 'right_bottom');
+    return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: `${USER_ASSETS_GRID_GAP}px`,
       height: '100%',
     })}">
-      ${slots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
+      <div>${renderUserAssetsCard(projectId, entriesBySlotId.get('left_large'), left)}</div>
+      <div style="display:grid;gap:11px">
+        ${renderUserAssetsCard(projectId, entriesBySlotId.get('right_top'), rightTop)}
+        ${renderUserAssetsCard(projectId, entriesBySlotId.get('right_bottom'), rightBottom)}
+      </div>
     </div>`;
   }
 
-  if (
-    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
-    slots.length === 5
-  ) {
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR) {
+    return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
+      display: 'grid',
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+      gap: `${USER_ASSETS_GRID_GAP}px`,
+      height: '100%',
+    })}">${slots.map((slot) => renderUserAssetsCard(projectId, entriesBySlotId.get(slot.id), slot)).join('')}</div>`;
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE) {
     const topSlots = slots.slice(0, 2);
     const bottomSlots = slots.slice(2);
-    return `<div class="sf-user-assets-placeholder__layout" style="display:grid;gap:16px;height:100%">
-      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:16px">
-        ${topSlots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
+    return `<div class="sf-user-assets-placeholder__layout" style="display:grid;gap:11px;height:100%">
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:11px">
+        ${topSlots.map((slot) => renderUserAssetsCard(projectId, entriesBySlotId.get(slot.id), slot)).join('')}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px">
-        ${bottomSlots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:11px">
+        ${bottomSlots.map((slot) => renderUserAssetsCard(projectId, entriesBySlotId.get(slot.id), slot)).join('')}
       </div>
     </div>`;
   }
 
-  const fallbackSlots = slots.length > 0 ? slots : [{ id: 'slot-1' }, { id: 'slot-2' }, { id: 'slot-3' }];
-  const columns = fallbackSlots.length >= 4 ? 2 : Math.min(fallbackSlots.length, 3);
-  return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
-    display: 'grid',
-    gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))`,
-    gap: `${USER_ASSETS_ROW_GAP}px`,
-    height: '100%',
-  })}">
-    ${fallbackSlots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
+  return `<div class="sf-user-assets-placeholder__layout" style="display:grid;gap:11px;height:100%">
+    ${renderHotzoneRows(projectId, slots, entriesBySlotId)}
   </div>`;
 }
 
-function renderUserAssetsPendingPlaceholder(schema) {
+function renderUserAssetsPendingPlaceholder(cardLayout, entries) {
   return `<div class="sf-user-assets-placeholder">
-    ${renderUserAssetsPendingLayout(schema)}
+    ${renderUserAssetsCardsLayout('', cardLayout, entries)}
   </div>`;
 }
 
@@ -3148,58 +3428,60 @@ function computeImageHeight(module, index, schema) {
 }
 
 function computeUserAssetsHeight(module, schema) {
-  const metrics = resolveUserAssetsLayoutMetrics(module.data.body_image_schema);
+  const metrics = resolveUserAssetsLayoutMetrics(module.data.card_layout);
   const availableWidth = clamp(
     schema.design_context.page_width - schema.design_context.spacing * 2 - 32,
     260,
     schema.design_context.page_width,
   );
   const imageHeight = Math.round((availableWidth * metrics.canvasHeight) / metrics.canvasWidth);
-  const hasBodyImage = Boolean(stringOr(module.data.body_image));
-  const fallback = hasBodyImage ? imageHeight + 134 : 208;
+  const hasEntries = Array.isArray(module.data.entries) && module.data.entries.length > 0;
+  const hasGeneratedEntries = Array.isArray(module.data.entries)
+    ? module.data.entries.some((entry) => stringOr(entry?.image))
+    : false;
+  const hasLegacyBodyImage = Boolean(stringOr(module.data.body_image));
+  const hasRenderableEntries = hasEntries || hasGeneratedEntries || hasLegacyBodyImage;
+  const fallback = hasRenderableEntries ? imageHeight + 134 : 208;
   const maxHeight = metrics.isFreeform ? 760 : 560;
-  return hasBodyImage
+  return hasRenderableEntries
     ? blendSuggestion(toNumber(module.data.height, fallback), fallback, 124, maxHeight)
     : fallback;
 }
 
-function resolveUserAssetsLayoutMetrics(schema) {
-  const slots = userAssetsSlots(schema);
-  if (isAsymmetricThreeUserAssetsLayout(schema)) {
+function buildHotzoneRowPattern(count) {
+  if (count <= 0) return [];
+  if (count <= 3) return [count];
+  if (count === 4) return [2, 2];
+  if (count === 5) return [2, 3];
+  const rows = Array(Math.floor(count / 3)).fill(3);
+  const remainder = count % 3;
+  if (remainder === 0) return rows;
+  if (remainder === 2) return [...rows, 2];
+  if (rows.length === 0) return [2, 2];
+  return [...rows.slice(0, -1), 2, 2];
+}
+
+function resolveUserAssetsLayoutMetrics(cardLayout) {
+  const templateType = normalizeUserAssetsTemplateType(cardLayout?.template_type);
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    const slots = userAssetsCardLayoutSlots(cardLayout);
+    const rowPattern = buildHotzoneRowPattern(slots.length || 1);
     return {
-      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
-      isFreeform: false,
+      canvasWidth: 611,
+      canvasHeight:
+        rowPattern.length * USER_ASSETS_SLOT_SIZE_SPECS.free.height
+        + Math.max(0, rowPattern.length - 1) * USER_ASSETS_GRID_GAP,
+      isFreeform: true,
+      rowPattern,
     };
   }
-  if (hasUserAssetsPositions(slots, 'left', 'right') && slots.length === 2) {
-    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
-  }
-  if (hasUserAssetsPositions(slots, 'left_1', 'center_1', 'right_1') && slots.length === 3) {
-    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
-  }
-  if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
-    return {
-      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
-      isFreeform: false,
-    };
-  }
-  if (
-    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
-    slots.length === 5
-  ) {
-    return {
-      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
-      isFreeform: false,
-    };
-  }
-  const rows = Math.max(1, Math.ceil(slots.length / 3));
+
+  const spec = fixedUserAssetsLayoutSpec(templateType ?? USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE);
   return {
-    canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-    canvasHeight: rows * USER_ASSETS_ROW_HEIGHT + Math.max(0, rows - 1) * USER_ASSETS_ROW_GAP,
-    isFreeform: true,
+    canvasWidth: spec?.canvasWidth ?? 611,
+    canvasHeight: spec?.canvasHeight ?? 220,
+    isFreeform: false,
+    rowPattern: [],
   };
 }
 
@@ -3208,16 +3490,52 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
 
   for (const module of schema.modules) {
     if (module.type === 'user_assets') {
-      if (!forceRegenerate && stringOr(module.data.body_image)) continue;
-      const metrics = resolveUserAssetsLayoutMetrics(module.data.body_image_schema);
-      tasks.push({
-        fileName: `${IMAGE_FILE_PREFIX.user_assets}-1.png`,
-        prompt: buildUserAssetsPrompt(module.data.body_image_schema, styleGuide),
-        size: resolveSizeFromDimensions(metrics.canvasWidth, metrics.canvasHeight),
-        assign: (fileName) => {
-          module.data.body_image = fileName;
-          module.data.body_image_no_cache = false;
-        },
+      const entries = Array.isArray(module.data.entries) ? module.data.entries.filter(isPlainObject) : [];
+      const templateType = normalizeUserAssetsTemplateType(module.data.card_layout?.template_type);
+      const isHotzone = templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+      const hasLegacyBodyImage = Boolean(stringOr(module.data.body_image));
+      if (!forceRegenerate && hasLegacyBodyImage && !entries.some((entry) => stringOr(entry.image))) {
+        continue;
+      }
+
+      let firstEntryFileName = null;
+      entries.forEach((entry, index) => {
+        if (!forceRegenerate && stringOr(entry.image)) {
+          if (!isHotzone && index === 0) {
+            firstEntryFileName = stringOr(entry.image);
+          }
+          return;
+        }
+        const slot = userAssetsCardLayoutSlots(module.data.card_layout).find(
+          (candidate) => stringOr(candidate.id) === stringOr(entry.slot_id),
+        );
+        const sizeSpec = slotSizeSpecForUserAssetsSlot(slot);
+        const fileName = `${IMAGE_FILE_PREFIX.user_assets}-${index + 1}.png`;
+        const sequentialReference = !isHotzone && index > 0 && firstEntryFileName;
+        tasks.push({
+          fileName,
+          prompt: sequentialReference ? null : buildUserAssetsEntryPrompt(entry, slot, module.data.card_layout, styleGuide),
+          buildPromptFn: sequentialReference
+            ? () => buildUserAssetsEntryPrompt(entry, slot, module.data.card_layout, styleGuide)
+            : null,
+          dependsOnFileName: sequentialReference ? firstEntryFileName : null,
+          size:
+            templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE
+              ? '1024x1024'
+              : resolveSizeFromDimensions(sizeSpec.width, sizeSpec.height),
+          inputImagePaths: [],
+          buildInputImagePathsFn: (projectDir) =>
+            collectUserAssetsReferenceImagePaths(entry, firstEntryFileName, projectDir),
+          assign: (resolvedFileName) => {
+            entry.image = resolvedFileName;
+            entry.no_cache = false;
+            module.data.body_image = '';
+            module.data.body_image_no_cache = false;
+          },
+        });
+        if (!isHotzone && index === 0) {
+          firstEntryFileName = fileName;
+        }
       });
       continue;
     }
@@ -3280,28 +3598,46 @@ function buildImagePrompt(moduleType, item, styleGuide) {
   return JSON.stringify(promptSchema);
 }
 
-function buildUserAssetsPrompt(bodyImageSchema, styleGuide) {
-  const promptSchema = deepClone(bodyImageSchema ?? {});
+function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
+  const promptSchema = deepClone(entry?.image_prompt_schema ?? {});
   const styleNotes = buildUserAssetsGenerationNotes(styleGuide);
   promptSchema.generation_notes = [
     ...styleNotes,
-    '客户资产入口图只表达功能入口 icon、标题、副标题，不要添加其他营销文案、装饰场景或复杂背景。',
-    '入口 icon 的造型、描边、圆角和用色跟随页面整体视觉风格；除 icon 和必要文字外不要引入额外图形。',
-    '画布背景必须保持纯白色，不能使用页面背景色、渐变、纹理、插画场景、摄影图、纸张质感或复杂图案。',
+    `当前入口卡片布局为 ${userAssetsTemplateTypeLabel(cardLayout?.template_type)}，当前卡片槽位是 ${stringOr(slot?.id, 'slot')}。`,
+    '客户资产入口卡片只表达当前这个功能入口，不要在一张图里额外生成别的按钮卡片、额外小入口或整组宫格。',
+    '入口卡片中的 icon、标题、副标题必须保留在卡片内部，跟随页面整体风格，但背景保持纯白，不要渐变、纹理、插画场景或摄影背景。',
     '不要展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
   ];
-  if (isAsymmetricThreeUserAssetsLayout(bodyImageSchema)) {
+  if (cardLayout?.template_type === USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO) {
     promptSchema.generation_notes.push(
-      '当入口布局是左大右二时，右侧两个中按钮保持约 300x220 的横向比例，整体画布不要误做成正方形。',
+      '左一右二布局里，左侧主卡与右侧两张副卡必须保持同一套网格语言；如果当前槽位不是主卡，不要误画成大卡。',
     );
   }
-  if (Array.isArray(styleGuide?.reference_images) && styleGuide.reference_images.length > 0) {
+  if (cardLayout?.template_type === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    promptSchema.generation_notes.push(
+      '热区自由布局没有固定尺寸要求，可以自由发挥卡片造型，但仍要保证单张卡片可独立使用，并且不要在画面里出现第二张卡片。',
+    );
+  }
+  if (Array.isArray(entry?.reference_images) && entry.reference_images.length > 0) {
     promptSchema.reference_style = {
       preset_id: stringOr(styleGuide?.preset_id, 'custom'),
-      reference_images: styleGuide.reference_images,
+      reference_images: entry.reference_images,
     };
   }
   return JSON.stringify(promptSchema);
+}
+
+function collectUserAssetsReferenceImagePaths(entry, firstEntryFileName, projectDir) {
+  const paths = [];
+  if (firstEntryFileName && projectDir) {
+    paths.push(path.join(projectDir, firstEntryFileName));
+  }
+  for (const referenceImage of Array.isArray(entry?.reference_images) ? entry.reference_images : []) {
+    const fileName = stringOr(referenceImage);
+    if (!fileName || /^(https?:|data:|blob:)/i.test(fileName) || !projectDir) continue;
+    paths.push(path.join(projectDir, fileName));
+  }
+  return [...new Set(paths)];
 }
 
 function buildUserAssetsGenerationNotes(styleGuide) {
@@ -3341,7 +3677,7 @@ function buildStyleGenerationNotes(styleGuide, moduleType) {
     if (moduleType === 'top_slider') {
       notes.push('顶部主视觉优先做成手绘感海报：超大标题、奶油色底、可加入涂鸦皇冠/箭头/吐司边缘橙色高光。');
     } else if (moduleType === 'user_assets') {
-      notes.push('客户资产入口图采用左大右二的不对称卡片布局，标题更像手写英文招牌而不是常规系统按钮。');
+      notes.push('客户资产入口卡片可以保留手绘招牌感标题和轻涂鸦细节，但布局仍需服从当前 schema 里的实际卡片模式。');
     } else if (moduleType === 'goods') {
       notes.push('商品图主体可以是真实烘焙产品摄影，但允许少量手绘箭头、贴纸和标题覆盖，不要做成标准商城白底商品图。');
     }
@@ -3389,6 +3725,10 @@ function queueTryProcess() {
 
 async function runAssetTask(task) {
   try {
+    let inputImagePaths = Array.isArray(task.inputImagePaths) ? task.inputImagePaths : [];
+    if (task.buildInputImagePathsFn) {
+      inputImagePaths = task.buildInputImagePathsFn(task.projectDir);
+    }
     if (task.buildPromptFn) {
       const refUrl = `/api/projects/${encodeURIComponent(task.projectId)}/files/${encodeURIComponent(task.dependsOnFileName)}`;
       task.prompt = task.buildPromptFn(refUrl);
@@ -3398,7 +3738,7 @@ async function runAssetTask(task) {
       : null;
     if (!existingFile) {
       const imageConfig = resolveImageConfig(task.imageConfigOptions);
-      const generated = await generatePromptImage(task.prompt, task.size, imageConfig);
+      const generated = await generatePromptImage(task.prompt, task.size, imageConfig, inputImagePaths);
       await writeProjectFile(task.projectsRoot, task.projectId, task.fileName, generated.buffer, {
         overwrite: true,
       });
@@ -3474,6 +3814,10 @@ export async function enqueueAssetTasks(projectsRoot, projectId, skillRoot, opti
       fileName: task.fileName,
       prompt: task.prompt,
       size: task.size,
+      buildPromptFn: task.buildPromptFn ?? null,
+      dependsOnFileName: task.dependsOnFileName ?? null,
+      inputImagePaths: Array.isArray(task.inputImagePaths) ? task.inputImagePaths : [],
+      buildInputImagePathsFn: task.buildInputImagePathsFn ?? null,
       assign: task.assign,
       schema,
       projectDir,
@@ -3518,19 +3862,55 @@ function resolveImageConfig(options) {
   return { apiKey, baseUrl, model };
 }
 
-async function generatePromptImage(prompt, size, config) {
-  const response = await fetch(`${config.baseUrl}/images/generations`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      prompt,
-      size,
-    }),
-  });
+function imageMimeTypeForPath(filePath) {
+  const lower = String(filePath).toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  return 'image/png';
+}
+
+async function generatePromptImage(prompt, size, config, inputImagePaths = []) {
+  const cleanedInputImagePaths = Array.isArray(inputImagePaths)
+    ? inputImagePaths.filter((filePath) => typeof filePath === 'string' && filePath)
+    : [];
+  const isEditRequest = cleanedInputImagePaths.length > 0;
+  let response;
+
+  if (isEditRequest) {
+    const formData = new FormData();
+    formData.append('model', config.model);
+    formData.append('prompt', prompt);
+    formData.append('size', size);
+    for (const filePath of cleanedInputImagePaths) {
+      const buffer = await fs.readFile(filePath);
+      formData.append(
+        'image',
+        new Blob([buffer], { type: imageMimeTypeForPath(filePath) }),
+        path.basename(filePath),
+      );
+    }
+    response = await fetch(`${config.baseUrl}/images/edits`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: formData,
+    });
+  } else {
+    response = await fetch(`${config.baseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        prompt,
+        size,
+      }),
+    });
+  }
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `Image generation failed with ${response.status}`);

@@ -39,23 +39,34 @@ type ImageItemLike = {
 type UserAssetsSlotLike = {
   id?: string;
   position?: string;
-  size?: 'large' | 'medium' | 'small';
+  role?: string;
+  size?: 'wide' | 'large' | 'medium' | 'small' | 'free';
 };
 
-type UserAssetsMappingLike = {
+type UserAssetsEntryLike = {
+  id?: string;
+  slot_id?: string;
   icon?: string;
   title?: string;
   subtitle?: string;
+  image?: string;
+  alt?: string;
+  no_cache?: boolean;
+  image_prompt_schema?: ImagePromptSchemaLike;
+  reference_images?: string[];
 };
 
-type UserAssetsSchemaLike = {
+type UserAssetsCardLayoutLike = {
+  template_type?: number | 'hotzone';
+  slots?: UserAssetsSlotLike[];
+};
+
+type UserAssetsLegacySchemaLike = {
   layout?: {
-    structure?: string;
-    distribution?: string;
     slots?: UserAssetsSlotLike[];
   };
   content?: {
-    slots_mapping?: Record<string, UserAssetsMappingLike>;
+    slots_mapping?: Record<string, UserAssetsEntryLike>;
   };
 };
 
@@ -101,12 +112,99 @@ const USER_ASSETS_DEFAULTS = {
   pendingLabel: '客户资产运行时生图中...',
 } as const;
 
-const USER_ASSETS_CANVAS_WIDTH = 632;
-const USER_ASSETS_ROW_HEIGHT = 220;
-const USER_ASSETS_ROW_GAP = 16;
 const USER_ASSETS_PREVIEW_BODY_WIDTH = 311;
-const USER_ASSETS_ASYMMETRIC_LARGE_WIDTH = 316;
-const USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH = 300;
+const USER_ASSETS_GRID_GAP = 11;
+const USER_ASSETS_TEMPLATE_TYPES = {
+  SINGLE: 7,
+  ONE_ROW_TWO: 1,
+  LEFT_ONE_RIGHT_TWO: 2,
+  ONE_ROW_THREE: 3,
+  TWO_ROW_FIVE: 5,
+  TWO_ROW_FOUR: 6,
+  HOTZONE: 'hotzone',
+} as const;
+
+const USER_ASSETS_TEMPLATE_TYPE_LABELS: Record<string, string> = {
+  '7': '单张横图',
+  '1': '一行两个',
+  '2': '左一右二',
+  '3': '一行三个',
+  '5': '二行五个',
+  '6': '二行四个',
+  hotzone: '热区自由布局',
+};
+
+const USER_ASSETS_SLOT_SIZE_SPECS = {
+  wide: { width: 611, height: 216 },
+  large: { width: 300, height: 456 },
+  medium: { width: 300, height: 220 },
+  small: { width: 196, height: 220 },
+  free: { width: 196, height: 220 },
+} as const;
+
+const USER_ASSETS_LAYOUT_SPECS = {
+  '7': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.SINGLE,
+    slots: [{ id: 'single', role: 'main_action', size: 'wide', position: 'single' }],
+    canvasWidth: 611,
+    canvasHeight: 216,
+  },
+  '1': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO,
+    slots: [
+      { id: 'left', role: 'sub_action', size: 'medium', position: 'left' },
+      { id: 'right', role: 'sub_action', size: 'medium', position: 'right' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 220,
+  },
+  '3': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE,
+    slots: [
+      { id: 'left_1', role: 'sub_action', size: 'small', position: 'left_1' },
+      { id: 'center_1', role: 'sub_action', size: 'small', position: 'center_1' },
+      { id: 'right_1', role: 'sub_action', size: 'small', position: 'right_1' },
+    ],
+    canvasWidth: 610,
+    canvasHeight: 220,
+  },
+  '2': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO,
+    slots: [
+      { id: 'left_large', role: 'main_action', size: 'large', position: 'left_large' },
+      { id: 'right_top', role: 'sub_action', size: 'medium', position: 'right_top' },
+      { id: 'right_bottom', role: 'sub_action', size: 'medium', position: 'right_bottom' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 456,
+  },
+  '6': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR,
+    slots: [
+      { id: 'top_left', role: 'sub_action', size: 'medium', position: 'top_left' },
+      { id: 'top_right', role: 'sub_action', size: 'medium', position: 'top_right' },
+      { id: 'bottom_left', role: 'sub_action', size: 'medium', position: 'bottom_left' },
+      { id: 'bottom_right', role: 'sub_action', size: 'medium', position: 'bottom_right' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 451,
+  },
+  '5': {
+    templateType: USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE,
+    slots: [
+      { id: 'top_left', role: 'sub_action', size: 'medium', position: 'top_left' },
+      { id: 'top_right', role: 'sub_action', size: 'medium', position: 'top_right' },
+      { id: 'bottom_left', role: 'sub_action', size: 'small', position: 'bottom_left' },
+      { id: 'bottom_center', role: 'sub_action', size: 'small', position: 'bottom_center' },
+      { id: 'bottom_right', role: 'sub_action', size: 'small', position: 'bottom_right' },
+    ],
+    canvasWidth: 611,
+    canvasHeight: 451,
+  },
+} as const;
+
+type FixedUserAssetsLayoutSpec =
+  (typeof USER_ASSETS_LAYOUT_SPECS)[keyof typeof USER_ASSETS_LAYOUT_SPECS];
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -190,7 +288,26 @@ function imageHeightFor(module: StorefrontSchemaModule, index: number, schema: S
   return blendSuggestion(suggestion, 180, 120, 260);
 }
 
-function userAssetsSlots(schema: UserAssetsSchemaLike | undefined): UserAssetsSlotLike[] {
+function normalizeUserAssetsTemplateType(value: unknown): number | 'hotzone' | null {
+  if (value === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    return USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+  }
+  const numeric = Number(value);
+  if ([1, 2, 3, 5, 6, 7].includes(numeric)) {
+    return numeric as 1 | 2 | 3 | 5 | 6 | 7;
+  }
+  return null;
+}
+
+function userAssetsTemplateTypeLabel(templateType: unknown) {
+  return USER_ASSETS_TEMPLATE_TYPE_LABELS[String(templateType)] ?? '客户资产布局';
+}
+
+function userAssetsCardLayoutSlots(layout: UserAssetsCardLayoutLike | undefined) {
+  return Array.isArray(layout?.slots) ? layout.slots : [];
+}
+
+function legacyUserAssetsSlots(schema: UserAssetsLegacySchemaLike | undefined) {
   return Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
 }
 
@@ -203,95 +320,190 @@ function hasUserAssetsPositions(slots: UserAssetsSlotLike[], ...entries: string[
   return entries.every((entry) => ids.includes(entry));
 }
 
-function isAsymmetricThreeUserAssetsLayout(schema: UserAssetsSchemaLike | undefined) {
-  const slots = userAssetsSlots(schema);
-  if (slots.length !== 3) return false;
-  if (!hasUserAssetsPositions(slots, 'right_top', 'right_bottom')) return false;
-  if (hasUserAssetsPositions(slots, 'left_large') || hasUserAssetsPositions(slots, 'left')) {
-    return true;
-  }
-  const structure = stringOr(schema?.layout?.structure);
-  const distribution = stringOr(schema?.layout?.distribution);
-  return (
-    structure === 'asymmetric' ||
-    structure === 'asymmetric_entry_grid' ||
-    distribution === 'one_large_two_stacked'
-  );
-}
-
-function resolveAsymmetricUserAssetsSlots(schema: UserAssetsSchemaLike | undefined) {
-  const slots = userAssetsSlots(schema);
-  if (!isAsymmetricThreeUserAssetsLayout(schema)) return null;
-  const rightTop = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_top');
-  const rightBottom = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_bottom');
-  const left = slots.find((slot) => {
-    const position = userAssetsSlotPosition(slot);
-    return position === 'left_large' || position === 'left';
-  }) ?? slots.find((slot) => {
-    const position = userAssetsSlotPosition(slot);
-    return position !== 'right_top' && position !== 'right_bottom';
-  });
-  if (!left || !rightTop || !rightBottom) return null;
-  return { left, rightTop, rightBottom };
-}
-
-function resolveUserAssetsLayoutMetrics(schema: UserAssetsSchemaLike | undefined) {
-  const slots = userAssetsSlots(schema);
-  if (isAsymmetricThreeUserAssetsLayout(schema)) {
-    return {
-      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
-      isFreeform: false,
-    };
+function templateTypeFromSlots(slots: UserAssetsSlotLike[]) {
+  if (slots.length === 1) {
+    const position = userAssetsSlotPosition(slots[0]);
+    if (position === 'single' || position === 'slot_1') return USER_ASSETS_TEMPLATE_TYPES.SINGLE;
   }
   if (hasUserAssetsPositions(slots, 'left', 'right') && slots.length === 2) {
-    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
+    return USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO;
+  }
+  if (slots.length === 3 && hasUserAssetsPositions(slots, 'right_top', 'right_bottom')) {
+    if (hasUserAssetsPositions(slots, 'left_large') || hasUserAssetsPositions(slots, 'left')) {
+      return USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO;
+    }
   }
   if (hasUserAssetsPositions(slots, 'left_1', 'center_1', 'right_1') && slots.length === 3) {
-    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
+    return USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE;
   }
   if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
-    return {
-      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
-      isFreeform: false,
-    };
+    return USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR;
   }
   if (
-    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
-    slots.length === 5
+    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right')
+    && slots.length === 5
   ) {
+    return USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE;
+  }
+  if (slots.every((slot, index) => userAssetsSlotPosition(slot) === `slot_${index + 1}`)) {
+    return USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
+  }
+  return null;
+}
+
+function fixedUserAssetsLayoutSpec(templateType: number | 'hotzone' | null): FixedUserAssetsLayoutSpec | null {
+  if (templateType === null || templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) return null;
+  return USER_ASSETS_LAYOUT_SPECS[String(templateType) as keyof typeof USER_ASSETS_LAYOUT_SPECS] ?? null;
+}
+
+function resolveUserAssetsCardLayout(data: Record<string, unknown>): UserAssetsCardLayoutLike {
+  const explicit = data.card_layout as UserAssetsCardLayoutLike | undefined;
+  const explicitTemplateType = normalizeUserAssetsTemplateType(explicit?.template_type);
+  if (explicitTemplateType !== null && explicit) {
+    return explicit;
+  }
+  const legacySchema = data.body_image_schema as UserAssetsLegacySchemaLike | undefined;
+  const legacyTemplateType = templateTypeFromSlots(legacyUserAssetsSlots(legacySchema));
+  const spec = fixedUserAssetsLayoutSpec(
+    legacyTemplateType ?? USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE,
+  );
+  if (legacyTemplateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    const slotCount = Math.max(legacyUserAssetsSlots(legacySchema).length, 1);
     return {
-      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
-      isFreeform: false,
+      template_type: USER_ASSETS_TEMPLATE_TYPES.HOTZONE,
+      slots: Array.from({ length: slotCount }, (_, index): UserAssetsSlotLike => ({
+        id: `slot_${index + 1}`,
+        role: 'sub_action',
+        size: 'free',
+        position: `slot_${index + 1}`,
+      })),
     };
   }
-  const rows = Math.max(1, Math.ceil(slots.length / 3));
+  return spec
+    ? { template_type: spec.templateType, slots: spec.slots.map((slot: UserAssetsSlotLike) => ({ ...slot })) }
+    : { template_type: USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE, slots: [] };
+}
+
+function buildHotzoneRowPattern(count: number) {
+  if (count <= 0) return [];
+  if (count <= 3) return [count];
+  if (count === 4) return [2, 2];
+  if (count === 5) return [2, 3];
+  const rows = Array(Math.floor(count / 3)).fill(3);
+  const remainder = count % 3;
+  if (remainder === 0) return rows;
+  if (remainder === 2) return [...rows, 2];
+  if (rows.length === 0) return [2, 2];
+  return [...rows.slice(0, -1), 2, 2];
+}
+
+function resolveUserAssetsLayoutMetrics(cardLayout: UserAssetsCardLayoutLike | undefined) {
+  const templateType = normalizeUserAssetsTemplateType(cardLayout?.template_type);
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE) {
+    const slots = userAssetsCardLayoutSlots(cardLayout);
+    const rowPattern = buildHotzoneRowPattern(slots.length || 1);
+    return {
+      canvasWidth: 611,
+      canvasHeight:
+        rowPattern.length * USER_ASSETS_SLOT_SIZE_SPECS.free.height
+        + Math.max(0, rowPattern.length - 1) * USER_ASSETS_GRID_GAP,
+      isFreeform: true,
+      rowPattern,
+    };
+  }
+  const spec = fixedUserAssetsLayoutSpec(templateType ?? USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE);
   return {
-    canvasWidth: USER_ASSETS_CANVAS_WIDTH,
-    canvasHeight: rows * USER_ASSETS_ROW_HEIGHT + Math.max(0, rows - 1) * USER_ASSETS_ROW_GAP,
-    isFreeform: true,
+    canvasWidth: spec?.canvasWidth ?? 611,
+    canvasHeight: spec?.canvasHeight ?? 220,
+    isFreeform: false,
+    rowPattern: [] as number[],
   };
+}
+
+function legacyUserAssetsMapping(schema: UserAssetsLegacySchemaLike | undefined) {
+  return schema?.content?.slots_mapping ?? {};
+}
+
+function legacyUserAssetsSourceForSlot(mapping: Record<string, UserAssetsEntryLike>, slotId: string) {
+  const aliases: Record<string, string[]> = {
+    left_large: ['left_large', 'left', 'primary'],
+    right_top: ['right_top', 'secondary_1'],
+    right_bottom: ['right_bottom', 'secondary_2'],
+    left: ['left', 'primary'],
+    right: ['right', 'secondary_1'],
+    left_1: ['left_1', 'primary'],
+    center_1: ['center_1', 'secondary_1'],
+    right_1: ['right_1', 'secondary_2'],
+    top_left: ['top_left', 'primary'],
+    top_right: ['top_right', 'secondary_1'],
+    bottom_left: ['bottom_left', 'secondary_2'],
+    bottom_center: ['bottom_center', 'secondary_3'],
+    bottom_right: ['bottom_right', 'secondary_4'],
+    single: ['single', 'primary', 'slot_1'],
+  };
+  const candidates = aliases[slotId] ?? [slotId];
+  for (const candidate of candidates) {
+    const entry = mapping[candidate];
+    if (entry) return entry;
+  }
+  return undefined;
+}
+
+function resolveUserAssetsEntries(
+  data: {
+    entries?: UserAssetsEntryLike[];
+    body_image_schema?: UserAssetsLegacySchemaLike;
+  },
+  cardLayout: UserAssetsCardLayoutLike,
+) {
+  const slots = userAssetsCardLayoutSlots(cardLayout);
+  const inputEntries = Array.isArray(data.entries) ? data.entries : [];
+  const entriesBySlotId = new Map(
+    inputEntries.map((entry) => [stringOr(entry.slot_id || entry.id), entry] as const).filter(([slotId]) => Boolean(slotId)),
+  );
+  const legacyMapping = legacyUserAssetsMapping(data.body_image_schema);
+
+  return slots.map((slot, index) => {
+    const slotId = stringOr(slot.id, `slot_${index + 1}`);
+    const source = entriesBySlotId.get(slotId) ?? legacyUserAssetsSourceForSlot(legacyMapping, slotId);
+    const title = stringOr(source?.title, `入口 ${index + 1}`);
+    return {
+      id: stringOr(source?.id, slotId),
+      slot_id: slotId,
+      icon: stringOr(source?.icon, 'sparkles'),
+      title,
+      subtitle: stringOr(source?.subtitle, '功能入口'),
+      image: stringOr(source?.image),
+      alt: stringOr(source?.alt, title),
+      no_cache: source?.no_cache === true,
+      image_prompt_schema: source?.image_prompt_schema,
+      reference_images: Array.isArray(source?.reference_images) ? source.reference_images : [],
+    };
+  });
 }
 
 function userAssetsHeightFor(module: StorefrontSchemaModule, schema: StorefrontSchema) {
   const data = module.data as {
+    card_layout?: UserAssetsCardLayoutLike;
+    entries?: UserAssetsEntryLike[];
     height?: number;
     body_image?: string;
-    body_image_schema?: UserAssetsSchemaLike;
+    body_image_schema?: UserAssetsLegacySchemaLike;
   };
-  const metrics = resolveUserAssetsLayoutMetrics(data.body_image_schema);
+  const cardLayout = resolveUserAssetsCardLayout(data as Record<string, unknown>);
+  const entries = resolveUserAssetsEntries(data, cardLayout);
+  const metrics = resolveUserAssetsLayoutMetrics(cardLayout);
   const availableWidth = clamp(
     pageWidthFor(schema) - spacingFor(schema) * 2 - 32,
     260,
     pageWidthFor(schema),
   );
   const imageHeight = Math.round((availableWidth * metrics.canvasHeight) / metrics.canvasWidth);
+  const hasEntries = entries.length > 0;
   const hasBodyImage = Boolean(stringOr(data.body_image));
-  const fallback = hasBodyImage ? imageHeight + 134 : 208;
+  const fallback = hasEntries || hasBodyImage ? imageHeight + 134 : 208;
   const maxHeight = metrics.isFreeform ? 760 : 560;
-  return hasBodyImage ? blendSuggestion(data.height, fallback, 124, maxHeight) : fallback;
+  return hasEntries || hasBodyImage ? blendSuggestion(data.height, fallback, 124, maxHeight) : fallback;
 }
 
 function resolvePageLayout(schema: StorefrontSchema): StorefrontSchema {
@@ -510,22 +722,6 @@ function PendingPlaceholder({
   );
 }
 
-function userAssetsDetailFor(schema: UserAssetsSchemaLike | undefined) {
-  const slots = Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
-  const structure = stringOr(schema?.layout?.structure);
-  const layoutLabel =
-    structure === 'asymmetric'
-      ? '非对称入口布局'
-      : structure === 'grid'
-        ? '宫格入口布局'
-        : structure === 'horizontal'
-          ? '横向入口布局'
-          : structure === 'vertical'
-            ? '纵向入口布局'
-            : '入口布局预排';
-  return `${slots.length} 个入口 · ${layoutLabel}`;
-}
-
 function hasImageAsset(item: ImageItemLike | undefined) {
   return Boolean(stringOr(item?.image));
 }
@@ -653,22 +849,28 @@ function MiniProgramCapsule({
   );
 }
 
-function UserAssetsEntryGhost({
+function userAssetsCardRadius(slot: UserAssetsSlotLike | undefined) {
+  const size = stringOr(slot?.size);
+  return size === 'large' || size === 'wide' ? 24 : 20;
+}
+
+function UserAssetsEntryShell({
   item,
+  slot,
   palette,
-  large = false,
 }: {
-  item: UserAssetsMappingLike | undefined;
+  item: UserAssetsEntryLike | undefined;
+  slot: UserAssetsSlotLike | undefined;
   palette: PendingPalette;
-  large?: boolean;
 }) {
+  const large = stringOr(slot?.size) === 'large' || stringOr(slot?.size) === 'wide';
   const title = shortenText(stringOr(item?.title, '功能入口'), large ? 10 : 8);
   const subtitle = shortenText(stringOr(item?.subtitle, 'ENTRY'), large ? 14 : 12);
   return (
     <div
       style={{
         height: '100%',
-        borderRadius: large ? 24 : 20,
+        borderRadius: userAssetsCardRadius(slot),
         background: palette.panelStrong,
         border: `1px solid ${palette.edge}`,
         boxShadow: palette.shadow,
@@ -715,95 +917,284 @@ function UserAssetsEntryGhost({
   );
 }
 
-function UserAssetsPendingArt({
-  designContext,
-  schema,
+function UserAssetsCard({
+  projectId,
+  item,
+  slot,
+  palette,
 }: {
-  designContext: DesignContext;
-  schema?: UserAssetsSchemaLike;
+  projectId: string;
+  item: UserAssetsEntryLike | undefined;
+  slot: UserAssetsSlotLike | undefined;
+  palette: PendingPalette;
 }) {
-  const palette = buildPendingPalette(designContext);
-  const slots = userAssetsSlots(schema);
-  const mapping = schema?.content?.slots_mapping ?? {};
-  const asymmetricSlots = resolveAsymmetricUserAssetsSlots(schema);
-
-  let layout: JSX.Element;
-  if (asymmetricSlots) {
-    layout = (
+  const imageUrl = resolveAssetUrl(projectId, item?.image);
+  if (imageUrl) {
+    return (
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: `${USER_ASSETS_ASYMMETRIC_LARGE_WIDTH / USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH}fr 1fr`,
-          gap: USER_ASSETS_ROW_GAP,
           height: '100%',
+          borderRadius: userAssetsCardRadius(slot),
+          overflow: 'hidden',
+          background: '#fff',
         }}
       >
-        <div>
-          <UserAssetsEntryGhost item={mapping[asymmetricSlots.left.id ?? '']} palette={palette} large />
-        </div>
-        <div style={{ display: 'grid', gap: USER_ASSETS_ROW_GAP }}>
-          <UserAssetsEntryGhost item={mapping[asymmetricSlots.rightTop.id ?? '']} palette={palette} />
-          <UserAssetsEntryGhost item={mapping[asymmetricSlots.rightBottom.id ?? '']} palette={palette} />
-        </div>
+        <img
+          src={imageUrl}
+          alt={stringOr(item?.alt, stringOr(item?.title, '客户资产入口'))}
+          style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+        />
       </div>
     );
-  } else if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
-    layout = (
+  }
+  return <UserAssetsEntryShell item={item} slot={slot} palette={palette} />;
+}
+
+function UserAssetsHotzoneRows({
+  projectId,
+  slots,
+  entriesBySlotId,
+  palette,
+}: {
+  projectId: string;
+  slots: UserAssetsSlotLike[];
+  entriesBySlotId: Map<string, UserAssetsEntryLike>;
+  palette: PendingPalette;
+}) {
+  const rowPattern = buildHotzoneRowPattern(slots.length || 1);
+  let cursor = 0;
+  return (
+    <>
+      {rowPattern.map((count, rowIndex) => {
+        const rowSlots = slots.slice(cursor, cursor + count);
+        cursor += count;
+        return (
+          <div
+            key={`hotzone-row-${rowIndex}`}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`,
+              gap: USER_ASSETS_GRID_GAP,
+            }}
+          >
+            {rowSlots.map((slot, index) => (
+              <UserAssetsCard
+                key={slot.id || `slot-${rowIndex}-${index}`}
+                projectId={projectId}
+                item={entriesBySlotId.get(stringOr(slot.id))}
+                slot={slot}
+                palette={palette}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function UserAssetsCardsLayout({
+  projectId,
+  cardLayout,
+  entries,
+  palette,
+}: {
+  projectId: string;
+  cardLayout: UserAssetsCardLayoutLike;
+  entries: UserAssetsEntryLike[];
+  palette: PendingPalette;
+}) {
+  const templateType = normalizeUserAssetsTemplateType(cardLayout.template_type);
+  const slots = userAssetsCardLayoutSlots(cardLayout);
+  const entriesBySlotId = new Map(
+    entries.map((entry) => [stringOr(entry.slot_id || entry.id), entry] as const).filter(([slotId]) => Boolean(slotId)),
+  );
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.SINGLE) {
+    const slot = slots[0];
+    return (
+      <UserAssetsCard
+        projectId={projectId}
+        item={slot ? entriesBySlotId.get(stringOr(slot.id)) : undefined}
+        slot={slot}
+        palette={palette}
+      />
+    );
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_TWO) {
+    return (
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: USER_ASSETS_ROW_GAP,
+          gap: USER_ASSETS_GRID_GAP,
           height: '100%',
         }}
       >
         {slots.map((slot, index) => (
-          <UserAssetsEntryGhost key={slot.id || index} item={slot.id ? mapping[slot.id] : undefined} palette={palette} />
-        ))}
-      </div>
-    );
-  } else if (
-    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
-    slots.length === 5
-  ) {
-    const topSlots = slots.slice(0, 2);
-    const bottomSlots = slots.slice(2);
-    layout = (
-      <div style={{ display: 'grid', gap: USER_ASSETS_ROW_GAP, height: '100%' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: USER_ASSETS_ROW_GAP }}>
-          {topSlots.map((slot, index) => (
-            <UserAssetsEntryGhost key={slot.id || index} item={slot.id ? mapping[slot.id] : undefined} palette={palette} />
-          ))}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: USER_ASSETS_ROW_GAP }}>
-          {bottomSlots.map((slot, index) => (
-            <UserAssetsEntryGhost key={slot.id || index} item={slot.id ? mapping[slot.id] : undefined} palette={palette} />
-          ))}
-        </div>
-      </div>
-    );
-  } else {
-    const fallbackSlots = slots.length > 0 ? slots : [{ id: 'slot-1' }, { id: 'slot-2' }, { id: 'slot-3' }];
-    const columns = fallbackSlots.length >= 4 ? 2 : Math.min(fallbackSlots.length, 3);
-    layout = (
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))`,
-          gap: USER_ASSETS_ROW_GAP,
-          height: '100%',
-        }}
-      >
-        {fallbackSlots.map((slot, index) => (
-          <UserAssetsEntryGhost
+          <UserAssetsCard
             key={slot.id || index}
-            item={slot.id && slot.id in mapping ? mapping[slot.id] : undefined}
+            projectId={projectId}
+            item={entriesBySlotId.get(stringOr(slot.id))}
+            slot={slot}
             palette={palette}
           />
         ))}
       </div>
     );
   }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.ONE_ROW_THREE) {
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: USER_ASSETS_GRID_GAP,
+          height: '100%',
+        }}
+      >
+        {slots.map((slot, index) => (
+          <UserAssetsCard
+            key={slot.id || index}
+            projectId={projectId}
+            item={entriesBySlotId.get(stringOr(slot.id))}
+            slot={slot}
+            palette={palette}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO) {
+    const left = slots.find((slot) => stringOr(slot.id) === 'left_large');
+    const rightTop = slots.find((slot) => stringOr(slot.id) === 'right_top');
+    const rightBottom = slots.find((slot) => stringOr(slot.id) === 'right_bottom');
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: USER_ASSETS_GRID_GAP,
+          height: '100%',
+        }}
+      >
+        <div>
+          <UserAssetsCard
+            projectId={projectId}
+            item={entriesBySlotId.get('left_large')}
+            slot={left}
+            palette={palette}
+          />
+        </div>
+        <div style={{ display: 'grid', gap: USER_ASSETS_GRID_GAP }}>
+          <UserAssetsCard
+            projectId={projectId}
+            item={entriesBySlotId.get('right_top')}
+            slot={rightTop}
+            palette={palette}
+          />
+          <UserAssetsCard
+            projectId={projectId}
+            item={entriesBySlotId.get('right_bottom')}
+            slot={rightBottom}
+            palette={palette}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FOUR) {
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: USER_ASSETS_GRID_GAP,
+          height: '100%',
+        }}
+      >
+        {slots.map((slot, index) => (
+          <UserAssetsCard
+            key={slot.id || index}
+            projectId={projectId}
+            item={entriesBySlotId.get(stringOr(slot.id))}
+            slot={slot}
+            palette={palette}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (templateType === USER_ASSETS_TEMPLATE_TYPES.TWO_ROW_FIVE) {
+    const topSlots = slots.slice(0, 2);
+    const bottomSlots = slots.slice(2);
+    return (
+      <div style={{ display: 'grid', gap: USER_ASSETS_GRID_GAP, height: '100%' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: USER_ASSETS_GRID_GAP,
+          }}
+        >
+          {topSlots.map((slot, index) => (
+            <UserAssetsCard
+              key={slot.id || index}
+              projectId={projectId}
+              item={entriesBySlotId.get(stringOr(slot.id))}
+              slot={slot}
+              palette={palette}
+            />
+          ))}
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: USER_ASSETS_GRID_GAP,
+          }}
+        >
+          {bottomSlots.map((slot, index) => (
+            <UserAssetsCard
+              key={slot.id || index}
+              projectId={projectId}
+              item={entriesBySlotId.get(stringOr(slot.id))}
+              slot={slot}
+              palette={palette}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: USER_ASSETS_GRID_GAP, height: '100%' }}>
+      <UserAssetsHotzoneRows
+        projectId={projectId}
+        slots={slots}
+        entriesBySlotId={entriesBySlotId}
+        palette={palette}
+      />
+    </div>
+  );
+}
+
+function UserAssetsPendingArt({
+  designContext,
+  cardLayout,
+  entries,
+}: {
+  designContext: DesignContext;
+  cardLayout: UserAssetsCardLayoutLike;
+  entries: UserAssetsEntryLike[];
+}) {
+  const palette = buildPendingPalette(designContext);
 
   return (
     <div
@@ -815,7 +1206,12 @@ function UserAssetsPendingArt({
         background: palette.shellSoft,
       }}
     >
-      {layout}
+      <UserAssetsCardsLayout
+        projectId=""
+        cardLayout={cardLayout}
+        entries={entries}
+        palette={palette}
+      />
     </div>
   );
 }
@@ -1075,14 +1471,20 @@ function UserAssetsModule({
     upgrade_tip?: string;
     progress_percent?: number;
     height?: number;
+    card_layout?: UserAssetsCardLayoutLike;
+    entries?: UserAssetsEntryLike[];
     body_image?: string;
     body_alt?: string;
-    body_image_schema?: UserAssetsSchemaLike;
+    body_image_schema?: UserAssetsLegacySchemaLike;
   };
-  const metrics = resolveUserAssetsLayoutMetrics(data.body_image_schema);
+  const cardLayout = resolveUserAssetsCardLayout(data as Record<string, unknown>);
+  const entries = resolveUserAssetsEntries(data, cardLayout);
+  const metrics = resolveUserAssetsLayoutMetrics(cardLayout);
   const bodyImageUrl = resolveAssetUrl(projectId, data.body_image);
+  const hasEntries = entries.length > 0;
+  const hasEntryImages = entries.some((entry) => Boolean(resolveAssetUrl(projectId, entry.image)));
   const hasBodyImage = Boolean(bodyImageUrl);
-  const bodyHeight = hasBodyImage
+  const bodyHeight = hasEntries || hasBodyImage
     ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * USER_ASSETS_PREVIEW_BODY_WIDTH)
     : clamp(Math.round(toNumber(data.height, 208) * 0.38), 72, 108);
   const avatarUrl = resolveAssetUrl(projectId, data.avatar || USER_ASSETS_DEFAULTS.avatar);
@@ -1175,14 +1577,25 @@ function UserAssetsModule({
           overflow: 'hidden',
         }}
       >
-        {bodyImageUrl ? (
+        {hasEntryImages ? (
+          <UserAssetsCardsLayout
+            projectId={projectId}
+            cardLayout={cardLayout}
+            entries={entries}
+            palette={buildPendingPalette(designContext)}
+          />
+        ) : bodyImageUrl ? (
           <img
             src={bodyImageUrl}
             alt={stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt)}
             style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center' }}
           />
         ) : (
-          <UserAssetsPendingArt designContext={designContext} schema={data.body_image_schema} />
+          <UserAssetsPendingArt
+            designContext={designContext}
+            cardLayout={cardLayout}
+            entries={entries}
+          />
         )}
       </div>
     </section>

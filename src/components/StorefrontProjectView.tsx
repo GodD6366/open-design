@@ -1131,6 +1131,7 @@ function storefrontAssetLabel(fileName: string): string {
   if (fileName.startsWith('storefront-featured-')) return '主推商品素材';
   if (fileName.startsWith('storefront-grid-')) return '商品网格素材';
   if (fileName.startsWith('storefront-brand-')) return '品牌故事素材';
+  if (fileName.startsWith('user-assets-entry-')) return '客户资产入口素材';
   return '图片素材';
 }
 

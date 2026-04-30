@@ -535,67 +535,90 @@ function validateImageModule(module, errors) {
 }
 
 function validateUserAssets(module, errors) {
-  const schema = module.data?.body_image_schema;
-
-  if (!isRecord(schema)) {
-    fail(errors, "user_assets.data.body_image_schema 必须是对象。");
+  const layout = module.data?.card_layout;
+  if (!isRecord(layout)) {
+    fail(errors, "user_assets.data.card_layout 必须是对象。");
     return;
   }
 
-  for (const legacyKey of ["primaryColor", "divider", "aspectRatio", "tone", "items"]) {
-    if (legacyKey in schema) {
-      fail(errors, `user_assets body_image_schema 不允许使用旧字段 ${legacyKey}。`);
+  const templateType = layout.template_type;
+  const validTemplateType =
+    templateType === "hotzone" ||
+    templateType === 1 ||
+    templateType === 2 ||
+    templateType === 3 ||
+    templateType === 5 ||
+    templateType === 6 ||
+    templateType === 7;
+  if (!validTemplateType) {
+    fail(errors, "user_assets.data.card_layout.template_type 必须是 1/2/3/5/6/7 或 hotzone。");
+  }
+
+  const slots = Array.isArray(layout.slots) ? layout.slots : [];
+  if (slots.length < 1) {
+    fail(errors, "user_assets.data.card_layout.slots 至少需要 1 项。");
+    return;
+  }
+
+  const expectedSlotsByTemplateType = {
+    7: ["single"],
+    1: ["left", "right"],
+    2: ["left_large", "right_top", "right_bottom"],
+    3: ["left_1", "center_1", "right_1"],
+    6: ["top_left", "top_right", "bottom_left", "bottom_right"],
+    5: ["top_left", "top_right", "bottom_left", "bottom_center", "bottom_right"],
+  };
+  if (templateType !== "hotzone") {
+    const expected = expectedSlotsByTemplateType[templateType];
+    if (!expected || slots.length !== expected.length) {
+      fail(errors, "user_assets.data.card_layout.slots 数量与 template_type 不匹配。");
+    } else {
+      expected.forEach((slotId, index) => {
+        const slot = slots[index];
+        if (!isRecord(slot) || slot.id !== slotId || slot.position !== slotId) {
+          fail(errors, `user_assets.data.card_layout.slots[${index}] 必须是 ${slotId}。`);
+        }
+      });
     }
+  } else {
+    slots.forEach((slot, index) => {
+      const expectedId = `slot_${index + 1}`;
+      if (!isRecord(slot) || slot.id !== expectedId || slot.position !== expectedId) {
+        fail(errors, "user_assets 热区布局必须使用 slot_1...slot_n 的连续槽位。");
+      }
+    });
   }
 
-  if (schema.type !== "mobile_ui_entry_panel") {
-    fail(errors, 'user_assets body_image_schema.type 必须是 "mobile_ui_entry_panel"。');
-  }
-
-  const canvasRules = schema.instruction?.canvas_rules;
-  if (
-    isRecord(canvasRules) &&
-    typeof canvasRules.background === "string" &&
-    canvasRules.background !== "pure_white"
-  ) {
-    fail(errors, 'user_assets body_image_schema.instruction.canvas_rules.background 必须是 "pure_white"。');
-  }
-
-  if (schema.visual_style?.color_system?.usage?.background === true) {
-    fail(errors, "user_assets 入口图背景必须保持白色，不允许启用品牌色或复杂背景。");
-  }
-
-  const slots = schema.layout?.slots;
-  if (!Array.isArray(slots) || slots.length < 1) {
-    fail(errors, "user_assets body_image_schema.layout.slots 至少需要 1 项。");
+  const entries = Array.isArray(module.data?.entries) ? module.data.entries : [];
+  if (entries.length !== slots.length) {
+    fail(errors, "user_assets.data.entries 数量必须与 card_layout.slots 完全一致。");
     return;
   }
 
-  const mapping = schema.content?.slots_mapping;
-  if (!isRecord(mapping)) {
-    fail(errors, "user_assets body_image_schema.content.slots_mapping 必须是对象。");
-    return;
-  }
-
-  for (const slot of slots) {
-    if (!isRecord(slot) || typeof slot.id !== "string" || !slot.id.trim()) {
-      fail(errors, "user_assets body_image_schema.layout.slots 每项都需要 id。");
+  const slotIds = new Set(slots.map((slot) => (isRecord(slot) ? slot.id : "")));
+  for (const entry of entries) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || !entry.id.trim()) {
+      fail(errors, "user_assets.data.entries 每项都需要 id。");
       continue;
     }
-
-    const item = mapping[slot.id];
     if (
-      !isRecord(item) ||
-      typeof item.icon !== "string" ||
-      !item.icon.trim() ||
-      typeof item.title !== "string" ||
-      !item.title.trim() ||
-      typeof item.subtitle !== "string"
+      typeof entry.slot_id !== "string" ||
+      !entry.slot_id.trim() ||
+      !slotIds.has(entry.slot_id)
     ) {
-      fail(
-        errors,
-        `user_assets slots_mapping.${slot.id} 必须包含 icon、title、subtitle 字符串。`,
-      );
+      fail(errors, `user_assets.data.entries.${entry.id} 必须引用 card_layout 中存在的 slot_id。`);
+    }
+    if (typeof entry.title !== "string" || !entry.title.trim()) {
+      fail(errors, `user_assets.data.entries.${entry.id} 必须包含 title。`);
+    }
+    if (typeof entry.subtitle !== "string") {
+      fail(errors, `user_assets.data.entries.${entry.id} 必须包含 subtitle 字符串。`);
+    }
+    if (typeof entry.icon !== "string" || !entry.icon.trim()) {
+      fail(errors, `user_assets.data.entries.${entry.id} 必须包含 icon。`);
+    }
+    if (!isRecord(entry.image_prompt_schema)) {
+      fail(errors, `user_assets.data.entries.${entry.id}.image_prompt_schema 必须是对象。`);
     }
   }
 }

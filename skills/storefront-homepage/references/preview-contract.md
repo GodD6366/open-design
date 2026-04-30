@@ -13,10 +13,16 @@ The host renders a mobile storefront preview from schema only.
 - Preview logic follows the workspace homepage renderer:
   - overlay layout mode
   - `top_slider` as poster carousel
-  - `user_assets` as membership/entry panel
+  - `user_assets` as B-end actual membership entry-card layout, driven by `data.card_layout + data.entries`
   - `banner` as single wide entry module
   - `goods` as product cards
   - `shop_info` as tall story poster
+
+`user_assets` preview rules:
+
+- fixed layouts (`7/1/2/3/6/5`) render per-card layout directly instead of merging all buttons into one panel image
+- `hotzone` uses free row balancing without strict fixed card-size requirements
+- legacy `body_image` / `body_image_schema` only serve as compatibility fallback for old projects
 
 Do not try to approximate preview by authoring HTML. The host compiles
 `storefront.preview.html` and `storefront.screen.html` from
