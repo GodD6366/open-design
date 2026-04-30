@@ -66,6 +66,8 @@ import {
   loadStorefrontPromptContext,
   loadStorefrontState,
   saveStorefrontBrief,
+  STOREFRONT_PREVIEW_FILE,
+  STOREFRONT_SCREEN_FILE,
   storefrontSkillDir,
   clearSchemaImageSlot,
 } from './storefront.js';
@@ -954,6 +956,15 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
 
   app.get('/api/projects/:id/files/:name', async (req, res) => {
     try {
+      if (req.params.name === STOREFRONT_SCREEN_FILE || req.params.name === STOREFRONT_PREVIEW_FILE) {
+        const dir = projectDir(PROJECTS_DIR, req.params.id);
+        try {
+          await fs.promises.stat(dir);
+          await loadStorefrontState(PROJECTS_DIR, req.params.id, STOREFRONT_SKILL_DIR);
+        } catch (err) {
+          if (!err || err.code !== 'ENOENT') throw err;
+        }
+      }
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');

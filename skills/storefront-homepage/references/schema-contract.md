@@ -64,9 +64,12 @@ The modules array must contain exactly the confirmed modules from
 
 - `body_image_schema.type` must be `mobile_ui_entry_panel`
 - `body_image_schema.layout.slots` must contain at least 2 slots
+- the canonical asymmetric 3-entry layout uses `layout.structure = asymmetric_entry_grid`, `distribution = one_large_two_stacked`, and slot positions `left_large`, `right_top`, `right_bottom`
+- existing saved schemas may still use the legacy asymmetric alias `left`, `right_top`, `right_bottom`; runtime compatibility must remain intact
 - `body_image_schema.content.slots_mapping` must cover every slot id
 - every slot mapping must contain `icon`, `title`, `subtitle`
 - entry-panel image content is limited to function icons, titles, and subtitles; icon style follows the page style
 - background must stay plain white; do not use gradients, patterns, scenic illustration, photography, paper texture, or other complex backgrounds
 - do not introduce shop logo, brand corner mark, watermark, or shop slogan into the entry-panel image
 - do not use legacy keys such as `primaryColor`, `divider`, `aspectRatio`, `tone`, `items`
+- the rendered entry-panel image stays slot-driven and may be non-square; do not force a square output when the layout implies a wider canvas

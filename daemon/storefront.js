@@ -7,6 +7,12 @@ import {
   buildInitialHomepageRequirements,
   validateHomepageSchema,
 } from './lib/homepage-agent-shared.js';
+import {
+  STOREFRONT_PHONE_CHROME,
+  STOREFRONT_STATUS_BATTERY,
+  STOREFRONT_STATUS_SIGNAL_BARS,
+  STOREFRONT_STATUS_WIFI_PATHS,
+} from '../src/storefront/phoneChrome.js';
 
 export const STOREFRONT_BRIEF_FILE = 'storefront.brief.json';
 export const STOREFRONT_REQUIREMENTS_FILE = 'storefront.requirements.json';
@@ -79,6 +85,13 @@ const USER_ASSETS_DEFAULTS = {
   pendingLabel: '客户资产运行时生图中...',
 };
 
+const USER_ASSETS_CANVAS_WIDTH = 632;
+const USER_ASSETS_ROW_HEIGHT = 220;
+const USER_ASSETS_ROW_GAP = 16;
+const USER_ASSETS_PREVIEW_BODY_WIDTH = 311;
+const USER_ASSETS_ASYMMETRIC_LARGE_WIDTH = 316;
+const USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH = 300;
+
 const STOREFRONT_TONE_PRESETS = JSON.parse(
   readFileSync(new URL('../src/storefront/tone-presets.json', import.meta.url), 'utf8'),
 );
@@ -149,8 +162,8 @@ const BAKERY_STYLE_GUIDE_PRESET = {
       greeting: '欢迎回来',
       upgrade_tip: '用手绘感入口承接会员、自取、配送与扫码下单。',
       layout: {
-        structure: 'asymmetric',
-        distribution: 'auto_balance',
+        structure: 'asymmetric_entry_grid',
+        distribution: 'one_large_two_stacked',
         alignment: {
           horizontal: 'full_bleed',
           edge: 'no_padding',
@@ -1017,9 +1030,9 @@ function createUserAssetsSlots(count) {
   }
   if (count === 3) {
     return [
-      { id: 'left_1', role: 'sub_action', size: 'medium', position: 'left_1' },
-      { id: 'center_1', role: 'sub_action', size: 'medium', position: 'center_1' },
-      { id: 'right_1', role: 'sub_action', size: 'medium', position: 'right_1' },
+      { id: 'left_large', role: 'main_action', size: 'large', position: 'left_large' },
+      { id: 'right_top', role: 'sub_action', size: 'medium', position: 'right_top' },
+      { id: 'right_bottom', role: 'sub_action', size: 'medium', position: 'right_bottom' },
     ];
   }
   if (count === 4) {
@@ -1058,6 +1071,51 @@ function createUserAssetsSlotsMapping(labels, slots) {
       },
     ]),
   );
+}
+
+function userAssetsSlots(schema) {
+  return Array.isArray(schema?.layout?.slots) ? schema.layout.slots.filter(isPlainObject) : [];
+}
+
+function userAssetsSlotPosition(slot) {
+  return stringOr(slot?.position || slot?.id);
+}
+
+function hasUserAssetsPositions(slots, ...entries) {
+  const ids = slots.map((slot) => userAssetsSlotPosition(slot));
+  return entries.every((entry) => ids.includes(entry));
+}
+
+function isAsymmetricThreeUserAssetsLayout(schema) {
+  const slots = userAssetsSlots(schema);
+  if (slots.length !== 3) return false;
+  if (!hasUserAssetsPositions(slots, 'right_top', 'right_bottom')) return false;
+  if (hasUserAssetsPositions(slots, 'left_large') || hasUserAssetsPositions(slots, 'left')) {
+    return true;
+  }
+  const structure = stringOr(schema?.layout?.structure);
+  const distribution = stringOr(schema?.layout?.distribution);
+  return (
+    structure === 'asymmetric' ||
+    structure === 'asymmetric_entry_grid' ||
+    distribution === 'one_large_two_stacked'
+  );
+}
+
+function resolveAsymmetricUserAssetsSlots(schema) {
+  const slots = userAssetsSlots(schema);
+  if (!isAsymmetricThreeUserAssetsLayout(schema)) return null;
+  const rightTop = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_top');
+  const rightBottom = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_bottom');
+  const left = slots.find((slot) => {
+    const position = userAssetsSlotPosition(slot);
+    return position === 'left_large' || position === 'left';
+  }) ?? slots.find((slot) => {
+    const position = userAssetsSlotPosition(slot);
+    return position !== 'right_top' && position !== 'right_bottom';
+  });
+  if (!left || !rightTop || !rightBottom) return null;
+  return { left, rightTop, rightBottom };
 }
 
 function createSeedSchema(requirements, styleGuide) {
@@ -1408,13 +1466,21 @@ function resolvePresetUserAssetsDefaults(styleGuide, accent, requirements) {
   const actionLabels = resolveActionButtonLabels(requirements);
   const slots = createUserAssetsSlots(actionLabels.length);
   const slotsMapping = createUserAssetsSlotsMapping(actionLabels, slots);
+  const useAsymmetricThreeLayout = actionLabels.length === 3;
+  const useFreeformLayout = actionLabels.length > 5;
 
   return {
     greeting: stringOr(preset?.greeting, USER_ASSETS_DEFAULTS.greeting),
     upgrade_tip: stringOr(preset?.upgrade_tip, '完善会员等级和权益，提升复购效率。'),
     layout: {
-      structure: actionLabels.length > 5 ? 'freeform' : 'grid',
-      distribution: stringOr(preset?.layout?.distribution, 'auto_balance'),
+      structure: stringOr(
+        preset?.layout?.structure,
+        useAsymmetricThreeLayout ? 'asymmetric_entry_grid' : useFreeformLayout ? 'freeform' : 'grid',
+      ),
+      distribution: stringOr(
+        preset?.layout?.distribution,
+        useAsymmetricThreeLayout ? 'one_large_two_stacked' : 'auto_balance',
+      ),
       alignment: {
         horizontal: stringOr(preset?.layout?.alignment?.horizontal, 'full_bleed'),
         edge: stringOr(preset?.layout?.alignment?.edge, 'no_padding'),
@@ -1946,7 +2012,6 @@ async function persistSchema(projectDir, projectId, schema, requirements, styleG
 
 function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }) {
   const screenPath = `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(STOREFRONT_SCREEN_FILE)}?v=${Math.round(previewUpdatedAt)}`;
-  const frameSrc = `/frames/iphone-15-pro.html?screen=${encodeURIComponent(screenPath)}`;
   const bg = stringOr(designContext?.color_palette?.bg, DEFAULT_DESIGN_CONTEXT.color_palette.bg);
   const accent = stringOr(designContext?.color_palette?.accent, DEFAULT_DESIGN_CONTEXT.color_palette.accent);
   const text = stringOr(designContext?.color_palette?.text_primary, DEFAULT_DESIGN_CONTEXT.color_palette.text_primary);
@@ -1982,18 +2047,157 @@ function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }
         text-transform: uppercase;
         color: rgba(31, 41, 55, 0.58);
       }
-      iframe {
-        width: 430px;
-        height: 920px;
+      .preview-shell {
+        position: relative;
+        width: 390px;
+        height: 844px;
+      }
+      .preview-device {
+        position: relative;
+        width: 390px;
+        height: 844px;
+        border-radius: 56px;
+        padding: 12px;
+        background:
+          linear-gradient(160deg, #2a2a2c 0%, #1a1a1c 50%, #0e0e10 100%);
+        box-shadow:
+          0 0 0 1px rgba(255,255,255,0.04) inset,
+          0 0 0 2px #000 inset,
+          0 28px 60px -12px rgba(0,0,0,0.45),
+          0 8px 20px -8px rgba(0,0,0,0.35);
+        isolation: isolate;
+      }
+      .preview-device::before,
+      .preview-device::after {
+        content: "";
+        position: absolute;
+        width: 3px;
+        top: 100px;
+        bottom: 100px;
+        background:
+          linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.06) 8%, transparent 16%, transparent 84%, rgba(255,255,255,0.04) 92%, transparent 100%);
+        pointer-events: none;
+      }
+      .preview-device::before { left: -1px; }
+      .preview-device::after { right: -1px; }
+      .preview-rail {
+        position: absolute;
+        width: 4px;
+        background: #0a0a0c;
+        border-radius: 2px;
+      }
+      .preview-rail-left-1 { left: -3px; top: 174px; height: 32px; }
+      .preview-rail-left-2 { left: -3px; top: 220px; height: 60px; }
+      .preview-rail-left-3 { left: -3px; top: 290px; height: 60px; }
+      .preview-rail-right-1 { right: -3px; top: 250px; height: 100px; }
+      .preview-island {
+        position: absolute;
+        top: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 124px;
+        height: 36px;
+        border-radius: 999px;
+        background: #000;
+        z-index: 5;
+      }
+      .preview-screen {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 44px;
+        overflow: hidden;
+        background: ${bg};
+      }
+      .preview-statusbar {
+        position: absolute;
+        inset: 0 0 auto;
+        z-index: 6;
+        pointer-events: none;
+        padding: ${STOREFRONT_PHONE_CHROME.statusBarPaddingTop}px ${STOREFRONT_PHONE_CHROME.statusBarPaddingX}px 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        font-size: ${STOREFRONT_PHONE_CHROME.statusBarFontSize}px;
+        line-height: ${STOREFRONT_PHONE_CHROME.statusBarLineHeight}px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: ${text};
+      }
+      .preview-statusbar__right {
+        display: inline-flex;
+        align-items: center;
+        gap: ${STOREFRONT_PHONE_CHROME.statusBarGap}px;
+      }
+      .preview-statusbar__right svg {
+        display: block;
+        flex: none;
+      }
+      .preview-statusbar__battery {
+        width: 25px;
+        height: 11px;
+      }
+      .preview-inner {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         border: 0;
-        background: transparent;
+        background: ${bg};
+      }
+      .preview-home-indicator {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: ${STOREFRONT_PHONE_CHROME.homeIndicatorHeight}px;
+        z-index: 7;
+        pointer-events: none;
+      }
+      .preview-home-indicator::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: ${STOREFRONT_PHONE_CHROME.homeIndicatorBottom}px;
+        transform: translateX(-50%);
+        width: ${STOREFRONT_PHONE_CHROME.homeIndicatorWidth}px;
+        height: 5px;
+        border-radius: 999px;
+        background: #1a1916;
+        opacity: 0.85;
       }
     </style>
   </head>
   <body>
     <div class="preview-stage">
       <div class="preview-caption">Workspace storefront runtime preview</div>
-      <iframe src="${escapeAttr(frameSrc)}" loading="lazy"></iframe>
+      <div class="preview-shell">
+        <div class="preview-device">
+          <span class="preview-rail preview-rail-left-1" aria-hidden="true"></span>
+          <span class="preview-rail preview-rail-left-2" aria-hidden="true"></span>
+          <span class="preview-rail preview-rail-left-3" aria-hidden="true"></span>
+          <span class="preview-rail preview-rail-right-1" aria-hidden="true"></span>
+          <span class="preview-island" aria-hidden="true"></span>
+          <div class="preview-screen">
+            <div class="preview-statusbar">
+              <span>9:41</span>
+              <span class="preview-statusbar__right">
+                ${renderStatusSignalIcon()}
+                ${renderStatusWifiIcon()}
+                ${renderStatusBatteryIcon('preview-statusbar__battery')}
+              </span>
+            </div>
+            <iframe
+              class="preview-inner"
+              title="店铺首页内屏"
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin"
+              src="${escapeAttr(screenPath)}"
+            ></iframe>
+            <div class="preview-home-indicator" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </body>
 </html>`;
@@ -2078,52 +2282,10 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
         background: linear-gradient(180deg, ${hexToRgba(context.color_palette.bg, immersiveHero ? 0.14 : 0.86)} 0%, ${hexToRgba(context.color_palette.bg, immersiveHero ? 0.04 : 0.16)} 78%, ${hexToRgba(context.color_palette.bg, 0)} 100%);
         transition: background 220ms ease;
       }
-      .sf-statusbar {
-        padding: 14px 18px 0;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        font-size: 15px;
-        line-height: 18px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-        color: var(--sf-fg);
-        transition: color 220ms ease;
-      }
-      .sf-statusbar__right {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-      }
-      .sf-battery-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 1px;
-      }
-      .sf-battery-badge__value {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 34px;
-        height: 20px;
-        padding: 0 7px;
-        border-radius: 10px;
-        background: rgba(17,17,19,0.96);
-        color: #fff;
-        font-size: 10.5px;
-        line-height: 14px;
-        font-weight: 700;
-      }
-      .sf-battery-badge__nub {
-        width: 3px;
-        height: 7px;
-        border-radius: 0 2px 2px 0;
-        background: rgba(17,17,19,0.26);
-      }
       .sf-capsule-wrap {
         display: flex;
         justify-content: flex-end;
-        padding: 8px 18px 0;
+        padding: ${STOREFRONT_PHONE_CHROME.capsuleOffsetTop}px ${STOREFRONT_PHONE_CHROME.capsulePaddingX}px 0;
       }
       .sf-mini-capsule {
         width: 84px;
@@ -2433,8 +2595,18 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
       .sf-user-assets__body {
         flex: 0 0 auto;
         border-radius: 6px;
-        background: var(--sf-card-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--sf-card-bg);
         overflow: hidden;
+      }
+      .sf-user-assets__body-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        object-position: center;
       }
       .sf-goods-stack {
         display: flex;
@@ -2469,17 +2641,6 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
   <body>
     <div class="sf-screen${immersiveHero ? ' is-immersive' : ''}" id="sfScreen">
       <div class="sf-overlay">
-        <div class="sf-statusbar">
-          <span>9:41</span>
-          <span class="sf-statusbar__right">
-            ${renderStatusSignalIcon()}
-            ${renderStatusWifiIcon()}
-            <span class="sf-battery-badge" aria-hidden="true">
-              <span class="sf-battery-badge__value">73</span>
-              <span class="sf-battery-badge__nub"></span>
-            </span>
-          </span>
-        </div>
         <div class="sf-capsule-wrap" aria-hidden="true">
           ${renderMiniProgramCapsule()}
         </div>
@@ -2660,7 +2821,7 @@ function renderUserAssetsModule(projectId, module) {
   const asset = resolveAssetUrl(projectId, data.body_image);
   const avatar = resolveAssetUrl(projectId, data.avatar || USER_ASSETS_DEFAULTS.avatar);
   const bodyHeight = asset
-    ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * 311)
+    ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * USER_ASSETS_PREVIEW_BODY_WIDTH)
     : clamp(Math.round(toNumber(data.height, 208) * 0.38), 72, 108);
   return `<div class="sf-user-assets" style="min-height:${Math.max(124, toNumber(data.height, 188))}px">
     <div class="sf-user-assets__top">
@@ -2679,8 +2840,8 @@ function renderUserAssetsModule(projectId, module) {
       : ''}
     <div class="sf-user-assets__body" style="height:${bodyHeight}px">
       ${asset
-        ? `<img src="${escapeAttr(asset)}" alt="${escapeAttr(stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt))}" class="sf-image-fill" />`
-        : renderUserAssetsPendingPlaceholder()}
+        ? `<img src="${escapeAttr(asset)}" alt="${escapeAttr(stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt))}" class="sf-user-assets__body-image" />`
+        : renderUserAssetsPendingPlaceholder(data.body_image_schema)}
     </div>
   </div>`;
 }
@@ -2754,19 +2915,24 @@ function renderGenericPendingImageMark(label = '图片待生成', compact = fals
 
 function renderStatusSignalIcon() {
   return `<svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden="true">
-    <rect x="1" y="9.5" width="3" height="2.5" rx="1.4" fill="currentColor" opacity="0.45"></rect>
-    <rect x="5" y="7" width="3" height="5" rx="1.4" fill="currentColor" opacity="0.61"></rect>
-    <rect x="9" y="4.5" width="3" height="7.5" rx="1.4" fill="currentColor" opacity="0.77"></rect>
-    <rect x="13" y="2" width="3" height="10" rx="1.4" fill="currentColor" opacity="0.93"></rect>
+    ${STOREFRONT_STATUS_SIGNAL_BARS.map((bar) => `<rect x="${bar.x}" y="${bar.y}" width="${bar.width}" height="${bar.height}" rx="${bar.rx}" fill="currentColor" opacity="${bar.opacity}"></rect>`).join('')}
   </svg>`;
 }
 
 function renderStatusWifiIcon() {
   return `<svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden="true">
-    <path d="M1.7 4.8C3.6 3 6.2 2 9 2c2.8 0 5.4 1 7.3 2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-    <path d="M4.4 7.5A6.6 6.6 0 0 1 9 5.8c1.8 0 3.4.6 4.6 1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-    <path d="M7.1 10.2A2.9 2.9 0 0 1 9 9.5c.7 0 1.4.3 1.9.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-    <circle cx="9" cy="12" r="1.25" fill="currentColor"></circle>
+    ${STOREFRONT_STATUS_WIFI_PATHS.map((entry) => entry.type === 'circle'
+      ? `<circle cx="${entry.cx}" cy="${entry.cy}" r="${entry.r}" fill="currentColor"></circle>`
+      : `<path d="${entry.d}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>`).join('')}
+  </svg>`;
+}
+
+function renderStatusBatteryIcon(className = '') {
+  const classAttr = className ? ` class="${className}"` : '';
+  return `<svg${classAttr} viewBox="${STOREFRONT_STATUS_BATTERY.viewBox}" fill="none" aria-hidden="true">
+    <rect x="${STOREFRONT_STATUS_BATTERY.outline.x}" y="${STOREFRONT_STATUS_BATTERY.outline.y}" width="${STOREFRONT_STATUS_BATTERY.outline.width}" height="${STOREFRONT_STATUS_BATTERY.outline.height}" rx="${STOREFRONT_STATUS_BATTERY.outline.rx}" fill="none" stroke="currentColor" stroke-opacity="${STOREFRONT_STATUS_BATTERY.outline.strokeOpacity}"></rect>
+    <rect x="${STOREFRONT_STATUS_BATTERY.nub.x}" y="${STOREFRONT_STATUS_BATTERY.nub.y}" width="${STOREFRONT_STATUS_BATTERY.nub.width}" height="${STOREFRONT_STATUS_BATTERY.nub.height}" rx="${STOREFRONT_STATUS_BATTERY.nub.rx}" fill="currentColor" fill-opacity="${STOREFRONT_STATUS_BATTERY.nub.fillOpacity}"></rect>
+    <rect x="${STOREFRONT_STATUS_BATTERY.fill.x}" y="${STOREFRONT_STATUS_BATTERY.fill.y}" width="${STOREFRONT_STATUS_BATTERY.fill.width}" height="${STOREFRONT_STATUS_BATTERY.fill.height}" rx="${STOREFRONT_STATUS_BATTERY.fill.rx}" fill="currentColor"></rect>
   </svg>`;
 }
 
@@ -2791,7 +2957,7 @@ function renderImagePlaceholderArt(_variant) {
 function userAssetsDetailFor(schema) {
   const slots = Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
   const structure = stringOr(schema?.layout?.structure);
-  const layoutLabel = structure === 'asymmetric'
+  const layoutLabel = structure === 'asymmetric' || structure === 'asymmetric_entry_grid'
     ? '非对称入口布局'
     : structure === 'grid'
       ? '宫格入口布局'
@@ -2816,34 +2982,31 @@ function renderUserAssetsEntry(item, large = false) {
 }
 
 function renderUserAssetsPendingLayout(schema) {
-  const slots = Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
+  const slots = userAssetsSlots(schema);
   const mapping = isPlainObject(schema?.content?.slots_mapping) ? schema.content.slots_mapping : {};
-  const ids = slots.map((slot) => stringOr(slot.position || slot.id));
-  const has = (...entries) => entries.every((entry) => ids.includes(entry));
+  const asymmetricSlots = resolveAsymmetricUserAssetsSlots(schema);
 
-  if (has('left_large', 'right_top', 'right_bottom')) {
-    const left = slots.find((slot) => stringOr(slot.position) === 'left_large');
-    const rightTop = slots.find((slot) => stringOr(slot.position) === 'right_top');
-    const rightBottom = slots.find((slot) => stringOr(slot.position) === 'right_bottom');
+  if (asymmetricSlots) {
+    const { left, rightTop, rightBottom } = asymmetricSlots;
     return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
       display: 'grid',
-      gridTemplateColumns: '1.08fr 1fr',
-      gap: '10px',
+      gridTemplateColumns: `${USER_ASSETS_ASYMMETRIC_LARGE_WIDTH / USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH}fr 1fr`,
+      gap: `${USER_ASSETS_ROW_GAP}px`,
       height: '100%',
     })}">
       <div>${renderUserAssetsEntry(left?.id ? mapping[left.id] : undefined, true)}</div>
-      <div style="display:grid;gap:10px">
+      <div style="display:grid;gap:16px">
         ${renderUserAssetsEntry(rightTop?.id ? mapping[rightTop.id] : undefined)}
         ${renderUserAssetsEntry(rightBottom?.id ? mapping[rightBottom.id] : undefined)}
       </div>
     </div>`;
   }
 
-  if (has('top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
+  if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
     return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
       display: 'grid',
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-      gap: '10px',
+      gap: `${USER_ASSETS_ROW_GAP}px`,
       height: '100%',
     })}">
       ${slots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
@@ -2851,16 +3014,16 @@ function renderUserAssetsPendingLayout(schema) {
   }
 
   if (
-    has('top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
+    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
     slots.length === 5
   ) {
     const topSlots = slots.slice(0, 2);
     const bottomSlots = slots.slice(2);
-    return `<div class="sf-user-assets-placeholder__layout" style="display:grid;gap:10px;height:100%">
-      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px">
+    return `<div class="sf-user-assets-placeholder__layout" style="display:grid;gap:16px;height:100%">
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:16px">
         ${topSlots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px">
         ${bottomSlots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
       </div>
     </div>`;
@@ -2871,16 +3034,16 @@ function renderUserAssetsPendingLayout(schema) {
   return `<div class="sf-user-assets-placeholder__layout" style="${styleAttr({
     display: 'grid',
     gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))`,
-    gap: '10px',
+    gap: `${USER_ASSETS_ROW_GAP}px`,
     height: '100%',
   })}">
     ${fallbackSlots.map((slot) => renderUserAssetsEntry(slot.id ? mapping[slot.id] : undefined)).join('')}
   </div>`;
 }
 
-function renderUserAssetsPendingPlaceholder() {
+function renderUserAssetsPendingPlaceholder(schema) {
   return `<div class="sf-user-assets-placeholder">
-    ${renderGenericPendingImageMark('图片待生成', true)}
+    ${renderUserAssetsPendingLayout(schema)}
   </div>`;
 }
 
@@ -2931,6 +3094,9 @@ function computeModuleLayout(module, index, modules, schema) {
   const previous = index > 0 ? modules[index - 1] : null;
   if (module.type === 'top_slider' && index === 0) {
     return { offsetY: 0, zIndex: 1, paddingX: 0, paddingTop: 0, paddingBottom: 0 };
+  }
+  if (module.type === 'banner') {
+    return { offsetY: 0, zIndex: 1, paddingX: 16, paddingTop: 0, paddingBottom: 6 };
   }
   if (module.type === 'user_assets') {
     const shouldOverlap =
@@ -2998,31 +3164,41 @@ function computeUserAssetsHeight(module, schema) {
 }
 
 function resolveUserAssetsLayoutMetrics(schema) {
-  const slots = Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
-  const ids = slots.map((slot) => stringOr(slot.position || slot.id));
-  const has = (...entries) => entries.every((entry) => ids.includes(entry));
-  if (has('left_large', 'right_top', 'right_bottom')) {
-    return { canvasWidth: 632, canvasHeight: 456, isFreeform: false };
+  const slots = userAssetsSlots(schema);
+  if (isAsymmetricThreeUserAssetsLayout(schema)) {
+    return {
+      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
+      isFreeform: false,
+    };
   }
-  if (has('left', 'right') && slots.length === 2) {
-    return { canvasWidth: 632, canvasHeight: 220, isFreeform: false };
+  if (hasUserAssetsPositions(slots, 'left', 'right') && slots.length === 2) {
+    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
   }
-  if (has('left_1', 'center_1', 'right_1') && slots.length === 3) {
-    return { canvasWidth: 632, canvasHeight: 220, isFreeform: false };
+  if (hasUserAssetsPositions(slots, 'left_1', 'center_1', 'right_1') && slots.length === 3) {
+    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
   }
-  if (has('top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
-    return { canvasWidth: 632, canvasHeight: 456, isFreeform: false };
+  if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
+    return {
+      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
+      isFreeform: false,
+    };
   }
   if (
-    has('top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
+    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
     slots.length === 5
   ) {
-    return { canvasWidth: 632, canvasHeight: 456, isFreeform: false };
+    return {
+      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
+      isFreeform: false,
+    };
   }
   const rows = Math.max(1, Math.ceil(slots.length / 3));
   return {
-    canvasWidth: 632,
-    canvasHeight: rows * 220 + Math.max(0, rows - 1) * 16,
+    canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+    canvasHeight: rows * USER_ASSETS_ROW_HEIGHT + Math.max(0, rows - 1) * USER_ASSETS_ROW_GAP,
     isFreeform: true,
   };
 }
@@ -3114,6 +3290,11 @@ function buildUserAssetsPrompt(bodyImageSchema, styleGuide) {
     '画布背景必须保持纯白色，不能使用页面背景色、渐变、纹理、插画场景、摄影图、纸张质感或复杂图案。',
     '不要展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
   ];
+  if (isAsymmetricThreeUserAssetsLayout(bodyImageSchema)) {
+    promptSchema.generation_notes.push(
+      '当入口布局是左大右二时，右侧两个中按钮保持约 300x220 的横向比例，整体画布不要误做成正方形。',
+    );
+  }
   if (Array.isArray(styleGuide?.reference_images) && styleGuide.reference_images.length > 0) {
     promptSchema.reference_style = {
       preset_id: stringOr(styleGuide?.preset_id, 'custom'),
@@ -3400,9 +3581,15 @@ function resolveSizeFromAspectRatio(aspectRatio) {
 }
 
 function resolveSizeFromDimensions(width, height) {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return '1024x1024';
+  }
   const minSide = 1024;
   const rounded = (value) => Math.max(minSide, Math.round(value / 16) * 16);
-  return `${rounded(width)}x${rounded(height)}`;
+  if (width >= height) {
+    return `${rounded((minSide * width) / height)}x${rounded(minSide)}`;
+  }
+  return `${rounded(minSide)}x${rounded((minSide * height) / width)}`;
 }
 
 async function writeRuntimeState(projectDir, status, level, message) {

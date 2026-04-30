@@ -20,6 +20,7 @@ const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV !== 'development';
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['172.18.172.190','127.0.0.1'],
   reactStrictMode: true,
   turbopack: {
     root: ROOT_DIR,
@@ -43,9 +44,18 @@ const nextConfig: NextConfig = {
           // CORS gymnastics. SSE on /api/chat works through this rewrite
           // because Next.js's dev server streams responses unbuffered.
           return [
-            { source: '/api/:path*', destination: `${DAEMON_ORIGIN}/api/:path*` },
-            { source: '/artifacts/:path*', destination: `${DAEMON_ORIGIN}/artifacts/:path*` },
-            { source: '/frames/:path*', destination: `${DAEMON_ORIGIN}/frames/:path*` },
+            {
+              source: '/api/:path*',
+              destination: `${DAEMON_ORIGIN}/api/:path*`,
+            },
+            {
+              source: '/artifacts/:path*',
+              destination: `${DAEMON_ORIGIN}/artifacts/:path*`,
+            },
+            {
+              source: '/frames/:path*',
+              destination: `${DAEMON_ORIGIN}/frames/:path*`,
+            },
           ];
         },
       }),

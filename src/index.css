@@ -5336,6 +5336,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: flex-start;
   justify-content: space-between;
   font-size: 15px;
+  line-height: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: #1a1916;
@@ -5349,36 +5350,14 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .storefront-phone-status-right {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
-.storefront-phone-battery-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-}
-
-.storefront-phone-battery-badge span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 10px;
-  background: rgba(17, 17, 19, 0.96);
-  color: #fff;
-  font-size: 10.5px;
-  line-height: 14px;
-  font-weight: 700;
-}
-
-.storefront-phone-battery-badge i {
-  width: 3px;
-  height: 7px;
-  border-radius: 0 2px 2px 0;
-  background: rgba(17, 17, 19, 0.26);
+.storefront-phone-battery-icon {
   display: block;
+  width: 25px;
+  height: 11px;
+  flex: none;
 }
 
 .storefront-phone-capsule-wrap {

@@ -10,4 +10,8 @@
 - Treat `店铺首页` as a dedicated storefront workflow, not just another generic homepage/prototype mode.
 - Storefront-facing wording and requirement guidance should stay aligned with the shop scene; prefer storefront-native expressions instead of generic design-language phrasing.
 - In the storefront homepage flow, `banner` and `商品` are optional by default. Keep that behavior consistent through the full path, and do not silently add them back as mandatory requirements.
+- In the storefront homepage flow, `banner` uses 16px left/right padding and 6px bottom padding by default unless the branch explicitly changes that layout rule.
+- In the storefront homepage flow, `user_assets` must preserve slot-driven aspect ratios. The default 3-entry layout is `left_large/right_top/right_bottom`, while existing `left/right_top/right_bottom` projects remain compatible and should not be silently rewritten.
+- In the storefront homepage preview, pending image placeholders should fully fill their module bounds and keep the waiting mark visually centered instead of leaving trailing blank space.
+- In the storefront homepage preview contract, `storefront.screen.html` is inner content only; system status UI and phone chrome belong to the outer preview/debug hosts.
 - When `shopHomePage` behavior changes on this branch, update this file in the same change with the new high-level direction. Keep the notes behavioral and concise; do not turn `AGENTS.md` into an implementation log.

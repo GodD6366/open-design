@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { projectFileUrl } from '../providers/registry';
 import type { StorefrontSchema, StorefrontSchemaModule } from './types';
+import {
+  STOREFRONT_STATUS_BATTERY,
+  STOREFRONT_STATUS_SIGNAL_BARS,
+  STOREFRONT_STATUS_WIFI_PATHS,
+} from './phoneChrome.js';
 
 type Props = {
   projectId: string;
@@ -46,6 +51,7 @@ type UserAssetsMappingLike = {
 type UserAssetsSchemaLike = {
   layout?: {
     structure?: string;
+    distribution?: string;
     slots?: UserAssetsSlotLike[];
   };
   content?: {
@@ -94,6 +100,13 @@ const USER_ASSETS_DEFAULTS = {
   bodyAlt: '客户资产功能区背景图',
   pendingLabel: '客户资产运行时生图中...',
 } as const;
+
+const USER_ASSETS_CANVAS_WIDTH = 632;
+const USER_ASSETS_ROW_HEIGHT = 220;
+const USER_ASSETS_ROW_GAP = 16;
+const USER_ASSETS_PREVIEW_BODY_WIDTH = 311;
+const USER_ASSETS_ASYMMETRIC_LARGE_WIDTH = 316;
+const USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH = 300;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -177,32 +190,87 @@ function imageHeightFor(module: StorefrontSchemaModule, index: number, schema: S
   return blendSuggestion(suggestion, 180, 120, 260);
 }
 
+function userAssetsSlots(schema: UserAssetsSchemaLike | undefined): UserAssetsSlotLike[] {
+  return Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
+}
+
+function userAssetsSlotPosition(slot: UserAssetsSlotLike | undefined) {
+  return stringOr(slot?.position || slot?.id);
+}
+
+function hasUserAssetsPositions(slots: UserAssetsSlotLike[], ...entries: string[]) {
+  const ids = slots.map((slot) => userAssetsSlotPosition(slot));
+  return entries.every((entry) => ids.includes(entry));
+}
+
+function isAsymmetricThreeUserAssetsLayout(schema: UserAssetsSchemaLike | undefined) {
+  const slots = userAssetsSlots(schema);
+  if (slots.length !== 3) return false;
+  if (!hasUserAssetsPositions(slots, 'right_top', 'right_bottom')) return false;
+  if (hasUserAssetsPositions(slots, 'left_large') || hasUserAssetsPositions(slots, 'left')) {
+    return true;
+  }
+  const structure = stringOr(schema?.layout?.structure);
+  const distribution = stringOr(schema?.layout?.distribution);
+  return (
+    structure === 'asymmetric' ||
+    structure === 'asymmetric_entry_grid' ||
+    distribution === 'one_large_two_stacked'
+  );
+}
+
+function resolveAsymmetricUserAssetsSlots(schema: UserAssetsSchemaLike | undefined) {
+  const slots = userAssetsSlots(schema);
+  if (!isAsymmetricThreeUserAssetsLayout(schema)) return null;
+  const rightTop = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_top');
+  const rightBottom = slots.find((slot) => userAssetsSlotPosition(slot) === 'right_bottom');
+  const left = slots.find((slot) => {
+    const position = userAssetsSlotPosition(slot);
+    return position === 'left_large' || position === 'left';
+  }) ?? slots.find((slot) => {
+    const position = userAssetsSlotPosition(slot);
+    return position !== 'right_top' && position !== 'right_bottom';
+  });
+  if (!left || !rightTop || !rightBottom) return null;
+  return { left, rightTop, rightBottom };
+}
+
 function resolveUserAssetsLayoutMetrics(schema: UserAssetsSchemaLike | undefined) {
-  const slots = Array.isArray(schema?.layout?.slots) ? schema.layout.slots : [];
-  const ids = slots.map((slot) => stringOr(slot.position || slot.id));
-  const has = (...entries: string[]) => entries.every((entry) => ids.includes(entry));
-  if (has('left_large', 'right_top', 'right_bottom')) {
-    return { canvasWidth: 632, canvasHeight: 456, isFreeform: false };
+  const slots = userAssetsSlots(schema);
+  if (isAsymmetricThreeUserAssetsLayout(schema)) {
+    return {
+      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
+      isFreeform: false,
+    };
   }
-  if (has('left', 'right') && slots.length === 2) {
-    return { canvasWidth: 632, canvasHeight: 220, isFreeform: false };
+  if (hasUserAssetsPositions(slots, 'left', 'right') && slots.length === 2) {
+    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
   }
-  if (has('left_1', 'center_1', 'right_1') && slots.length === 3) {
-    return { canvasWidth: 632, canvasHeight: 220, isFreeform: false };
+  if (hasUserAssetsPositions(slots, 'left_1', 'center_1', 'right_1') && slots.length === 3) {
+    return { canvasWidth: USER_ASSETS_CANVAS_WIDTH, canvasHeight: USER_ASSETS_ROW_HEIGHT, isFreeform: false };
   }
-  if (has('top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
-    return { canvasWidth: 632, canvasHeight: 456, isFreeform: false };
+  if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
+    return {
+      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
+      isFreeform: false,
+    };
   }
   if (
-    has('top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
+    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
     slots.length === 5
   ) {
-    return { canvasWidth: 632, canvasHeight: 456, isFreeform: false };
+    return {
+      canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+      canvasHeight: USER_ASSETS_ROW_HEIGHT * 2 + USER_ASSETS_ROW_GAP,
+      isFreeform: false,
+    };
   }
   const rows = Math.max(1, Math.ceil(slots.length / 3));
   return {
-    canvasWidth: 632,
-    canvasHeight: rows * 220 + Math.max(0, rows - 1) * 16,
+    canvasWidth: USER_ASSETS_CANVAS_WIDTH,
+    canvasHeight: rows * USER_ASSETS_ROW_HEIGHT + Math.max(0, rows - 1) * USER_ASSETS_ROW_GAP,
     isFreeform: true,
   };
 }
@@ -234,6 +302,8 @@ function resolvePageLayout(schema: StorefrontSchema): StorefrontSchema {
     const layout =
       module.type === 'top_slider' && index === 0
         ? { offsetY: 0, zIndex: 1, paddingX: 0, paddingTop: 0, paddingBottom: 0 }
+        : module.type === 'banner'
+          ? { offsetY: 0, zIndex: 1, paddingX: 16, paddingTop: 0, paddingBottom: 6 }
         : module.type === 'user_assets'
           ? {
               offsetY:
@@ -340,14 +410,17 @@ function GenericPendingImageMark({
   return (
     <div
       style={{
-        display: 'grid',
-        placeItems: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
         gap: compact ? 6 : 10,
         width: '100%',
         height: '100%',
         minHeight: 0,
         boxSizing: 'border-box',
         color: palette.muted,
+        textAlign: 'center',
       }}
     >
       <svg
@@ -457,6 +530,10 @@ function hasImageAsset(item: ImageItemLike | undefined) {
   return Boolean(stringOr(item?.image));
 }
 
+function pendingFrameHeight(hasAsset: boolean, height: number) {
+  return hasAsset ? undefined : height;
+}
+
 function heroModuleFor(schema: StorefrontSchema) {
   const first = schema.modules[0];
   if (!first || first.type !== 'top_slider') return null;
@@ -473,19 +550,18 @@ function heroHasImage(schema: StorefrontSchema) {
 }
 
 function StatusSignalIcon({ color }: { color: string }) {
-  const bars = [1, 5, 9, 13];
   return (
     <svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden>
-      {bars.map((x, index) => (
+      {STOREFRONT_STATUS_SIGNAL_BARS.map((bar) => (
         <rect
-          key={x}
-          x={x}
-          y={12 - (index + 1) * 2.5}
-          width="3"
-          height={(index + 1) * 2.5}
-          rx="1.4"
+          key={bar.x}
+          x={bar.x}
+          y={bar.y}
+          width={bar.width}
+          height={bar.height}
+          rx={bar.rx}
           fill={color}
-          opacity={0.45 + index * 0.16}
+          opacity={bar.opacity}
         />
       ))}
     </svg>
@@ -495,35 +571,72 @@ function StatusSignalIcon({ color }: { color: string }) {
 function StatusWifiIcon({ color }: { color: string }) {
   return (
     <svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden>
-      <path d="M1.7 4.8C3.6 3 6.2 2 9 2c2.8 0 5.4 1 7.3 2.8" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M4.4 7.5A6.6 6.6 0 0 1 9 5.8c1.8 0 3.4.6 4.6 1.7" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M7.1 10.2A2.9 2.9 0 0 1 9 9.5c.7 0 1.4.3 1.9.7" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="9" cy="12" r="1.25" fill={color} />
+      {STOREFRONT_STATUS_WIFI_PATHS.map((entry, index) =>
+        entry.type === 'circle' ? (
+          <circle key={`circle-${index}`} cx={entry.cx} cy={entry.cy} r={entry.r} fill={color} />
+        ) : (
+          <path
+            key={`path-${entry.d}`}
+            d={entry.d}
+            stroke={color}
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+        ),
+      )}
     </svg>
   );
 }
 
-function StatusBatteryBadge() {
+function StatusBatteryIcon({ color }: { color: string }) {
   return (
-    <div className="storefront-phone-battery-badge" aria-hidden>
-      <span>73</span>
-      <i />
-    </div>
+    <svg
+      className="storefront-phone-battery-icon"
+      viewBox={STOREFRONT_STATUS_BATTERY.viewBox}
+      fill="none"
+      aria-hidden
+    >
+      <rect
+        x={STOREFRONT_STATUS_BATTERY.outline.x}
+        y={STOREFRONT_STATUS_BATTERY.outline.y}
+        width={STOREFRONT_STATUS_BATTERY.outline.width}
+        height={STOREFRONT_STATUS_BATTERY.outline.height}
+        rx={STOREFRONT_STATUS_BATTERY.outline.rx}
+        fill="none"
+        stroke={color}
+        strokeOpacity={STOREFRONT_STATUS_BATTERY.outline.strokeOpacity}
+      />
+      <rect
+        x={STOREFRONT_STATUS_BATTERY.nub.x}
+        y={STOREFRONT_STATUS_BATTERY.nub.y}
+        width={STOREFRONT_STATUS_BATTERY.nub.width}
+        height={STOREFRONT_STATUS_BATTERY.nub.height}
+        rx={STOREFRONT_STATUS_BATTERY.nub.rx}
+        fill={color}
+        fillOpacity={STOREFRONT_STATUS_BATTERY.nub.fillOpacity}
+      />
+      <rect
+        x={STOREFRONT_STATUS_BATTERY.fill.x}
+        y={STOREFRONT_STATUS_BATTERY.fill.y}
+        width={STOREFRONT_STATUS_BATTERY.fill.width}
+        height={STOREFRONT_STATUS_BATTERY.fill.height}
+        rx={STOREFRONT_STATUS_BATTERY.fill.rx}
+        fill={color}
+      />
+    </svg>
   );
 }
 
 function MiniProgramCapsule({
-  lightChrome,
   borderColor,
 }: {
-  lightChrome: boolean;
   borderColor: string;
 }) {
   return (
     <div
       className="storefront-phone-mini-capsule"
       style={{
-        background: lightChrome ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.9)',
+        background: 'rgba(255,255,255,0.88)',
         borderColor,
       }}
     >
@@ -602,8 +715,95 @@ function UserAssetsEntryGhost({
   );
 }
 
-function UserAssetsPendingArt({ designContext }: { designContext: DesignContext }) {
+function UserAssetsPendingArt({
+  designContext,
+  schema,
+}: {
+  designContext: DesignContext;
+  schema?: UserAssetsSchemaLike;
+}) {
   const palette = buildPendingPalette(designContext);
+  const slots = userAssetsSlots(schema);
+  const mapping = schema?.content?.slots_mapping ?? {};
+  const asymmetricSlots = resolveAsymmetricUserAssetsSlots(schema);
+
+  let layout: JSX.Element;
+  if (asymmetricSlots) {
+    layout = (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `${USER_ASSETS_ASYMMETRIC_LARGE_WIDTH / USER_ASSETS_ASYMMETRIC_MEDIUM_WIDTH}fr 1fr`,
+          gap: USER_ASSETS_ROW_GAP,
+          height: '100%',
+        }}
+      >
+        <div>
+          <UserAssetsEntryGhost item={mapping[asymmetricSlots.left.id ?? '']} palette={palette} large />
+        </div>
+        <div style={{ display: 'grid', gap: USER_ASSETS_ROW_GAP }}>
+          <UserAssetsEntryGhost item={mapping[asymmetricSlots.rightTop.id ?? '']} palette={palette} />
+          <UserAssetsEntryGhost item={mapping[asymmetricSlots.rightBottom.id ?? '']} palette={palette} />
+        </div>
+      </div>
+    );
+  } else if (hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_right') && slots.length === 4) {
+    layout = (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: USER_ASSETS_ROW_GAP,
+          height: '100%',
+        }}
+      >
+        {slots.map((slot, index) => (
+          <UserAssetsEntryGhost key={slot.id || index} item={slot.id ? mapping[slot.id] : undefined} palette={palette} />
+        ))}
+      </div>
+    );
+  } else if (
+    hasUserAssetsPositions(slots, 'top_left', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right') &&
+    slots.length === 5
+  ) {
+    const topSlots = slots.slice(0, 2);
+    const bottomSlots = slots.slice(2);
+    layout = (
+      <div style={{ display: 'grid', gap: USER_ASSETS_ROW_GAP, height: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: USER_ASSETS_ROW_GAP }}>
+          {topSlots.map((slot, index) => (
+            <UserAssetsEntryGhost key={slot.id || index} item={slot.id ? mapping[slot.id] : undefined} palette={palette} />
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: USER_ASSETS_ROW_GAP }}>
+          {bottomSlots.map((slot, index) => (
+            <UserAssetsEntryGhost key={slot.id || index} item={slot.id ? mapping[slot.id] : undefined} palette={palette} />
+          ))}
+        </div>
+      </div>
+    );
+  } else {
+    const fallbackSlots = slots.length > 0 ? slots : [{ id: 'slot-1' }, { id: 'slot-2' }, { id: 'slot-3' }];
+    const columns = fallbackSlots.length >= 4 ? 2 : Math.min(fallbackSlots.length, 3);
+    layout = (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${Math.max(columns, 1)}, minmax(0, 1fr))`,
+          gap: USER_ASSETS_ROW_GAP,
+          height: '100%',
+        }}
+      >
+        {fallbackSlots.map((slot, index) => (
+          <UserAssetsEntryGhost
+            key={slot.id || index}
+            item={slot.id && slot.id in mapping ? mapping[slot.id] : undefined}
+            palette={palette}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -615,7 +815,7 @@ function UserAssetsPendingArt({ designContext }: { designContext: DesignContext 
         background: palette.shellSoft,
       }}
     >
-      <GenericPendingImageMark palette={palette} label="图片待生成" compact />
+      {layout}
     </div>
   );
 }
@@ -740,7 +940,7 @@ function ImageAdModule({
         {items.map((item, index) => (
           <div
             key={item.id || String(index)}
-            style={{ minHeight: hasImage(item) ? undefined : data.height || 300, overflow: 'hidden' }}
+            style={{ height: pendingFrameHeight(hasImage(item), data.height || 300), overflow: 'hidden' }}
           >
             <PreviewFrame
               projectId={projectId}
@@ -757,13 +957,31 @@ function ImageAdModule({
   if (data.mode === 'dual_carousel' && items.length >= 2) {
     const topItem = items[activeIndex];
     const bottomItem = items[(activeIndex + 1) % items.length];
-    const allActiveImagesReady = hasImage(topItem) && hasImage(bottomItem);
+    const topReady = hasImage(topItem);
+    const bottomReady = hasImage(bottomItem);
     return (
-      <section style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: allActiveImagesReady ? undefined : data.height || 420 }}>
-        <div style={{ minHeight: hasImage(topItem) ? undefined : Math.max(80, Math.floor(((data.height || 420) - 12) / 2)), overflow: 'hidden' }}>
+      <section
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          height: !topReady && !bottomReady ? data.height || 420 : undefined,
+        }}
+      >
+        <div
+          style={{
+            height: pendingFrameHeight(topReady, Math.max(80, Math.floor(((data.height || 420) - 12) / 2))),
+            overflow: 'hidden',
+          }}
+        >
           <PreviewFrame projectId={projectId} item={topItem} moduleType={module.type} designContext={designContext} />
         </div>
-        <div style={{ minHeight: hasImage(bottomItem) ? undefined : Math.max(80, Math.floor(((data.height || 420) - 12) / 2)), overflow: 'hidden' }}>
+        <div
+          style={{
+            height: pendingFrameHeight(bottomReady, Math.max(80, Math.floor(((data.height || 420) - 12) / 2))),
+            overflow: 'hidden',
+          }}
+        >
           <PreviewFrame projectId={projectId} item={bottomItem} moduleType={module.type} designContext={designContext} />
         </div>
       </section>
@@ -773,13 +991,20 @@ function ImageAdModule({
   if (data.mode === 'carousel_poster' && carouselItems.length > 1) {
     const activeItem = carouselItems[carouselActiveIndex];
     return (
-      <section style={{ position: 'relative', overflow: 'hidden', minHeight: hasImage(activeItem) ? undefined : data.height || 300 }}>
+      <section
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          height: pendingFrameHeight(hasImage(activeItem), data.height || 300),
+        }}
+      >
         {carouselItems.map((item, index) => (
           <div
             key={item.id || String(index)}
             style={{
               position: index === carouselActiveIndex ? 'relative' : 'absolute',
               inset: index === carouselActiveIndex ? undefined : 0,
+              height: hasImage(item) ? undefined : '100%',
               opacity: index === carouselActiveIndex ? 1 : 0,
               transition: 'opacity 700ms ease',
             }}
@@ -799,7 +1024,13 @@ function ImageAdModule({
   if (data.mode === 'carousel_poster' && carouselItems.length === 1) {
     const item = carouselItems[0];
     return (
-      <section style={{ position: 'relative', overflow: 'hidden', minHeight: hasImage(item) ? undefined : data.height || 300 }}>
+      <section
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          height: pendingFrameHeight(hasImage(item), data.height || 300),
+        }}
+      >
         <PreviewFrame
           projectId={projectId}
           item={item}
@@ -811,7 +1042,13 @@ function ImageAdModule({
   }
 
   return (
-    <section style={{ position: 'relative', overflow: 'hidden', minHeight: hasImage(items[0]) ? undefined : data.height || 300 }}>
+    <section
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        height: pendingFrameHeight(hasImage(items[0]), data.height || 300),
+      }}
+    >
       <PreviewFrame
         projectId={projectId}
         item={items[0]}
@@ -846,7 +1083,7 @@ function UserAssetsModule({
   const bodyImageUrl = resolveAssetUrl(projectId, data.body_image);
   const hasBodyImage = Boolean(bodyImageUrl);
   const bodyHeight = hasBodyImage
-    ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * 311)
+    ? Math.round((metrics.canvasHeight / metrics.canvasWidth) * USER_ASSETS_PREVIEW_BODY_WIDTH)
     : clamp(Math.round(toNumber(data.height, 208) * 0.38), 72, 108);
   const avatarUrl = resolveAssetUrl(projectId, data.avatar || USER_ASSETS_DEFAULTS.avatar);
   const progress = clamp(toNumber(data.progress_percent, 33), 0, 100);
@@ -934,7 +1171,7 @@ function UserAssetsModule({
           flex: '0 0 auto',
           height: bodyHeight,
           borderRadius: 6,
-          backgroundColor: designContext.color_palette.card_subtle,
+          backgroundColor: designContext.color_palette.card_bg,
           overflow: 'hidden',
         }}
       >
@@ -942,10 +1179,10 @@ function UserAssetsModule({
           <img
             src={bodyImageUrl}
             alt={stringOr(data.body_alt, USER_ASSETS_DEFAULTS.bodyAlt)}
-            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'fill' }}
+            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center' }}
           />
         ) : (
-          <UserAssetsPendingArt designContext={designContext} />
+          <UserAssetsPendingArt designContext={designContext} schema={data.body_image_schema} />
         )}
       </div>
     </section>
@@ -992,14 +1229,13 @@ export function StorefrontPhonePreview({ projectId, schema }: Props) {
   const [scrollTop, setScrollTop] = useState(0);
   const immersiveHero = heroHasImage(resolved);
   const navProgress = clamp(scrollTop / 92, 0, 1);
-  const lightChrome = immersiveHero && navProgress < 0.58;
-  const chromeColor = lightChrome ? '#ffffff' : context.color_palette.text_primary;
+  const chromeColor = context.color_palette.text_primary;
   const overlayBaseAlpha = immersiveHero ? 0.14 : 0.84;
   const overlayAlpha = clamp(overlayBaseAlpha + navProgress * 0.72, overlayBaseAlpha, 0.92);
   const overlayFadeAlpha = immersiveHero
     ? clamp(0.04 + navProgress * 0.4, 0.04, 0.48)
     : clamp(0.14 + navProgress * 0.16, 0.14, 0.3);
-  const chromeBorder = lightChrome
+  const chromeBorder = immersiveHero && navProgress < 0.12
     ? 'rgba(255,255,255,0.18)'
     : hexToRgba(context.color_palette.text_primary, 0.08 + navProgress * 0.08);
   const overlayBackground = `linear-gradient(180deg, ${hexToRgba(
@@ -1073,11 +1309,11 @@ export function StorefrontPhonePreview({ projectId, schema }: Props) {
                 <span className="storefront-phone-status-right">
                   <StatusSignalIcon color={chromeColor} />
                   <StatusWifiIcon color={chromeColor} />
-                  <StatusBatteryBadge />
+                  <StatusBatteryIcon color={chromeColor} />
                 </span>
               </div>
               <div className="storefront-phone-capsule-wrap" style={{ boxShadow: navShadow }}>
-                <MiniProgramCapsule lightChrome={lightChrome} borderColor={chromeBorder} />
+                <MiniProgramCapsule borderColor={chromeBorder} />
               </div>
             </div>
             <div ref={scrollRef} className="storefront-phone-scroll">
