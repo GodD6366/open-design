@@ -14,6 +14,7 @@ import { composeSystemPrompt } from '../prompts/system';
 import { navigate } from '../router';
 import { agentDisplayName } from '../utils/agentLabels';
 import type { TodoItem } from '../runtime/todos';
+import { isShopHomePageMode } from '../types';
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -265,14 +266,17 @@ export function ProjectView({
   const composedSystemPrompt = useCallback(async (): Promise<string> => {
     let skillBody: string | undefined;
     let skillName: string | undefined;
-    let skillMode: Exclude<SkillSummary['mode'], 'storefront'> | undefined;
+    let skillMode: Exclude<SkillSummary['mode'], 'shopHomePage' | 'storefront'> | undefined;
     let designSystemBody: string | undefined;
     let designSystemTitle: string | undefined;
 
     if (project.skillId) {
       const summary = skills.find((s) => s.id === project.skillId);
       skillName = summary?.name;
-      skillMode = summary?.mode === 'storefront' ? undefined : summary?.mode;
+      const summaryMode = summary?.mode;
+      if (summaryMode && !isShopHomePageMode(summaryMode)) {
+        skillMode = summaryMode;
+      }
       const cached = skillCache.current.get(project.skillId);
       if (cached !== undefined) {
         skillBody = cached;

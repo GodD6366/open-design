@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
+import {
+  isShopHomePageMode,
+  SHOP_HOMEPAGE_KIND,
+} from '../types';
 import type {
   AgentInfo,
   AppConfig,
@@ -332,8 +336,8 @@ function metadataForSkill(skill: SkillSummary): ProjectMetadata {
         typeof skill.animations === 'boolean' ? skill.animations : false,
     };
   }
-  if (kind === 'storefront') {
-    return { kind };
+  if (kind === SHOP_HOMEPAGE_KIND) {
+    return { kind: SHOP_HOMEPAGE_KIND };
   }
   return { kind: 'other' };
 }
@@ -342,6 +346,6 @@ function kindForSkill(skill: SkillSummary): ProjectKind {
   if (skill.mode === 'deck') return 'deck';
   if (skill.mode === 'prototype') return 'prototype';
   if (skill.mode === 'template') return 'template';
-  if (skill.mode === 'storefront') return 'storefront';
+  if (isShopHomePageMode(skill.mode)) return SHOP_HOMEPAGE_KIND;
   return 'other';
 }

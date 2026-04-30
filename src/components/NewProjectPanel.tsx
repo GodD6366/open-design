@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import {
+  hasShopHomePageDefault,
+  isShopHomePageMode,
+  SHOP_HOMEPAGE_KIND,
+} from '../types';
 import type {
   DesignSystemSummary,
   ProjectKind,
@@ -30,9 +35,9 @@ interface Props {
   loading?: boolean;
 }
 
-export type CreateTab = 'prototype' | 'deck' | 'template' | 'storefront' | 'other';
+export type CreateTab = 'prototype' | 'deck' | 'template' | typeof SHOP_HOMEPAGE_KIND | 'other';
 
-const CREATE_TABS: CreateTab[] = ['storefront'];
+const CREATE_TABS: CreateTab[] = [SHOP_HOMEPAGE_KIND];
 
 export function NewProjectPanel({
   skills,
@@ -46,7 +51,7 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
-  const [tab, setTab] = useState<CreateTab>('storefront');
+  const [tab, setTab] = useState<CreateTab>(SHOP_HOMEPAGE_KIND);
   const [name, setName] = useState('');
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
@@ -80,7 +85,7 @@ export function NewProjectPanel({
 
   useEffect(() => {
     if (tab === 'template' && templates.length === 0) {
-      setTab('storefront');
+      setTab(SHOP_HOMEPAGE_KIND);
     }
   }, [tab, templates.length]);
 
@@ -101,9 +106,9 @@ export function NewProjectPanel({
         ?? list[0]?.id
         ?? null;
     }
-    if (tab === 'storefront') {
-      const list = skills.filter((s) => s.mode === 'storefront');
-      return list.find((s) => s.defaultFor.includes('storefront'))?.id
+    if (tab === SHOP_HOMEPAGE_KIND) {
+      const list = skills.filter((s) => isShopHomePageMode(s.mode));
+      return list.find((s) => hasShopHomePageDefault(s.defaultFor))?.id
         ?? list[0]?.id
         ?? null;
     }
@@ -121,8 +126,8 @@ export function NewProjectPanel({
 
   function handleCreate() {
     if (!canCreate) return;
-    const primaryDs = tab === 'storefront' ? null : (selectedDsIds[0] ?? null);
-    const inspirations = tab === 'storefront' ? [] : selectedDsIds.slice(1);
+    const primaryDs = tab === SHOP_HOMEPAGE_KIND ? null : (selectedDsIds[0] ?? null);
+    const inspirations = tab === SHOP_HOMEPAGE_KIND ? [] : selectedDsIds.slice(1);
     const metadata = buildMetadata({
       tab,
       fidelity,
@@ -179,7 +184,7 @@ export function NewProjectPanel({
           onChange={(e) => setName(e.target.value)}
         />
 
-        {tab !== 'storefront' ? (
+        {tab !== SHOP_HOMEPAGE_KIND ? (
           <DesignSystemPicker
             designSystems={designSystems}
             defaultDesignSystemId={defaultDesignSystemId}
@@ -858,8 +863,8 @@ function buildMetadata(input: {
       ...inspirations,
     };
   }
-  if (input.tab === 'storefront') {
-    return { kind: 'storefront' };
+  if (input.tab === SHOP_HOMEPAGE_KIND) {
+    return { kind: SHOP_HOMEPAGE_KIND };
   }
   return { kind: 'other', ...inspirations };
 }
@@ -872,8 +877,8 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
       return t('newproj.titleDeck');
     case 'template':
       return t('newproj.titleTemplate');
-    case 'storefront':
-      return t('newproj.titleStorefront');
+    case SHOP_HOMEPAGE_KIND:
+      return t('newproj.titleShopHomePage');
     case 'other':
       return t('newproj.titleOther');
   }
@@ -892,8 +897,8 @@ function tabLabel(tab: CreateTab, t: TranslateFn): string {
       return t('newproj.tabDeck');
     case 'template':
       return t('newproj.tabTemplate');
-    case 'storefront':
-      return t('newproj.tabStorefront');
+    case SHOP_HOMEPAGE_KIND:
+      return t('newproj.tabShopHomePage');
     case 'other':
       return t('newproj.tabOther');
   }

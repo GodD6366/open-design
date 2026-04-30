@@ -81,6 +81,8 @@ const STATIC_DIR = path.join(PROJECT_ROOT, 'out');
 const SKILLS_DIR = path.join(PROJECT_ROOT, 'skills');
 const DESIGN_SYSTEMS_DIR = path.join(PROJECT_ROOT, 'design-systems');
 const STOREFRONT_SKILL_DIR = storefrontSkillDir(PROJECT_ROOT);
+const SHOP_HOMEPAGE_KIND = 'shopHomePage';
+const LEGACY_STOREFRONT_KIND = 'storefront';
 loadDotEnv(PROJECT_ROOT);
 const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
   ? path.resolve(process.env.OD_DATA_DIR)
@@ -102,6 +104,11 @@ const promptFileBootstrap = (fp) =>
 const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+
+function isShopHomePageProject(project) {
+  const kind = project?.metadata?.kind;
+  return kind === SHOP_HOMEPAGE_KIND || kind === LEGACY_STOREFRONT_KIND;
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -1012,7 +1019,7 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     try {
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
       const project = getProject(db, req.params.id);
-      if (project?.metadata?.kind === 'storefront') {
+      if (isShopHomePageProject(project)) {
         await clearSchemaImageSlot(PROJECTS_DIR, req.params.id, req.params.name);
       }
       res.json({ ok: true });
@@ -1390,8 +1397,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
     try {
       const project = getProject(db, req.params.projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
-      if (project.metadata?.kind !== 'storefront') {
-        return res.status(400).json({ error: 'project is not a storefront project' });
+      if (!isShopHomePageProject(project)) {
+        return res.status(400).json({ error: 'project is not a shopHomePage project' });
       }
       const state = await loadStorefrontState(
         PROJECTS_DIR,
@@ -1412,8 +1419,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
-      if (project.metadata?.kind !== 'storefront') {
-        return res.status(400).json({ error: 'project is not a storefront project' });
+      if (!isShopHomePageProject(project)) {
+        return res.status(400).json({ error: 'project is not a shopHomePage project' });
       }
       const state = await saveStorefrontBrief(
         PROJECTS_DIR,
@@ -1440,8 +1447,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
-      if (project.metadata?.kind !== 'storefront') {
-        return res.status(400).json({ error: 'project is not a storefront project' });
+      if (!isShopHomePageProject(project)) {
+        return res.status(400).json({ error: 'project is not a shopHomePage project' });
       }
       const def = getAgentDef(agentId);
       if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
@@ -1496,8 +1503,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
-      if (project.metadata?.kind !== 'storefront') {
-        return res.status(400).json({ error: 'project is not a storefront project' });
+      if (!isShopHomePageProject(project)) {
+        return res.status(400).json({ error: 'project is not a shopHomePage project' });
       }
       const state = await applyStorefrontSchemaText(
         PROJECTS_DIR,
@@ -1521,8 +1528,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
-      if (project.metadata?.kind !== 'storefront') {
-        return res.status(400).json({ error: 'project is not a storefront project' });
+      if (!isShopHomePageProject(project)) {
+        return res.status(400).json({ error: 'project is not a shopHomePage project' });
       }
       const state = await generateStorefrontAssets(
         PROJECTS_DIR,
@@ -1546,8 +1553,8 @@ export async function startServer({ port = 7456, returnServer = false } = {}) {
       }
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
-      if (project.metadata?.kind !== 'storefront') {
-        return res.status(400).json({ error: 'project is not a storefront project' });
+      if (!isShopHomePageProject(project)) {
+        return res.status(400).json({ error: 'project is not a shopHomePage project' });
       }
       const result = await enqueueAssetTasks(
         PROJECTS_DIR,

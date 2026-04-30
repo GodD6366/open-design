@@ -4,6 +4,7 @@ import type { Dict } from '../i18n/types';
 import { fetchSkillExample } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
+import { isShopHomePageMode } from '../types';
 import type { SkillSummary } from '../types';
 import { PreviewModal } from './PreviewModal';
 
@@ -453,7 +454,7 @@ function tagForSkill(skill: SkillSummary, t: TranslateFn): string {
   if (skill.mode === 'deck') return t('examples.tagSlideDeck');
   if (skill.mode === 'template') return t('examples.tagTemplate');
   if (skill.mode === 'design-system') return t('examples.tagDesignSystem');
-  if (skill.mode === 'storefront') return 'Storefront';
+  if (isShopHomePageMode(skill.mode)) return 'shopHomePage';
   if (skill.platform === 'mobile') return t('examples.tagMobilePrototype');
   return t('examples.tagDesktopPrototype');
 }

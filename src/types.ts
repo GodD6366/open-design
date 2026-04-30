@@ -1,6 +1,27 @@
 import type { ArtifactKind, ArtifactManifest } from './artifacts/types';
 
 export type ExecMode = 'daemon' | 'api';
+export const SHOP_HOMEPAGE_KIND = 'shopHomePage';
+export const LEGACY_STOREFRONT_KIND = 'storefront';
+
+export type ShopHomePageIdentifier =
+  | typeof SHOP_HOMEPAGE_KIND
+  | typeof LEGACY_STOREFRONT_KIND;
+
+export function isShopHomePageKind(
+  kind: string | null | undefined,
+): kind is ShopHomePageIdentifier {
+  return kind === SHOP_HOMEPAGE_KIND || kind === LEGACY_STOREFRONT_KIND;
+}
+
+export const isShopHomePageMode = isShopHomePageKind;
+
+export function hasShopHomePageDefault(defaultFor: string[] | null | undefined): boolean {
+  return Boolean(
+    defaultFor?.includes(SHOP_HOMEPAGE_KIND)
+    || defaultFor?.includes(LEGACY_STOREFRONT_KIND),
+  );
+}
 
 // Per-CLI model + reasoning the user picked in the model menu. Each agent
 // keeps its own slot so flipping between Codex and Gemini doesn't reset the
@@ -105,7 +126,12 @@ export interface SkillSummary {
   name: string;
   description: string;
   triggers: string[];
-  mode: 'prototype' | 'deck' | 'template' | 'design-system' | 'storefront';
+  mode:
+    | 'prototype'
+    | 'deck'
+    | 'template'
+    | 'design-system'
+    | ShopHomePageIdentifier;
   platform?: 'desktop' | 'mobile' | null;
   scenario?: string | null;
   previewType: string;
@@ -181,7 +207,13 @@ export interface ProjectFile {
 // Per-project metadata captured at creation time. The agent reads this
 // during chat (via the system prompt) and the question-form re-asks for
 // any field that's missing. Each `kind` carries a different shape.
-export type ProjectKind = 'prototype' | 'deck' | 'template' | 'storefront' | 'other';
+export type ProjectKind =
+  | 'prototype'
+  | 'deck'
+  | 'template'
+  | typeof SHOP_HOMEPAGE_KIND
+  | typeof LEGACY_STOREFRONT_KIND
+  | 'other';
 
 export interface ProjectMetadata {
   kind: ProjectKind;

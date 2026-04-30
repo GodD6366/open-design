@@ -12,14 +12,14 @@ triggers:
   - "店铺首页"
   - "商城首页"
 od:
-  mode: storefront
+  mode: shopHomePage
   scenario: marketing
   preview:
-    type: storefront
+    type: shopHomePage
     entry: storefront.preview.html
   design_system:
     requires: false
-  default_for: storefront
+  default_for: shopHomePage
   example_prompt: "为精品咖啡品牌生成一个移动端店铺首页 schema，先澄清需求，再澄清视觉，再输出 requirements 和 schema。"
 ---
 

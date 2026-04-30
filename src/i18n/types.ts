@@ -114,12 +114,12 @@ export interface Dict {
   'newproj.tabPrototype': string;
   'newproj.tabDeck': string;
   'newproj.tabTemplate': string;
-  'newproj.tabStorefront': string;
+  'newproj.tabShopHomePage': string;
   'newproj.tabOther': string;
   'newproj.titlePrototype': string;
   'newproj.titleDeck': string;
   'newproj.titleTemplate': string;
-  'newproj.titleStorefront': string;
+  'newproj.titleShopHomePage': string;
   'newproj.titleOther': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;

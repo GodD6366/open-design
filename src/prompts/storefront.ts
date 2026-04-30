@@ -1,3 +1,7 @@
+import {
+  isShopHomePageKind,
+  SHOP_HOMEPAGE_KIND,
+} from '../types';
 import type { DesignSystemDetail, ProjectMetadata, SkillDetail } from '../types';
 import {
   renderStorefrontToneFormBody,
@@ -351,11 +355,11 @@ export function composeStorefrontSystemPrompt({
     renderStorefrontToneSpecBlock(),
   ];
 
-  if (metadata?.kind === 'storefront') {
+  if (isShopHomePageKind(metadata?.kind)) {
     parts.push(
       '## Project metadata',
       '',
-      '- kind: storefront',
+      `- kind: ${SHOP_HOMEPAGE_KIND}`,
       '- This project is explicitly schema-first and mobile-preview-first.',
     );
   }

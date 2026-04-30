@@ -28,6 +28,7 @@ import type {
   ProjectTemplate,
   SkillSummary,
 } from './types';
+import { isShopHomePageKind } from './types';
 
 export function App() {
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
@@ -286,7 +287,7 @@ export function App() {
   return (
     <>
       {activeProject ? (
-        activeProject.metadata?.kind === 'storefront' ? (
+        isShopHomePageKind(activeProject.metadata?.kind) ? (
           <StorefrontProjectView
             key={activeProject.id}
             project={activeProject}
