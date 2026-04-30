@@ -20,9 +20,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang='en'>
+    <html lang="zh-CN">
       <body>
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider initial="zh-CN">{children}</I18nProvider>
       </body>
     </html>
   );

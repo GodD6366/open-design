@@ -32,6 +32,8 @@ interface Props {
 
 export type CreateTab = 'prototype' | 'deck' | 'template' | 'storefront' | 'other';
 
+const CREATE_TABS: CreateTab[] = ['storefront'];
+
 export function NewProjectPanel({
   skills,
   designSystems,
@@ -44,9 +46,7 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
-  const [tab, setTab] = useState<CreateTab>(() => (
-    templates.length > 0 ? 'template' : 'prototype'
-  ));
+  const [tab, setTab] = useState<CreateTab>('storefront');
   const [name, setName] = useState('');
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
@@ -155,7 +155,7 @@ export function NewProjectPanel({
   return (
     <div className="newproj" data-testid="new-project-panel">
       <div className="newproj-tabs" role="tablist">
-        {(['prototype', 'deck', 'template', 'storefront', 'other'] as CreateTab[]).map((entry) => (
+        {CREATE_TABS.map((entry) => (
           <button
             key={entry}
             role="tab"

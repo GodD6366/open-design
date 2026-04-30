@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
 
 // Daemon port the local Express server binds to (see daemon/cli.js). The
@@ -6,6 +8,7 @@ import type { NextConfig } from 'next';
 // daemon instance during `next dev`.
 const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
 const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
+const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 // We ship as a static export so the existing `od` daemon can keep serving a
 // single-process production build (out/ replaces the old dist/). Project IDs
@@ -18,6 +21,9 @@ const isProd = process.env.NODE_ENV !== 'development';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    root: ROOT_DIR,
+  },
   // Keep the bundle output predictable so the daemon's STATIC_DIR can point
   // at it without any glob trickery.
   distDir: isProd ? 'out' : '.next',

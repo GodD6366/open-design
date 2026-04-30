@@ -12,7 +12,7 @@ import {
 import { en } from './locales/en';
 import { ptBR } from './locales/pt-BR';
 import { zhCN } from './locales/zh-CN';
-import { LOCALES, type Dict, type Locale } from './types';
+import type { Dict, Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
 export type { Locale } from './types';
@@ -26,21 +26,10 @@ const DICTS: Record<Locale, Dict> = {
 };
 
 const LS_KEY = 'open-design:locale';
+const FORCED_LOCALE: Locale = 'zh-CN';
 
-// First-run default is English. We honor an explicit user pick saved to
-// localStorage but never auto-detect from `navigator.language`, so the
-// initial experience is consistent and predictable.
 function detectInitialLocale(): Locale {
-  if (typeof window === 'undefined') return 'en';
-  try {
-    const stored = window.localStorage.getItem(LS_KEY);
-    if (stored && (LOCALES as string[]).includes(stored)) {
-      return stored as Locale;
-    }
-  } catch {
-    /* ignore */
-  }
-  return 'en';
+  return FORCED_LOCALE;
 }
 
 interface I18nContextValue {
@@ -67,10 +56,18 @@ export function I18nProvider({ initial, children }: ProviderProps) {
     }
   }, [locale]);
 
-  const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next);
+  useEffect(() => {
     try {
-      window.localStorage.setItem(LS_KEY, next);
+      window.localStorage.setItem(LS_KEY, FORCED_LOCALE);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setLocale = useCallback((_next: Locale) => {
+    setLocaleState(FORCED_LOCALE);
+    try {
+      window.localStorage.setItem(LS_KEY, FORCED_LOCALE);
     } catch {
       /* ignore */
     }
@@ -100,14 +97,14 @@ export function I18nProvider({ initial, children }: ProviderProps) {
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) {
-    // Fall back to a stand-alone English translator when no provider is
+    // Fall back to a stand-alone Chinese translator when no provider is
     // mounted (e.g. an isolated test). This keeps the API safe to call
     // without requiring every callsite to wrap in a provider.
     return {
-      locale: 'en',
+      locale: FORCED_LOCALE,
       setLocale: () => {},
       t: (key, vars) => {
-        const raw = en[key] ?? key;
+        const raw = zhCN[key] ?? en[key] ?? key;
         if (!vars) return raw;
         return raw.replace(/\{(\w+)\}/g, (_, n: string) => {
           const v = vars[n];
