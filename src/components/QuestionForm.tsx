@@ -60,10 +60,14 @@ export function QuestionFormView({
     setAnswers((prev) => ({ ...prev, [id]: value }));
   }
 
-  function toggleCheckbox(id: string, option: string) {
+  function toggleCheckbox(id: string, option: string, maxSelections?: number) {
+    if (locked) return;
     setAnswers((prev) => {
       const current = Array.isArray(prev[id]) ? (prev[id] as string[]) : [];
       const has = current.includes(option);
+      if (!has && maxSelections !== undefined && current.length >= maxSelections) {
+        return prev;
+      }
       const next = has ? current.filter((v) => v !== option) : [...current, option];
       return { ...prev, [id]: next };
     });
@@ -83,6 +87,7 @@ export function QuestionFormView({
   function handleSubmit() {
     if (locked || !onSubmit) return;
     if (hasPending) return;
+    if (!withinSelectionLimits) return;
     const missing = missingRequired();
     if (missing) {
       // Soft inline guard — surface via aria but don't alert; the disabled
@@ -93,7 +98,12 @@ export function QuestionFormView({
   }
 
   const required = form.questions.filter((q) => q.required);
-  const ready = required.every((q) => {
+  const withinSelectionLimits = form.questions.every((q) => {
+    if (q.type !== 'checkbox' || q.maxSelections === undefined) return true;
+    const v = answers[q.id];
+    return !Array.isArray(v) || v.length <= q.maxSelections;
+  });
+  const ready = withinSelectionLimits && required.every((q) => {
     const v = answers[q.id];
     return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
   });
@@ -145,14 +155,19 @@ export function QuestionFormView({
                   {q.options.map((opt) => {
                     const arr = Array.isArray(value) ? value : [];
                     const on = arr.includes(opt);
+                    const maxed =
+                      q.maxSelections !== undefined && !on && arr.length >= q.maxSelections;
                     return (
-                      <label key={opt} className={`qf-chip${on ? ' qf-chip-on' : ''}`}>
+                      <label
+                        key={opt}
+                        className={`qf-chip${on ? ' qf-chip-on' : ''}${maxed ? ' qf-chip-disabled' : ''}`}
+                      >
                         <input
                           type="checkbox"
                           value={opt}
                           checked={on}
-                          disabled={locked}
-                          onChange={() => toggleCheckbox(q.id, opt)}
+                          disabled={locked || maxed}
+                          onChange={() => toggleCheckbox(q.id, opt, q.maxSelections)}
                         />
                         <span>{opt}</span>
                       </label>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectRawUrl } from '../providers/registry';
+import type { TodoItem } from '../runtime/todos';
 import type { ChatAttachment, ChatMessage, Conversation, ProjectFile } from '../types';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
@@ -59,8 +60,9 @@ interface Props {
   onRequestOpenFile?: (name: string) => void;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
-  // routes that text through onSend (no attachments).
+  // routes that text and any uploaded references through onSend.
   onSubmitForm?: (text: string, attachments?: ChatAttachment[]) => void;
+  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   // Conversation list that used to live in the topbar. The chat tab now
@@ -92,6 +94,7 @@ export function ChatPane({
   onRequestOpenFile,
   initialDraft,
   onSubmitForm,
+  onContinueRemainingTasks,
   onNewConversation,
   conversations,
   activeConversationId,
@@ -210,6 +213,7 @@ export function ChatPane({
             <button
               type="button"
               className="icon-only"
+              data-testid="conversation-history-trigger"
               title={
                 activeConversation?.title
                   ? `${t('chat.conversationsTitle')} · ${activeConversation.title}`
@@ -226,7 +230,7 @@ export function ChatPane({
               ) : null}
             </button>
             {showConvList ? (
-              <div className="chat-history-menu" role="menu">
+              <div className="chat-history-menu" role="menu" data-testid="conversation-history-menu">
                 <div className="chat-history-menu-head">
                   <span className="chat-history-menu-title">
                     {t('chat.conversationsHeading')}
@@ -235,6 +239,7 @@ export function ChatPane({
                     <button
                       type="button"
                       className="chat-history-new"
+                      data-testid="conversation-history-new"
                       onClick={() => {
                         onNewConversation();
                         setShowConvList(false);
@@ -245,7 +250,7 @@ export function ChatPane({
                     </button>
                   ) : null}
                 </div>
-                <div className="chat-history-list">
+                <div className="chat-history-list" data-testid="conversation-list">
                   {conversations.length === 0 ? (
                     <div className="chat-history-empty">
                       {t('chat.emptyConversations')}
@@ -273,6 +278,7 @@ export function ChatPane({
           <button
             type="button"
             className="icon-only"
+            data-testid="new-conversation"
             title={t('chat.newConversationsTitle')}
             aria-label={t('chat.newConversation')}
             onClick={onNewConversation}
@@ -354,6 +360,11 @@ export function ChatPane({
                     isLast={m.id === lastAssistantId}
                     nextUserContent={nextUserContentByAssistantId.get(m.id)}
                     onSubmitForm={onSubmitForm}
+                    onContinueRemainingTasks={
+                      m.id === lastAssistantId && onContinueRemainingTasks
+                        ? (todos) => onContinueRemainingTasks(m, todos)
+                        : undefined
+                    }
                   />
                 ),
               )}
@@ -408,7 +419,10 @@ function ConversationRow({
   const displayTitle =
     conversation.title || t('chat.untitledConversation');
   return (
-    <div className={`chat-conv-item${active ? ' active' : ''}`}>
+    <div
+      className={`chat-conv-item${active ? ' active' : ''}`}
+      data-testid={`conversation-item-${conversation.id}`}
+    >
       {editing && onRename ? (
         <input
           autoFocus
@@ -433,6 +447,7 @@ function ConversationRow({
         <button
           type="button"
           className="chat-conv-item-name"
+          data-testid={`conversation-select-${conversation.id}`}
           style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}
           onClick={onSelect}
           onDoubleClick={() => {
@@ -448,6 +463,7 @@ function ConversationRow({
       <button
         type="button"
         className="chat-conv-item-del"
+        data-testid={`conversation-delete-${conversation.id}`}
         title={t('chat.deleteConversation')}
         onClick={(e) => {
           e.stopPropagation();

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createHtmlArtifactManifest } from '../artifacts/manifest';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
@@ -11,6 +12,8 @@ import {
 } from '../providers/registry';
 import { composeSystemPrompt } from '../prompts/system';
 import { navigate } from '../router';
+import { agentDisplayName } from '../utils/agentLabels';
+import type { TodoItem } from '../runtime/todos';
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -53,6 +56,10 @@ interface Props {
   daemonLive: boolean;
   onModeChange: (mode: AppConfig['mode']) => void;
   onAgentChange: (id: string) => void;
+  onAgentModelChange: (
+    id: string,
+    choice: { model?: string; reasoning?: string },
+  ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: () => void;
   onBack: () => void;
@@ -72,6 +79,7 @@ export function ProjectView({
   daemonLive,
   onModeChange,
   onAgentChange,
+  onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
   onBack,
@@ -212,6 +220,10 @@ export function ProjectView({
     () => new Set(projectFiles.map((f) => f.name)),
     [projectFiles],
   );
+  const agentsById = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent])),
+    [agents],
+  );
 
   // Keep the @-picker's source of truth fresh: every refreshSignal bump
   // (artifact saved, sketch saved, image uploaded) refetches; on first
@@ -336,11 +348,23 @@ export function ProjectView({
         content: prompt,
         attachments: attachments.length > 0 ? attachments : undefined,
       };
+      const selectedAgent =
+        config.mode === 'daemon' && config.agentId
+          ? agentsById.get(config.agentId)
+          : null;
+      const assistantAgentId =
+        config.mode === 'daemon' ? config.agentId ?? undefined : 'anthropic-api';
+      const assistantAgentName =
+        config.mode === 'daemon'
+          ? assistantAgentDisplayName(config.agentId, selectedAgent?.name)
+          : 'Anthropic API';
       const assistantId = crypto.randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
         content: '',
+        agentId: assistantAgentId,
+        agentName: assistantAgentName,
         events: [],
         startedAt,
       };
@@ -490,6 +514,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
+        const choice = config.agentModels?.[config.agentId];
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -498,6 +523,8 @@ export function ProjectView({
           handlers,
           projectId: project.id,
           attachments: attachments.map((a) => a.path),
+          model: choice?.model ?? null,
+          reasoning: choice?.reasoning ?? null,
         });
       } else {
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
@@ -515,6 +542,7 @@ export function ProjectView({
       activeConversationId,
       messages,
       config,
+      agentsById,
       composedSystemPrompt,
       onTouchProject,
       project.id,
@@ -544,7 +572,19 @@ export function ProjectView({
       }
       if (savedArtifactRef.current === fileName) return;
       savedArtifactRef.current = fileName;
-      const file = await writeProjectTextFile(project.id, fileName, art.html);
+      const manifest = createHtmlArtifactManifest({
+        entry: fileName,
+        title: art.title || art.identifier || fileName,
+        sourceSkillId: project.skillId ?? undefined,
+        designSystemId: project.designSystemId,
+        metadata: {
+          identifier: art.identifier,
+          inferred: false,
+        },
+      });
+      const file = await writeProjectTextFile(project.id, fileName, art.html, {
+        artifactManifest: manifest,
+      });
       if (file) {
         setFilesRefresh((n) => n + 1);
         // Auto-open the freshly-persisted artifact as a tab so the user
@@ -554,6 +594,27 @@ export function ProjectView({
       }
     },
     [project.id, projectFiles, requestOpenFile],
+  );
+
+  const handleContinueRemainingTasks = useCallback(
+    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+      if (streaming || todos.length === 0) return;
+      const remainingList = todos
+        .map((todo, i) => {
+          const label =
+            todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content;
+          return `${i + 1}. [${todo.status}] ${label}`;
+        })
+        .join('\n');
+      const prompt =
+        'Continue the remaining unfinished tasks from the previous run. ' +
+        'Do not redo completed work. Focus only on these unfinished todos:\n\n' +
+        `${remainingList}\n\n` +
+        'Before making changes, inspect the current project files as needed. ' +
+        'Update TodoWrite as you complete each remaining task.';
+      void handleSend(prompt, []);
+    },
+    [streaming, handleSend],
   );
 
   const handleExportAsPptx = useCallback(
@@ -704,6 +765,7 @@ export function ProjectView({
           <div className="topbar-title">
             <span
               className="title editable"
+              data-testid="project-title"
               tabIndex={0}
               role="textbox"
               suppressContentEditableWarning
@@ -718,7 +780,7 @@ export function ProjectView({
             >
               {project.name}
             </span>
-            <span className="meta">{projectMeta}</span>
+            <span className="meta" data-testid="project-meta">{projectMeta}</span>
           </div>
         </div>
         <div className="topbar-right">
@@ -728,6 +790,7 @@ export function ProjectView({
             daemonLive={daemonLive}
             onModeChange={onModeChange}
             onAgentChange={onAgentChange}
+            onAgentModelChange={onAgentModelChange}
             onOpenSettings={onOpenSettings}
             onRefreshAgents={onRefreshAgents}
             onBack={onBack}
@@ -757,6 +820,7 @@ export function ProjectView({
             if (streaming) return;
             void handleSend(text, attachments ?? []);
           }}
+          onContinueRemainingTasks={handleContinueRemainingTasks}
           onNewConversation={handleNewConversation}
           conversations={conversations}
           activeConversationId={activeConversationId}
@@ -781,4 +845,11 @@ export function ProjectView({
       </div>
     </div>
   );
+}
+
+function assistantAgentDisplayName(
+  agentId: string | null,
+  fallbackName?: string,
+): string | undefined {
+  return agentDisplayName(agentId, fallbackName) ?? undefined;
 }

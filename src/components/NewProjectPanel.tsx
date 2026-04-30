@@ -26,6 +26,7 @@ interface Props {
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
   onCreate: (input: CreateInput) => void;
+  onImportClaudeDesign?: (file: File) => Promise<void> | void;
   loading?: boolean;
 }
 
@@ -37,11 +38,14 @@ export function NewProjectPanel({
   defaultDesignSystemId,
   templates,
   onCreate,
+  onImportClaudeDesign,
   loading = false,
 }: Props) {
   const t = useT();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importing, setImporting] = useState(false);
   const [tab, setTab] = useState<CreateTab>(() => (
-    templates.length > 0 ? 'template' : 'storefront'
+    templates.length > 0 ? 'template' : 'prototype'
   ));
   const [name, setName] = useState('');
   // Design-system selection is now an *array* internally so the same
@@ -136,13 +140,26 @@ export function NewProjectPanel({
     });
   }
 
+  async function handleImportPicked(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    ev.target.value = '';
+    if (!file || !onImportClaudeDesign) return;
+    setImporting(true);
+    try {
+      await onImportClaudeDesign(file);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
-    <div className="newproj">
+    <div className="newproj" data-testid="new-project-panel">
       <div className="newproj-tabs" role="tablist">
-        {(['template', 'storefront'] as CreateTab[]).map((entry) => (
+        {(['prototype', 'deck', 'template', 'storefront', 'other'] as CreateTab[]).map((entry) => (
           <button
             key={entry}
             role="tab"
+            data-testid={`new-project-tab-${entry}`}
             aria-selected={tab === entry}
             className={`newproj-tab ${tab === entry ? 'active' : ''}`}
             onClick={() => setTab(entry)}
@@ -156,6 +173,7 @@ export function NewProjectPanel({
 
         <input
           className="newproj-name"
+          data-testid="new-project-name"
           placeholder={t('newproj.namePlaceholder')}
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -204,6 +222,7 @@ export function NewProjectPanel({
 
         <button
           className="primary newproj-create"
+          data-testid="create-project"
           onClick={handleCreate}
           disabled={!canCreate}
           title={
@@ -219,6 +238,31 @@ export function NewProjectPanel({
               : t('newproj.create')}
           </span>
         </button>
+        {onImportClaudeDesign ? (
+          <>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              onChange={handleImportPicked}
+            />
+            <button
+              type="button"
+              className="ghost newproj-import"
+              disabled={loading || importing}
+              title={t('newproj.importClaudeZipTitle')}
+              onClick={() => importInputRef.current?.click()}
+            >
+              <Icon name="import" size={13} />
+              <span>
+                {importing
+                  ? t('newproj.importingClaudeZip')
+                  : t('newproj.importClaudeZip')}
+              </span>
+            </button>
+          </>
+        ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
     </div>
@@ -548,10 +592,11 @@ function DesignSystemPicker({
   }
 
   return (
-    <div className="newproj-section ds-picker" ref={wrapRef}>
+    <div className="newproj-section ds-picker" data-testid="design-system-picker" ref={wrapRef}>
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
         type="button"
+        data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
@@ -585,6 +630,7 @@ function DesignSystemPicker({
           <div className="ds-picker-head">
             <input
               ref={searchRef}
+              data-testid="design-system-search"
               className="ds-picker-search"
               placeholder={t('newproj.dsSearch')}
               value={query}

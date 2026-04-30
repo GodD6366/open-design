@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -14,6 +14,7 @@ interface Props {
   onOpenFile: (name: string) => void;
   onDeleteFile: (name: string) => void;
   onUpload: () => void;
+  onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
   onNewSketch: () => void;
 }
@@ -43,11 +44,14 @@ export function DesignFilesPanel({
   onOpenFile,
   onDeleteFile,
   onUpload,
+  onUploadFiles,
   onPaste,
   onNewSketch,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
+  const [draggingFiles, setDraggingFiles] = useState(false);
+  const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -96,6 +100,14 @@ export function DesignFilesPanel({
     }
   }
 
+  function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
+    ev.preventDefault();
+    dragDepthRef.current = 0;
+    setDraggingFiles(false);
+    const dropped = Array.from(ev.dataTransfer.files ?? []);
+    if (dropped.length > 0) onUploadFiles(dropped);
+  }
+
   return (
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
@@ -129,7 +141,12 @@ export function DesignFilesPanel({
               <Icon name="copy" size={13} />
               <span>{t('designFiles.paste.label')}</span>
             </button>
-            <button type="button" onClick={onUpload} title={t('designFiles.upload.title')}>
+            <button
+              type="button"
+              data-testid="design-files-upload-trigger"
+              onClick={onUpload}
+              title={t('designFiles.upload.title')}
+            >
               <Icon name="upload" size={13} />
               <span>{t('designFiles.upload.label')}</span>
             </button>
@@ -151,6 +168,7 @@ export function DesignFilesPanel({
                     <button
                       key={f.name}
                       type="button"
+                      data-testid={`design-file-row-${f.name}`}
                       className={`df-row ${active ? 'active' : ''}`}
                       onMouseEnter={() => setHover(f.name)}
                       onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
@@ -166,6 +184,7 @@ export function DesignFilesPanel({
                       </span>
                       <span className="df-row-time">{relativeTime(f.mtime, t)}</span>
                       <span
+                        data-testid={`design-file-menu-${f.name}`}
                         className="df-row-menu"
                         style={isHovered || active ? { opacity: 1 } : undefined}
                         role="button"
@@ -190,7 +209,28 @@ export function DesignFilesPanel({
               </div>
             ))
           )}
-          <div className="df-drop">
+          <div
+            className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
+            onDragEnter={(ev) => {
+              ev.preventDefault();
+              dragDepthRef.current += 1;
+              setDraggingFiles(true);
+            }}
+            onDragOver={(ev) => {
+              ev.preventDefault();
+              ev.dataTransfer.dropEffect = 'copy';
+            }}
+            onDragLeave={(ev) => {
+              if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+                dragDepthRef.current = 0;
+                setDraggingFiles(false);
+                return;
+              }
+              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+              if (dragDepthRef.current === 0) setDraggingFiles(false);
+            }}
+            onDrop={handleDrop}
+          >
             <span className="label">{t('designFiles.dropTitle')}</span>
             <span className="desc">{t('designFiles.dropDesc')}</span>
           </div>
@@ -206,6 +246,7 @@ export function DesignFilesPanel({
       ) : null}
       {menuPos ? (
         <div
+          data-testid="design-file-menu-popover"
           className="df-row-popover"
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -232,6 +273,7 @@ export function DesignFilesPanel({
           <button
             type="button"
             className="danger"
+            data-testid={`design-file-delete-${menuPos.name}`}
             onClick={() => {
               const name = menuPos.name;
               setMenuPos(null);
@@ -282,7 +324,7 @@ function DfPreview({
           </div>
         )}
       </div>
-      <div className="df-preview-meta">
+      <div className="df-preview-meta" data-testid="design-file-preview">
         <button
           type="button"
           className="ghost"
@@ -323,6 +365,12 @@ function sectionFor(file: ProjectFile): Section {
   if (file.kind === 'sketch') return 'sketches';
   if (file.kind === 'code') return 'scripts';
   if (file.kind === 'image') return 'images';
+  if (
+    file.kind === 'pdf' ||
+    file.kind === 'document' ||
+    file.kind === 'presentation' ||
+    file.kind === 'spreadsheet'
+  ) return 'pages';
   return 'other';
 }
 
@@ -332,6 +380,10 @@ function kindGlyph(kind: ProjectFileKind): string {
   if (kind === 'sketch') return '✎';
   if (kind === 'text') return '¶';
   if (kind === 'code') return '{}';
+  if (kind === 'pdf') return 'PDF';
+  if (kind === 'document') return 'DOC';
+  if (kind === 'presentation') return 'PPT';
+  if (kind === 'spreadsheet') return 'XLS';
   return '·';
 }
 
@@ -341,6 +393,10 @@ function kindLabel(kind: ProjectFileKind, t: TranslateFn): string {
   if (kind === 'sketch') return t('designFiles.kindSketch');
   if (kind === 'text') return t('designFiles.kindText');
   if (kind === 'code') return t('designFiles.kindCode');
+  if (kind === 'pdf') return t('designFiles.kindPdf');
+  if (kind === 'document') return t('designFiles.kindDocument');
+  if (kind === 'presentation') return t('designFiles.kindPresentation');
+  if (kind === 'spreadsheet') return t('designFiles.kindSpreadsheet');
   return t('designFiles.kindBinary');
 }
 

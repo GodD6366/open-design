@@ -6,22 +6,35 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { detectAgents, getAgentDef } from './agents.js';
+import {
+  detectAgents,
+  getAgentDef,
+  isKnownModel,
+  resolveAgentBin,
+  sanitizeCustomModel,
+} from './agents.js';
 import { listSkills } from './skills.js';
 import { listDesignSystems, readDesignSystem } from './design-systems.js';
+import { attachAcpSession } from './acp.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { createCopilotStreamHandler } from './copilot-stream.js';
+import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
+import { importClaudeDesignZip } from './claude-design-import.js';
+import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import {
   deleteProjectFile,
   ensureProject,
   listFiles,
+  projectDir,
   readProjectFile,
   removeProjectDir,
   sanitizeName,
   writeProjectFile,
 } from './projects.js';
+import { validateArtifactManifestInput } from './artifact-manifest.js';
 import {
   deleteConversation,
   deleteProject as dbDeleteProject,
@@ -60,14 +73,31 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const STATIC_DIR = path.join(PROJECT_ROOT, 'dist');
+// Built web app lives in `out/` — that's where Next.js writes the static
+// export configured in next.config.ts. The folder name used to be `dist/`
+// when this project shipped with Vite; the daemon serves whatever the
+// frontend toolchain emits, no further config needed.
+const STATIC_DIR = path.join(PROJECT_ROOT, 'out');
 const SKILLS_DIR = path.join(PROJECT_ROOT, 'skills');
 const DESIGN_SYSTEMS_DIR = path.join(PROJECT_ROOT, 'design-systems');
-const ARTIFACTS_DIR = path.join(PROJECT_ROOT, '.od', 'artifacts');
-const PROJECTS_DIR = path.join(PROJECT_ROOT, '.od', 'projects');
 const STOREFRONT_SKILL_DIR = storefrontSkillDir(PROJECT_ROOT);
 loadDotEnv(PROJECT_ROOT);
+const RUNTIME_DATA_DIR = process.env.OD_DATA_DIR
+  ? path.resolve(process.env.OD_DATA_DIR)
+  : path.join(PROJECT_ROOT, '.od');
+const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
+const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+
+// Windows ENAMETOOLONG mitigation constants
+const CMD_BAT_RE = /\.(cmd|bat)$/i;
+const PROMPT_TEMP_FILE = () =>
+  '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
+const promptFileBootstrap = (fp) =>
+  `Read the file at ${fp.replace(/\\/g, '/')} for your complete instructions ` +
+  '(system prompt, design system, skill workflow, and user request). ' +
+  'Follow every instruction in that file exactly. ' +
+  'Do not begin your response until you have read the entire file.';
 
 const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -82,6 +112,17 @@ const upload = multer({
     },
   }),
   limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+const importUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (_req, file, cb) => {
+      const safe = file.originalname.replace(/[^\w.\-]/g, '_');
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
+    },
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
 });
 
 // Project-scoped multi-file upload. Lands files directly in the project
@@ -276,10 +317,57 @@ async function importProjectImageFromUrl(projectId, rawUrl) {
   }
 }
 
-export async function startServer({ port = 7456 } = {}) {
+function handleProjectUpload(req, res, next) {
+  projectUpload.array('files', 12)(req, res, (err) => {
+    if (err) {
+      return sendMulterError(res, err);
+    }
+    next();
+  });
+}
+
+function sendMulterError(res, err) {
+  if (err instanceof multer.MulterError) {
+    const code = err.code || 'UPLOAD_ERROR';
+    const statusByCode = {
+      LIMIT_FILE_SIZE: 413,
+      LIMIT_FILE_COUNT: 400,
+      LIMIT_UNEXPECTED_FILE: 400,
+      LIMIT_PART_COUNT: 400,
+      LIMIT_FIELD_KEY: 400,
+      LIMIT_FIELD_VALUE: 400,
+      LIMIT_FIELD_COUNT: 400,
+    };
+    const errorByCode = {
+      LIMIT_FILE_SIZE: 'file too large',
+      LIMIT_FILE_COUNT: 'too many files',
+      LIMIT_UNEXPECTED_FILE: 'unexpected file field',
+      LIMIT_PART_COUNT: 'too many form parts',
+      LIMIT_FIELD_KEY: 'field name too long',
+      LIMIT_FIELD_VALUE: 'field value too long',
+      LIMIT_FIELD_COUNT: 'too many form fields',
+    };
+    const status = statusByCode[code] ?? 400;
+    const message = errorByCode[code] ?? 'upload failed';
+    return res.status(status).json({ code, error: message });
+  }
+
+  if (err) {
+    return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
+  }
+
+  return res.status(500).json({ code: 'UPLOAD_ERROR', error: 'upload failed' });
+}
+
+export async function startServer({ port = 7456, returnServer = false } = {}) {
   const app = express();
   app.use(express.json({ limit: '4mb' }));
-  const db = openDatabase(PROJECT_ROOT);
+  const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+
+  // Warm agent-capability probes (e.g. whether the installed Claude Code
+  // build advertises --include-partial-messages) so the first /api/chat
+  // hits a populated cache even if /api/agents hasn't been called yet.
+  void detectAgents().catch(() => {});
 
   if (fs.existsSync(STATIC_DIR)) {
     app.use(express.static(STATIC_DIR));
@@ -362,6 +450,56 @@ export async function startServer({ port = 7456 } = {}) {
       }
       res.json({ project, conversationId: cid });
     } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/import/claude-design', importUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'zip file required' });
+      const originalName = req.file.originalname || 'Claude Design export.zip';
+      if (!/\.zip$/i.test(originalName)) {
+        fs.promises.unlink(req.file.path).catch(() => {});
+        return res.status(400).json({ error: 'expected a .zip file' });
+      }
+      const id = randomId();
+      const now = Date.now();
+      const baseName = originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
+      const imported = await importClaudeDesignZip(req.file.path, projectDir(PROJECTS_DIR, id));
+      fs.promises.unlink(req.file.path).catch(() => {});
+
+      const project = insertProject(db, {
+        id,
+        name: baseName,
+        skillId: null,
+        designSystemId: null,
+        pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
+        metadata: {
+          kind: 'prototype',
+          importedFrom: 'claude-design',
+          entryFile: imported.entryFile,
+          sourceFileName: originalName,
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      const cid = randomId();
+      insertConversation(db, {
+        id: cid,
+        projectId: id,
+        title: 'Imported Claude Design project',
+        createdAt: now,
+        updatedAt: now,
+      });
+      setTabs(db, id, [imported.entryFile], imported.entryFile);
+      res.json({
+        project,
+        conversationId: cid,
+        entryFile: imported.entryFile,
+        files: imported.files,
+      });
+    } catch (err) {
+      if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
       res.status(400).json({ error: String(err) });
     }
   });
@@ -775,6 +913,38 @@ export async function startServer({ port = 7456 } = {}) {
     }
   });
 
+  app.get('/api/projects/:id/raw/*', async (req, res) => {
+    try {
+      const relPath = req.params[0];
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath);
+      res.type(file.mime).send(file.buffer);
+    } catch (err) {
+      const code = err && err.code === 'ENOENT' ? 404 : 400;
+      res.status(code).json({ error: String(err) });
+    }
+  });
+
+  app.delete('/api/projects/:id/raw/*', async (req, res) => {
+    try {
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0]);
+      res.json({ ok: true });
+    } catch (err) {
+      const code = err && err.code === 'ENOENT' ? 404 : 400;
+      res.status(code).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
+    try {
+      const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
+      const preview = await buildDocumentPreview(file);
+      res.json(preview);
+    } catch (err) {
+      const status = err && err.statusCode ? err.statusCode : err && err.code === 'ENOENT' ? 404 : 400;
+      res.status(status).json({ error: err?.message || 'preview unavailable' });
+    }
+  });
+
   app.get('/api/projects/:id/files/:name', async (req, res) => {
     try {
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, req.params.name);
@@ -793,7 +963,12 @@ export async function startServer({ port = 7456 } = {}) {
   // uses both depending on the file source.
   app.post(
     '/api/projects/:id/files',
-    upload.single('file'),
+    (req, res, next) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) return sendMulterError(res, err);
+        next();
+      });
+    },
     async (req, res) => {
       try {
         await ensureProject(PROJECTS_DIR, req.params.id);
@@ -809,18 +984,26 @@ export async function startServer({ port = 7456 } = {}) {
           fs.promises.unlink(req.file.path).catch(() => {});
           return res.json({ file: meta });
         }
-        const { name, content, encoding } = req.body || {};
+        const { name, content, encoding, artifactManifest } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return res.status(400).json({ error: 'name and content required' });
+        }
+        if (artifactManifest !== undefined && artifactManifest !== null) {
+          const validated = validateArtifactManifestInput(artifactManifest, name);
+          if (!validated.ok) {
+            return res.status(400).json({ error: `invalid artifactManifest: ${validated.error}` });
+          }
         }
         const buf =
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf);
+        const meta = await writeProjectFile(PROJECTS_DIR, req.params.id, name, buf, {
+          artifactManifest,
+        });
         res.json({ file: meta });
       } catch (err) {
-        res.status(400).json({ error: String(err) });
+        res.status(500).json({ error: 'upload failed' });
       }
     },
   );
@@ -845,7 +1028,7 @@ export async function startServer({ port = 7456 } = {}) {
   // without a separate refetch.
   app.post(
     '/api/projects/:id/upload',
-    projectUpload.array('files', 12),
+    handleProjectUpload,
     async (req, res) => {
       try {
         const incoming = Array.isArray(req.files) ? req.files : [];
@@ -866,7 +1049,7 @@ export async function startServer({ port = 7456 } = {}) {
         }
         res.json({ files: out });
       } catch (err) {
-        res.status(400).json({ error: String(err) });
+        res.status(500).json({ error: 'upload failed' });
       }
     },
   );
@@ -893,6 +1076,8 @@ export async function startServer({ port = 7456 } = {}) {
       imagePaths = [],
       projectId,
       attachments = [],
+      model,
+      reasoning,
     } = req.body || {};
     const def = getAgentDef(agentId);
     if (!def) return res.status(400).json({ error: `unknown agent: ${agentId}` });
@@ -982,7 +1167,73 @@ export async function startServer({ port = 7456 } = {}) {
     const extraAllowedDirs = [SKILLS_DIR, DESIGN_SYSTEMS_DIR].filter(
       (d) => fs.existsSync(d),
     );
-    const args = def.buildArgs(composed, safeImages, extraAllowedDirs);
+    // Per-agent model + reasoning the user picked in the model menu.
+    // Trust the value when it matches the most recent /api/agents listing
+    // (live or fallback). Otherwise allow it through if it passes a
+    // permissive sanitizer — that's the path for user-typed custom model
+    // ids the CLI's listing didn't surface yet.
+    const safeModel =
+      typeof model === 'string'
+        ? isKnownModel(def, model)
+          ? model
+          : sanitizeCustomModel(model)
+        : null;
+    const safeReasoning =
+      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
+        ? def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null
+        : null;
+    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+
+    // Windows ENAMETOOLONG mitigation.  On Windows the OS caps the command
+    // line passed to child_process.spawn: ~8 191 chars when shell:true is
+    // needed (.cmd/.bat npm shims) and ~32 767 chars otherwise (CreateProcess).
+    // The composed prompt (system prompt + design system + skill body + user
+    // message) can exceed either limit.  Agents with `promptViaStdin` bypass
+    // this by piping through stdin.  For the remaining agents we write the
+    // prompt to a temp file in the project directory and pass a short
+    // bootstrap message that tells the agent to Read it before responding.
+    const resolvedBin = resolveAgentBin(agentId);
+    const isWinShell = process.platform === 'win32' && resolvedBin && CMD_BAT_RE.test(resolvedBin);
+    // Thresholds account for escaping overhead (~1.1-1.3x for cmd.exe shell)
+    // plus other args (~500 chars).  6500 chars for shell:true, 30000 for
+    // direct CreateProcess.
+    const promptLimit = isWinShell ? 6500 : 30000;
+    const needsFilePrompt =
+      !def.promptViaStdin &&
+      process.platform === 'win32' &&
+      composed.length > promptLimit &&
+      cwd;
+    if (process.platform === 'win32') {
+      console.log(
+        `[od] prompt-delivery: agent=${agentId} promptLen=${composed.length} ` +
+        `shell=${isWinShell} limit=${promptLimit} file=${!!needsFilePrompt} ` +
+        `bin=${resolvedBin ? path.basename(resolvedBin) : 'null'}`,
+      );
+    }
+    let effectivePrompt = composed;
+    let promptFilePath = null;
+    let promptFileCleaned = false;
+    const cleanPromptFile = () => {
+      if (promptFilePath && !promptFileCleaned) {
+        promptFileCleaned = true;
+        fs.unlink(promptFilePath, () => {});
+      }
+    };
+    // ^^^ idempotency: promptFileCleaned is set synchronously BEFORE the
+    // async fs.unlink callback, so a second call never races past the guard.
+    if (needsFilePrompt) {
+      promptFilePath = path.join(cwd, PROMPT_TEMP_FILE);
+      try {
+        fs.writeFileSync(promptFilePath, composed, 'utf8');
+        effectivePrompt = promptFileBootstrap(promptFilePath);
+        console.log(`[od] wrote prompt to ${promptFilePath}`);
+      } catch (err) {
+        console.error(`[od] failed to write prompt file: ${err.message}`);
+        promptFilePath = null;
+      }
+    }
+
+    const args = def.buildArgs(effectivePrompt, safeImages, extraAllowedDirs, agentOptions, { cwd });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -995,22 +1246,85 @@ export async function startServer({ port = 7456 } = {}) {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
+    // resolvedBin was already looked up above for the ENAMETOOLONG check.
+    // If detection can't find the binary, surface a friendly SSE error
+    // pointing at /api/agents instead of silently falling back to
+    // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
+    // from issue #10 the rest of this block is meant to prevent.
+    if (!resolvedBin) {
+      cleanPromptFile();
+      send('error', {
+        message:
+          `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
+          'Install it and refresh the agent list (GET /api/agents) before retrying.',
+      });
+      return res.end();
+    }
+    // npm shims on Windows are .cmd/.bat files; Node ≥21 refuses to spawn
+    // those without `shell: true` (CVE-2024-27980). When `shell: true` is set
+    // on Windows, Node escapes argv items for the cmd.exe shell — that
+    // escape is what currently keeps user-controlled prompt text in `args`
+    // (composed via `def.buildArgs(prompt, ...)` above) from being
+    // interpreted as shell metacharacters. Two caveats this leaves on the
+    // table for a future contributor to be aware of:
+    //   1. Defensibility relies on Node's escaper staying correct. The
+    //      stronger fix is to keep user text out of argv entirely by piping
+    //      the composed prompt through child stdin instead of passing it
+    //      as a `-p $prompt`-style flag. Do NOT add a new prompt-bearing
+    //      flag in `buildArgs` thinking shell:true makes it safe — route
+    //      it through stdin instead.
+    //   2. cmd.exe caps the full command line at ~8191 chars (well below
+    //      Node's direct-spawn argv cap), so long prompts can fail with an
+    //      ENAMETOOLONG-class error here. Same mitigation: stdin.
+    //
+    // We only flip shell:true for `.cmd`/`.bat` because those are the only
+    // PATHEXT entries that strictly require cmd.exe to launch. `.exe`/`.com`
+    // launch directly (no shell needed); `.ps1`/`.vbs` etc. would need a
+    // different host (powershell / wscript) — `shell: true` (which uses
+    // cmd.exe) wouldn't actually help those, so we don't pretend it would.
+    // In practice npm-installed CLIs ship as `.cmd` shims, which is the
+    // case this branch covers.
+    const useShell =
+      process.platform === 'win32' && CMD_BAT_RE.test(resolvedBin);
+
     send('start', {
       agentId,
-      bin: def.bin,
+      bin: resolvedBin,
       streamFormat: def.streamFormat ?? 'plain',
       projectId: typeof projectId === 'string' ? projectId : null,
       cwd,
+      model: safeModel,
+      reasoning: safeReasoning,
     });
 
     let child;
+    let acpSession = null;
     try {
-      child = spawn(def.bin, args, {
+      // When the agent definition sets `promptViaStdin`, pipe the composed
+      // prompt through stdin instead of embedding it in argv. Bypasses the
+      // OS command-line length limit (Windows CreateProcess caps at ~32 KB)
+      // which causes `spawn ENAMETOOLONG` for any non-trivial prompt.
+      const stdinMode = def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      child = spawn(resolvedBin, args, {
         env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: cwd || undefined,
+        shell: useShell,
       });
+      if (def.promptViaStdin && child.stdin) {
+        // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
+        // launch) would otherwise surface as an unhandled stream error and
+        // crash the daemon. Swallow it — the regular exit/close handlers
+        // below already route the underlying failure to SSE via stderr.
+        child.stdin.on('error', (err) => {
+          if (err.code !== 'EPIPE') {
+            send('error', { message: `stdin: ${err.message}` });
+          }
+        });
+        child.stdin.end(composed, 'utf8');
+      }
     } catch (err) {
+      cleanPromptFile();
       send('error', { message: `spawn failed: ${err.message}` });
       return res.end();
     }
@@ -1026,6 +1340,24 @@ export async function startServer({ port = 7456 } = {}) {
       const claude = createClaudeStreamHandler((ev) => send('agent', ev));
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
+    } else if (def.streamFormat === 'copilot-stream-json') {
+      const copilot = createCopilotStreamHandler((ev) => send('agent', ev));
+      child.stdout.on('data', (chunk) => copilot.feed(chunk));
+      child.on('close', () => copilot.flush());
+    } else if (def.streamFormat === 'acp-json-rpc') {
+      acpSession = attachAcpSession({
+        child,
+        prompt: composed,
+        cwd: cwd || PROJECT_ROOT,
+        model: safeModel,
+        send,
+      });
+    } else if (def.streamFormat === 'json-event-stream') {
+      const handler = createJsonEventStreamHandler(def.eventParser || def.id, (ev) =>
+        send('agent', ev),
+      );
+      child.stdout.on('data', (chunk) => handler.feed(chunk));
+      child.on('close', () => handler.flush());
     } else {
       child.stdout.on('data', (chunk) => send('stdout', { chunk }));
     }
@@ -1043,6 +1375,10 @@ export async function startServer({ port = 7456 } = {}) {
       res.end();
     });
     child.on('close', (code, signal) => {
+      if (acpSession?.hasFatalError()) {
+        return res.end();
+      }
+      cleanPromptFile();
       send('end', { code, signal });
       res.end();
     });
@@ -1241,15 +1577,26 @@ export async function startServer({ port = 7456 } = {}) {
   });
 
   // SPA fallback for the built web app. Put this LAST so it never shadows
-  // /api routes. Only active when a dist/ exists (production mode).
+  // /api routes. Only active when out/ exists (production mode).
+  //
+  // Next.js's static export writes a single shell HTML at out/index.html
+  // for the optional catch-all route (`app/[[...slug]]/page.tsx`); project
+  // IDs aren't pre-rendered, so any unknown deep link (e.g. /projects/abc)
+  // needs to fall back to that shell so the client router can pick the
+  // right view at runtime.
   if (fs.existsSync(STATIC_DIR)) {
-    app.get(/^\/(?!api\/|artifacts\/).*/, (_req, res) => {
+    app.get(/^\/(?!api\/|artifacts\/|frames\/).*/, (_req, res) => {
       res.sendFile(path.join(STATIC_DIR, 'index.html'));
     });
   }
 
   return new Promise((resolve) => {
-    app.listen(port, '127.0.0.1', () => resolve(`http://localhost:${port}`));
+    const server = app.listen(port, '127.0.0.1', () => {
+      const address = server.address();
+      const actualPort = typeof address === 'object' && address ? address.port : port;
+      const url = `http://127.0.0.1:${actualPort}`;
+      resolve(returnServer ? { url, server } : url);
+    });
   });
 }
 

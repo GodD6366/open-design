@@ -69,6 +69,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       cursor: number;
     } | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const [importOpen, setImportOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -136,6 +137,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function reset() {
       setDraft("");
       setStaged([]);
+      setUploadError(null);
       setMention(null);
     }
 
@@ -149,9 +151,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const id = await ensureProject();
       if (!id) return;
       setUploading(true);
+      setUploadError(null);
       try {
-        const attachments = await uploadProjectFiles(id, files);
-        setStaged((s) => [...s, ...attachments]);
+        const result = await uploadProjectFiles(id, files);
+        if (result.uploaded.length > 0) {
+          setStaged((s) => [...s, ...result.uploaded]);
+        }
+        if (result.failed.length > 0) {
+          const failedCount = result.failed.length;
+          const uploadedCount = result.uploaded.length;
+          const detail = result.error ? ` (${result.error})` : '';
+          setUploadError(
+            uploadedCount > 0
+              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.`
+              : `Attachment upload failed for ${failedCount} file(s)${detail}.`,
+          );
+          console.warn('Some attachments failed to upload', result.failed);
+        }
       } finally {
         setUploading(false);
       }
@@ -247,6 +263,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     return (
       <div
         className={`composer${dragActive ? " drag-active" : ""}`}
+        data-testid="chat-composer"
         onDragOver={(e) => {
           e.preventDefault();
           setDragActive(true);
@@ -266,6 +283,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <div className="composer-input-wrap">
             <textarea
               ref={textareaRef}
+              data-testid="chat-composer-input"
               value={draft}
               placeholder={t('chat.composerPlaceholder')}
               onChange={handleChange}
@@ -288,6 +306,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <div className="composer-row">
             <input
               ref={fileInputRef}
+              data-testid="chat-file-input"
               type="file"
               multiple
               style={{ display: "none" }}
@@ -308,6 +327,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             </button>
             <button
               className="icon-btn"
+              data-testid="chat-attach"
               onClick={() => fileInputRef.current?.click()}
               title={t('chat.attachTitle')}
               disabled={uploading}
@@ -367,6 +387,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               <button
                 type="button"
                 className="composer-send"
+                data-testid="chat-send"
                 onClick={() => void submit()}
                 disabled={!draft.trim()}
               >
@@ -376,6 +397,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             )}
           </div>
         </div>
+        {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
         <span className="composer-hint">{t('chat.composerHint')}</span>
       </div>
     );
@@ -394,7 +416,7 @@ function StagedAttachments({
   t: TranslateFn;
 }) {
   return (
-    <div className="staged-row">
+    <div className="staged-row" data-testid="staged-attachments">
       {attachments.map((a) => (
         <div key={a.path} className={`staged-chip staged-${a.kind}`}>
           {a.kind === "image" && projectId ? (
@@ -461,7 +483,7 @@ function MentionPopover({
     if (ref.current) ref.current.scrollTop = 0;
   }, [files]);
   return (
-    <div className="mention-popover" ref={ref}>
+    <div className="mention-popover" data-testid="mention-popover" ref={ref}>
       {files.map((f) => {
         const key = f.path ?? f.name;
         return (

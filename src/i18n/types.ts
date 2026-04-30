@@ -1,12 +1,13 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'zh-CN';
+export type Locale = 'en' | 'zh-CN' | 'pt-BR';
 
-export const LOCALES: Locale[] = ['en', 'zh-CN'];
+export const LOCALES: Locale[] = ['en', 'zh-CN', 'pt-BR'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
   'zh-CN': '简体中文',
+  'pt-BR': 'Português (Brasil)',
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -93,6 +94,12 @@ export interface Dict {
   'settings.noAgentSelected': string;
   'settings.language': string;
   'settings.languageHint': string;
+  'settings.modelPicker': string;
+  'settings.reasoningPicker': string;
+  'settings.modelPickerHint': string;
+  'settings.modelCustom': string;
+  'settings.modelCustomLabel': string;
+  'settings.modelCustomPlaceholder': string;
 
   // Entry view / tabs
   'entry.tabDesigns': string;
@@ -131,6 +138,9 @@ export interface Dict {
   'newproj.create': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
+  'newproj.importClaudeZip': string;
+  'newproj.importClaudeZipTitle': string;
+  'newproj.importingClaudeZip': string;
   'newproj.privacyFooter': string;
   'newproj.designSystem': string;
   'newproj.dsNoneFreeform': string;
@@ -226,6 +236,10 @@ export interface Dict {
   'avatar.metaOffline': string;
   'avatar.metaSelected': string;
   'avatar.noAgentSelected': string;
+  'avatar.modelSection': string;
+  'avatar.modelLabel': string;
+  'avatar.reasoningLabel': string;
+  'avatar.customSuffix': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;
@@ -333,6 +347,10 @@ export interface Dict {
   'designFiles.kindSketch': string;
   'designFiles.kindText': string;
   'designFiles.kindCode': string;
+  'designFiles.kindPdf': string;
+  'designFiles.kindDocument': string;
+  'designFiles.kindPresentation': string;
+  'designFiles.kindSpreadsheet': string;
   'designFiles.kindBinary': string;
   'pasteDialog.title': string;
   'pasteDialog.hint': string;
@@ -356,6 +374,11 @@ export interface Dict {
   'fileViewer.share': string;
   'fileViewer.binaryMeta': string;
   'fileViewer.binaryNote': string;
+  'fileViewer.pdfMeta': string;
+  'fileViewer.documentMeta': string;
+  'fileViewer.presentationMeta': string;
+  'fileViewer.spreadsheetMeta': string;
+  'fileViewer.previewUnavailable': string;
   'fileViewer.download': string;
   'fileViewer.open': string;
   'fileViewer.imageMeta': string;
@@ -453,6 +476,10 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.unfinishedLabel': string;
+  'assistant.unfinishedSummary': string;
+  'assistant.unfinishedMore': string;
+  'assistant.continueRemaining': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;
   'assistant.openFile': string;
