@@ -12,7 +12,7 @@
   "scripts": {
     "daemon": "node daemon/cli.js --no-open",
     "dev": "next dev",
-    "dev:all": "node scripts/dev-all.mjs",
+    "dev:all": "NEXT_PORT=8201 node scripts/dev-all.mjs",
     "build": "next build",
     "preview": "pnpm build && node daemon/cli.js --no-open",
     "test:e2e:live": "node --test scripts/runtime-adapter.e2e.live.test.mjs",

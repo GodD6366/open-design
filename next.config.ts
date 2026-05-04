@@ -20,7 +20,7 @@ const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV !== 'development';
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['172.18.172.190','127.0.0.1'],
+  allowedDevOrigins: ['172.18.172.190', '127.0.0.1', 'design.godd.site'],
   reactStrictMode: true,
   turbopack: {
     root: ROOT_DIR,
