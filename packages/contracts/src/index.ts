@@ -15,6 +15,4 @@ export * from './sse/chat';
 export * from './sse/proxy';
 export * from './sse/critique';
 export * from './prompts/system';
-export * from './prompts/storefront';
-export * from './prompts/storefront-tones';
 export * from './critique';

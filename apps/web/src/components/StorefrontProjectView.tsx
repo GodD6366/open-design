@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   composeStorefrontSystemPrompt,
-  getStorefrontTonePresets,
-} from '@open-design/contracts';
+} from '../prompts/storefront';
+import { getStorefrontTonePresets } from '../prompts/storefront-tones';
 import { streamMessage } from '../providers/anthropic';
 import { streamViaDaemon } from '../providers/daemon';
 import {

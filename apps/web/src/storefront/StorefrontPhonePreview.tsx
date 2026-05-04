@@ -5,7 +5,7 @@ import {
   STOREFRONT_STATUS_BATTERY,
   STOREFRONT_STATUS_SIGNAL_BARS,
   STOREFRONT_STATUS_WIFI_PATHS,
-} from './phoneChrome.js';
+} from './phoneChrome';
 
 type Props = {
   projectId: string;
