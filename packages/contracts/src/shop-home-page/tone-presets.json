@@ -1,0 +1,192 @@
+[
+  {
+    "id": "tone-warm-cream",
+    "label": "暖奶油食欲感",
+    "summary": "奶油纸感底色配暖橙点缀，轻松、有食欲，适合咖啡、烘焙、甜品。",
+    "references": ["烘焙", "咖啡", "甜品"],
+    "displayFont": "'Iowan Old Style', 'Charter', Georgia, serif",
+    "bodyFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
+    "palette": {
+      "bg": "#F8EFE1",
+      "cardBg": "#FFFFFF",
+      "cardSubtle": "#F6EEDC",
+      "textPrimary": "#171717",
+      "textSecondary": "#7D6E61",
+      "accent": "#E59A2E"
+    },
+    "theme": "tone_warm_cream",
+    "radius": "26px",
+    "shadow": "0 20px 52px rgba(128, 92, 47, 0.14)",
+    "toneKeywords": ["warm", "cream", "bakery", "playful", "poster", "friendly"],
+    "analysis": {
+      "sourceSummary": "Warm cream storefront direction with paper-like backgrounds, large white rounded cards, soft appetite-driving orange accents, and poster-like composition.",
+      "iconStyle": "Friendly outlined or lightly filled icons, with a human touch instead of sharp corporate UI glyphs.",
+      "backgroundStyle": "Warm cream paper tone, white content cards, sparse toast-orange highlight blocks, and breathable module spacing.",
+      "layoutStyle": "Poster-like hero first, then a floating action area, then modular product and campaign blocks with clear whitespace."
+    },
+    "generationRules": {
+      "must": [
+        "Use warm cream paper-like backgrounds with soft food-friendly accent colors.",
+        "Keep whitespace generous so the page feels light and appetizing.",
+        "Hero and campaign modules should read like posters rather than coupon walls."
+      ],
+      "avoid": [
+        "no cold tech-blue chrome",
+        "no neon gradients",
+        "no dense discount-sticker clutter"
+      ]
+    }
+  },
+  {
+    "id": "tone-fresh-natural",
+    "label": "清透自然氧气感",
+    "summary": "清浅米绿与自然留白，轻盈、干净，适合茶饮、生活方式、有机零售。",
+    "references": ["茶饮", "生活方式", "有机零售"],
+    "displayFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
+    "bodyFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
+    "palette": {
+      "bg": "#F5F8F2",
+      "cardBg": "#FFFFFF",
+      "cardSubtle": "#E9F0E4",
+      "textPrimary": "#203124",
+      "textSecondary": "#5F6F60",
+      "accent": "#6FA05A"
+    },
+    "theme": "tone_fresh_natural",
+    "radius": "22px",
+    "shadow": "0 18px 44px rgba(103, 132, 96, 0.12)",
+    "toneKeywords": ["fresh", "natural", "airy", "clean", "green", "lifestyle"],
+    "analysis": {
+      "sourceSummary": "Fresh natural storefront direction with pale green neutrals, clear white cards, and an airy wellness-style layout.",
+      "iconStyle": "Simple rounded icons with low visual noise, suitable for clean retail or tea brands.",
+      "backgroundStyle": "Very light green-beige page background, clean white modules, and soft botanical contrast rather than heavy gradients.",
+      "layoutStyle": "Lightweight stacked layout with calm spacing, restrained copy, and a clean hierarchy for products and actions."
+    },
+    "generationRules": {
+      "must": [
+        "Keep the palette airy and breathable with natural green accents.",
+        "Use clean card separation rather than heavy borders or glossy effects.",
+        "Preserve a calm, lifestyle-first reading rhythm."
+      ],
+      "avoid": [
+        "no overly saturated promo red",
+        "no metallic luxury effects",
+        "no dense dashboard-like information blocks"
+      ]
+    }
+  },
+  {
+    "id": "tone-bright-pop",
+    "label": "明亮上新活力感",
+    "summary": "浅暖底配活力珊瑚橙，明快、上新感强，适合快消零售、美妆、活动页。",
+    "references": ["零售", "美妆", "活动上新"],
+    "displayFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
+    "bodyFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
+    "palette": {
+      "bg": "#FFF8F2",
+      "cardBg": "#FFFFFF",
+      "cardSubtle": "#FFEBDD",
+      "textPrimary": "#2B2118",
+      "textSecondary": "#7A6758",
+      "accent": "#FF7A45"
+    },
+    "theme": "tone_bright_pop",
+    "radius": "20px",
+    "shadow": "0 18px 42px rgba(255, 122, 69, 0.14)",
+    "toneKeywords": ["bright", "pop", "new-arrival", "energetic", "retail", "campaign"],
+    "analysis": {
+      "sourceSummary": "Bright campaign-friendly storefront direction with pale warm neutrals, coral-orange accents, and strong new-arrival energy.",
+      "iconStyle": "Modern compact icons or stickers that feel lively but not childish.",
+      "backgroundStyle": "Clean light backgrounds with vivid coral highlights, promotional flashes, and strong CTA emphasis.",
+      "layoutStyle": "Fast-scanning merchandising layout with energetic hero banners, featured goods, and active campaign blocks."
+    },
+    "generationRules": {
+      "must": [
+        "Use the accent color sparingly but decisively for CTA and new-arrival emphasis.",
+        "Keep campaign energy high without turning the page into a low-end discount wall.",
+        "Support fast browsing with strong visual chunking."
+      ],
+      "avoid": [
+        "no muddy gray overlays",
+        "no dull muted-only palette",
+        "no bargain-basement coupon spam"
+      ]
+    }
+  },
+  {
+    "id": "tone-premium-dark",
+    "label": "深色质感高级感",
+    "summary": "深炭底配金棕点缀，沉稳、精品感强，适合高客单、酒饮、精选零售。",
+    "references": ["酒饮", "精品零售", "高客单"],
+    "displayFont": "'Iowan Old Style', 'Charter', Georgia, serif",
+    "bodyFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
+    "palette": {
+      "bg": "#171719",
+      "cardBg": "#242428",
+      "cardSubtle": "#2E2E33",
+      "textPrimary": "#F6F2EB",
+      "textSecondary": "#B7B0A7",
+      "accent": "#C89B5B"
+    },
+    "theme": "tone_premium_dark",
+    "radius": "18px",
+    "shadow": "0 24px 64px rgba(0, 0, 0, 0.32)",
+    "toneKeywords": ["premium", "dark", "refined", "boutique", "luxury", "editorial"],
+    "analysis": {
+      "sourceSummary": "Dark premium storefront direction with charcoal surfaces, restrained gold-brown accents, and a boutique editorial mood.",
+      "iconStyle": "Minimal refined icons, thin strokes, low count, with more typography-driven sophistication than decorative graphics.",
+      "backgroundStyle": "Deep charcoal background, layered dark cards, warm metallic-brown accent points, and subtle light-on-dark contrast.",
+      "layoutStyle": "Elegant content blocks with controlled density, large hero space, and premium product presentation."
+    },
+    "generationRules": {
+      "must": [
+        "Maintain strong light-on-dark readability and premium spacing.",
+        "Use the accent like jewelry, not like a discount color.",
+        "Let typography and product imagery carry most of the hierarchy."
+      ],
+      "avoid": [
+        "no rainbow accent palette",
+        "no plastic mall-banner sheen",
+        "no overly playful doodle language"
+      ]
+    }
+  },
+  {
+    "id": "tone-soft-lifestyle",
+    "label": "柔和生活方式感",
+    "summary": "柔和米粉棕配日常质感，温和、生活化，适合家居、美护、日用品牌。",
+    "references": ["家居", "美护", "日用品牌"],
+    "displayFont": "'Tiempos Headline', 'Newsreader', 'Iowan Old Style', Georgia, serif",
+    "bodyFont": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
+    "palette": {
+      "bg": "#FAF6F1",
+      "cardBg": "#FFFFFF",
+      "cardSubtle": "#F2E8DE",
+      "textPrimary": "#332A24",
+      "textSecondary": "#84756B",
+      "accent": "#C97C5D"
+    },
+    "theme": "tone_soft_lifestyle",
+    "radius": "24px",
+    "shadow": "0 18px 48px rgba(143, 111, 90, 0.14)",
+    "toneKeywords": ["soft", "lifestyle", "gentle", "daily", "warm", "editorial"],
+    "analysis": {
+      "sourceSummary": "Soft lifestyle storefront direction with warm off-white tones, clay accents, and a calm editorial retail posture.",
+      "iconStyle": "Soft rounded icons or low-contrast marks that feel domestic and approachable.",
+      "backgroundStyle": "Warm off-white page background, soft beige support surfaces, subtle clay accents, and calm material warmth.",
+      "layoutStyle": "Magazine-like blocks with gentle rhythm, warmer photography framing, and lifestyle-first content sequencing."
+    },
+    "generationRules": {
+      "must": [
+        "Keep the page warm, gentle, and editorial instead of hyper-promotional.",
+        "Use materials and product styling that feel daily and tactile.",
+        "Keep cards soft and readable, with moderate radii and low-contrast contrast support colors."
+      ],
+      "avoid": [
+        "no aggressive neon highlights",
+        "no cold monochrome minimalism",
+        "no dense transactional chrome"
+      ]
+    }
+  }
+]

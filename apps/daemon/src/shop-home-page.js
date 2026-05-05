@@ -12,20 +12,27 @@ import {
   validateHomepageSchema,
 } from './lib/homepage-agent-shared.js';
 import {
-  STOREFRONT_PHONE_CHROME,
-  STOREFRONT_STATUS_BATTERY,
-  STOREFRONT_STATUS_SIGNAL_BARS,
-  STOREFRONT_STATUS_WIFI_PATHS,
-} from '../../web/src/storefront/phoneChrome.ts';
+  SHOP_HOME_PAGE_PHONE_CHROME,
+  SHOP_HOME_PAGE_STATUS_BATTERY,
+  SHOP_HOME_PAGE_STATUS_SIGNAL_BARS,
+  SHOP_HOME_PAGE_STATUS_WIFI_PATHS,
+} from '../../web/src/shop-home-page/phoneChrome.ts';
 
-export const STOREFRONT_BRIEF_FILE = 'storefront.brief.json';
-export const STOREFRONT_REQUIREMENTS_FILE = 'storefront.requirements.json';
-export const STOREFRONT_STYLE_GUIDE_FILE = 'storefront.style-guide.json';
-export const STOREFRONT_SCHEMA_FILE = 'storefront.schema.json';
-export const STOREFRONT_SCREEN_FILE = 'storefront.screen.html';
-export const STOREFRONT_PREVIEW_FILE = 'storefront.preview.html';
+export const LEGACY_SHOP_HOME_PAGE_REQUIREMENTS_FILE = 'storefront.requirements.json';
+export const LEGACY_SHOP_HOME_PAGE_STYLE_GUIDE_FILE = 'storefront.style-guide.json';
+export const LEGACY_SHOP_HOME_PAGE_SCHEMA_FILE = 'storefront.schema.json';
+export const LEGACY_SHOP_HOME_PAGE_SCREEN_FILE = 'storefront.screen.html';
+export const LEGACY_SHOP_HOME_PAGE_PREVIEW_FILE = 'storefront.preview.html';
+export const LEGACY_STOREFRONT_BRIEF_FILE = 'storefront.brief.json';
 
-const INTERNAL_STATE_FILE = '.storefront.state.json';
+export const SHOP_HOME_PAGE_BRIEF_FILE = 'shop-home-page.brief.json';
+export const SHOP_HOME_PAGE_REQUIREMENTS_FILE = 'shop-home-page.requirements.json';
+export const SHOP_HOME_PAGE_STYLE_GUIDE_FILE = 'shop-home-page.style-guide.json';
+export const SHOP_HOME_PAGE_SCHEMA_FILE = 'shop-home-page.schema.json';
+export const SHOP_HOME_PAGE_SCREEN_FILE = 'shop-home-page.screen.html';
+export const SHOP_HOME_PAGE_PREVIEW_FILE = 'shop-home-page.preview.html';
+
+const INTERNAL_STATE_FILE = '.shop-home-page.state.json';
 const REQUIREMENTS_TEMPLATE_FILE = path.join('assets', 'requirements.template.json');
 const STYLE_GUIDE_TEMPLATE_FILE = path.join('assets', 'style-guide.template.json');
 const SCHEMA_TEMPLATE_FILE = path.join('assets', 'schema.template.json');
@@ -185,9 +192,9 @@ const USER_ASSETS_LAYOUT_SPECS = {
 
 const USER_ASSETS_PREVIEW_BODY_WIDTH = 311;
 
-const STOREFRONT_TONE_PRESETS = JSON.parse(
+const SHOP_HOME_PAGE_TONE_PRESETS = JSON.parse(
   readFileSync(
-    new URL('../../../packages/contracts/src/storefront/tone-presets.json', import.meta.url),
+    new URL('../../../packages/contracts/src/shop-home-page/tone-presets.json', import.meta.url),
     'utf8',
   ),
 );
@@ -285,8 +292,8 @@ const BAKERY_STYLE_GUIDE_PRESET = {
   },
 };
 
-const STOREFRONT_TONE_STYLE_GUIDE_PRESETS = Object.fromEntries(
-  STOREFRONT_TONE_PRESETS.map((preset) => [
+const SHOP_HOME_PAGE_TONE_STYLE_GUIDE_PRESETS = Object.fromEntries(
+  SHOP_HOME_PAGE_TONE_PRESETS.map((preset) => [
     preset.id,
     {
       version: '1.0',
@@ -332,7 +339,7 @@ const STOREFRONT_TONE_STYLE_GUIDE_PRESETS = Object.fromEntries(
 
 const STYLE_PRESETS = {
   'bakery-handdrawn-cream': BAKERY_STYLE_GUIDE_PRESET,
-  ...STOREFRONT_TONE_STYLE_GUIDE_PRESETS,
+  ...SHOP_HOME_PAGE_TONE_STYLE_GUIDE_PRESETS,
 };
 
 const BAKERY_STYLE_KEYWORDS = [
@@ -416,11 +423,60 @@ function modulePolicyConstraints(moduleType) {
   return {};
 }
 
-export function storefrontSkillDir(projectRoot) {
-  return path.join(projectRoot, 'skills', 'storefront-homepage');
+export function shopHomePageSkillDir(projectRoot) {
+  return path.join(projectRoot, 'skills', 'shop-home-page');
 }
 
-export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
+export async function migrateLegacyStorefrontProjectFiles(projectsRoot, db, projectId) {
+  const projectDir = await ensureProject(projectsRoot, projectId);
+  const renamePairs = [
+    [LEGACY_STOREFRONT_BRIEF_FILE, SHOP_HOME_PAGE_BRIEF_FILE],
+    [LEGACY_SHOP_HOME_PAGE_REQUIREMENTS_FILE, SHOP_HOME_PAGE_REQUIREMENTS_FILE],
+    [LEGACY_SHOP_HOME_PAGE_STYLE_GUIDE_FILE, SHOP_HOME_PAGE_STYLE_GUIDE_FILE],
+    [LEGACY_SHOP_HOME_PAGE_SCHEMA_FILE, SHOP_HOME_PAGE_SCHEMA_FILE],
+    [LEGACY_SHOP_HOME_PAGE_SCREEN_FILE, SHOP_HOME_PAGE_SCREEN_FILE],
+    [LEGACY_SHOP_HOME_PAGE_PREVIEW_FILE, SHOP_HOME_PAGE_PREVIEW_FILE],
+  ];
+
+  for (const [legacyName, nextName] of renamePairs) {
+    const legacyPath = path.join(projectDir, legacyName);
+    const nextPath = path.join(projectDir, nextName);
+    if (await statMaybe(legacyPath)) {
+      if (!(await statMaybe(nextPath))) {
+        await fs.rename(legacyPath, nextPath);
+      }
+    }
+  }
+
+  if (!db?.prepare) return;
+  const row = db.prepare('select metadata_json as metadataJson, skill_id as skillId from projects where id = ?').get(projectId);
+  if (!row) return;
+
+  let nextMetadata = row.metadataJson;
+  try {
+    const parsed =
+      typeof row.metadataJson === 'string'
+        ? JSON.parse(row.metadataJson)
+        : row.metadataJson;
+    if (parsed && parsed.kind === 'storefront') {
+      parsed.kind = 'shopHomePage';
+      nextMetadata = JSON.stringify(parsed);
+    }
+  } catch {
+    /* ignore malformed metadata */
+  }
+
+  const nextSkillId = row.skillId === 'storefront-homepage' ? 'shop-home-page' : row.skillId;
+  if (nextMetadata !== row.metadataJson || nextSkillId !== row.skillId) {
+    db.prepare('update projects set metadata_json = ?, skill_id = ? where id = ?').run(
+      nextMetadata ?? null,
+      nextSkillId ?? null,
+      projectId,
+    );
+  }
+}
+
+export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const templates = await loadSkillTemplates(skillRoot);
   await ensureStorefrontSeedFiles(projectDir, templates);
@@ -432,9 +488,9 @@ export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
     runtimeState,
     files,
   ] = await Promise.all([
-    readTextMaybe(path.join(projectDir, STOREFRONT_REQUIREMENTS_FILE)),
-    readTextMaybe(path.join(projectDir, STOREFRONT_STYLE_GUIDE_FILE)),
-    readTextMaybe(path.join(projectDir, STOREFRONT_SCHEMA_FILE)),
+    readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_REQUIREMENTS_FILE)),
+    readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE)),
+    readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE)),
     readRuntimeState(projectDir),
     listFiles(projectsRoot, projectId),
   ]);
@@ -455,7 +511,7 @@ export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
   const validationErrors = schema
     ? validateStorefrontSchema(schema, requirements)
     : schemaTextFromFile && schemaTextFromFile.trim()
-      ? ['storefront.schema.json must be valid JSON.']
+      ? ['shop-home-page.schema.json must be valid JSON.']
       : [];
 
   await ensurePreviewArtifacts(
@@ -467,7 +523,7 @@ export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
     styleGuide,
   );
 
-  const previewStat = await statMaybe(path.join(projectDir, STOREFRONT_PREVIEW_FILE));
+  const previewStat = await statMaybe(path.join(projectDir, SHOP_HOME_PAGE_PREVIEW_FILE));
   const previewUpdatedAt = previewStat?.mtimeMs ?? null;
   const derivedStatus = deriveStatus(schema, validationErrors, runtimeState.status);
 
@@ -479,10 +535,10 @@ export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
     styleGuideText,
     schema,
     schemaText,
-    previewFileName: STOREFRONT_PREVIEW_FILE,
-    previewUrl: `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(STOREFRONT_PREVIEW_FILE)}`,
-    screenFileName: STOREFRONT_SCREEN_FILE,
-    screenUrl: `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(STOREFRONT_SCREEN_FILE)}`,
+    previewFileName: SHOP_HOME_PAGE_PREVIEW_FILE,
+    previewUrl: `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(SHOP_HOME_PAGE_PREVIEW_FILE)}`,
+    screenFileName: SHOP_HOME_PAGE_SCREEN_FILE,
+    screenUrl: `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(SHOP_HOME_PAGE_SCREEN_FILE)}`,
     previewUpdatedAt,
     files,
     logs: Array.isArray(runtimeState.logs) ? runtimeState.logs : [],
@@ -491,13 +547,13 @@ export async function loadStorefrontState(projectsRoot, projectId, skillRoot) {
   };
 }
 
-export async function applyStorefrontSchemaText(projectsRoot, projectId, skillRoot, schemaText) {
+export async function applyShopHomePageSchemaText(projectsRoot, projectId, skillRoot, schemaText) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const requirements = await readRequirementsForProject(projectDir);
   const styleGuide = await readStyleGuideForProject(projectDir, requirements);
   const raw = tryParseJson(schemaText);
   if (!isPlainObject(raw)) {
-    const err = new Error('storefront.schema.json must be valid JSON.');
+    const err = new Error('shop-home-page.schema.json must be valid JSON.');
     err.statusCode = 422;
     throw err;
   }
@@ -511,13 +567,13 @@ export async function applyStorefrontSchemaText(projectsRoot, projectId, skillRo
   }
 
   await persistSchema(projectDir, projectId, normalized, requirements, styleGuide);
-  await writeRuntimeState(projectDir, 'schema-ready', 'info', 'storefront.schema.json applied and preview recompiled.');
-  return loadStorefrontState(projectsRoot, projectId, skillRoot);
+  await writeRuntimeState(projectDir, 'schema-ready', 'info', 'shop-home-page.schema.json applied and preview recompiled.');
+  return loadShopHomePageState(projectsRoot, projectId, skillRoot);
 }
 
-export async function clearSchemaImageSlot(projectsRoot, projectId, fileName) {
+export async function clearShopHomePageSchemaImageSlot(projectsRoot, projectId, fileName) {
   const projectDir = await ensureProject(projectsRoot, projectId);
-  const schemaPath = path.join(projectDir, STOREFRONT_SCHEMA_FILE);
+  const schemaPath = path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE);
   const schemaText = await readTextMaybe(schemaPath);
   const schema = tryParseJson(schemaText);
   if (!isPlainObject(schema) || !Array.isArray(schema.modules)) return;
@@ -554,15 +610,15 @@ export async function clearSchemaImageSlot(projectsRoot, projectId, fileName) {
 
 async function ensureStorefrontSeedFiles(projectDir, templates) {
   await writeIfAbsent(
-    path.join(projectDir, STOREFRONT_REQUIREMENTS_FILE),
+    path.join(projectDir, SHOP_HOME_PAGE_REQUIREMENTS_FILE),
     `${templates.requirementsText.trim()}\n`,
   );
   await writeIfAbsent(
-    path.join(projectDir, STOREFRONT_STYLE_GUIDE_FILE),
+    path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE),
     `${templates.styleGuideText.trim()}\n`,
   );
   await writeIfAbsent(
-    path.join(projectDir, STOREFRONT_SCHEMA_FILE),
+    path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE),
     `${templates.schemaText.trim()}\n`,
   );
 }
@@ -610,12 +666,12 @@ function buildDefaultStyleGuideTemplate() {
 }
 
 async function readRequirementsForProject(projectDir) {
-  const text = await readTextMaybe(path.join(projectDir, STOREFRONT_REQUIREMENTS_FILE));
+  const text = await readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_REQUIREMENTS_FILE));
   return coerceRequirements(tryParseJson(text));
 }
 
 async function readStyleGuideForProject(projectDir, requirements) {
-  const text = await readTextMaybe(path.join(projectDir, STOREFRONT_STYLE_GUIDE_FILE));
+  const text = await readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE));
   const { styleGuide } = await loadStyleGuideForProject(projectDir, requirements, text, { syncFile: true });
   return styleGuide;
 }
@@ -625,7 +681,7 @@ async function loadStyleGuideForProject(projectDir, requirements, styleGuideText
   const nextText = `${JSON.stringify(toPublicStyleGuide(styleGuide), null, 2)}\n`;
   if (options.syncFile) {
     await writeTextIfChanged(
-      path.join(projectDir, STOREFRONT_STYLE_GUIDE_FILE),
+      path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE),
       nextText,
     );
   }
@@ -1124,7 +1180,7 @@ function createSeedSchema(requirements, styleGuide) {
   );
 
   return {
-    page_id: 'storefront_homepage',
+    page_id: 'shop_home_page',
     version: '1.0.0',
     layout_mode: 'overlay',
     design_context: designContext,
@@ -1629,7 +1685,7 @@ function normalizeStorefrontSchema(input, requirements, styleGuide) {
     .filter(Boolean);
 
   return {
-    page_id: stringOr(source.page_id, 'storefront_homepage'),
+    page_id: stringOr(source.page_id, 'shop_home_page'),
     version: stringOr(source.version, '1.0.0'),
     layout_mode: source.layout_mode === 'flow' ? 'flow' : 'overlay',
     design_context: designContext,
@@ -2057,17 +2113,17 @@ async function ensurePreviewArtifacts(projectDir, projectId, schema, requirement
     validationErrors,
   });
   await writeTextIfChanged(
-    path.join(projectDir, STOREFRONT_SCREEN_FILE),
+    path.join(projectDir, SHOP_HOME_PAGE_SCREEN_FILE),
     screenHtml,
   );
-  const screenStat = await statMaybe(path.join(projectDir, STOREFRONT_SCREEN_FILE));
+  const screenStat = await statMaybe(path.join(projectDir, SHOP_HOME_PAGE_SCREEN_FILE));
   const previewHtml = compileStorefrontPreview({
     projectId,
     previewUpdatedAt: screenStat?.mtimeMs ?? Date.now(),
     designContext: schema?.design_context ?? resolveDesignContextBase(styleGuide, requirements),
   });
   await writeTextIfChanged(
-    path.join(projectDir, STOREFRONT_PREVIEW_FILE),
+    path.join(projectDir, SHOP_HOME_PAGE_PREVIEW_FILE),
     previewHtml,
   );
 }
@@ -2075,7 +2131,7 @@ async function ensurePreviewArtifacts(projectDir, projectId, schema, requirement
 async function persistSchema(projectDir, projectId, schema, requirements, styleGuide) {
   await Promise.all([
     fs.writeFile(
-      path.join(projectDir, STOREFRONT_SCHEMA_FILE),
+      path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE),
       `${JSON.stringify(schema, null, 2)}\n`,
       'utf8',
     ),
@@ -2084,7 +2140,7 @@ async function persistSchema(projectDir, projectId, schema, requirements, styleG
 }
 
 function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }) {
-  const screenPath = `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(STOREFRONT_SCREEN_FILE)}?v=${Math.round(previewUpdatedAt)}`;
+  const screenPath = `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(SHOP_HOME_PAGE_SCREEN_FILE)}?v=${Math.round(previewUpdatedAt)}`;
   const bg = stringOr(designContext?.color_palette?.bg, DEFAULT_DESIGN_CONTEXT.color_palette.bg);
   const accent = stringOr(designContext?.color_palette?.accent, DEFAULT_DESIGN_CONTEXT.color_palette.accent);
   const text = stringOr(designContext?.color_palette?.text_primary, DEFAULT_DESIGN_CONTEXT.color_palette.text_primary);
@@ -2187,12 +2243,12 @@ function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }
         inset: 0 0 auto;
         z-index: 6;
         pointer-events: none;
-        padding: ${STOREFRONT_PHONE_CHROME.statusBarPaddingTop}px ${STOREFRONT_PHONE_CHROME.statusBarPaddingX}px 0;
+        padding: ${SHOP_HOME_PAGE_PHONE_CHROME.statusBarPaddingTop}px ${SHOP_HOME_PAGE_PHONE_CHROME.statusBarPaddingX}px 0;
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        font-size: ${STOREFRONT_PHONE_CHROME.statusBarFontSize}px;
-        line-height: ${STOREFRONT_PHONE_CHROME.statusBarLineHeight}px;
+        font-size: ${SHOP_HOME_PAGE_PHONE_CHROME.statusBarFontSize}px;
+        line-height: ${SHOP_HOME_PAGE_PHONE_CHROME.statusBarLineHeight}px;
         font-weight: 600;
         letter-spacing: -0.01em;
         color: ${text};
@@ -2200,7 +2256,7 @@ function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }
       .preview-statusbar__right {
         display: inline-flex;
         align-items: center;
-        gap: ${STOREFRONT_PHONE_CHROME.statusBarGap}px;
+        gap: ${SHOP_HOME_PAGE_PHONE_CHROME.statusBarGap}px;
       }
       .preview-statusbar__right svg {
         display: block;
@@ -2223,7 +2279,7 @@ function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }
         left: 0;
         right: 0;
         bottom: 0;
-        height: ${STOREFRONT_PHONE_CHROME.homeIndicatorHeight}px;
+        height: ${SHOP_HOME_PAGE_PHONE_CHROME.homeIndicatorHeight}px;
         z-index: 7;
         pointer-events: none;
       }
@@ -2231,9 +2287,9 @@ function compileStorefrontPreview({ projectId, previewUpdatedAt, designContext }
         content: "";
         position: absolute;
         left: 50%;
-        bottom: ${STOREFRONT_PHONE_CHROME.homeIndicatorBottom}px;
+        bottom: ${SHOP_HOME_PAGE_PHONE_CHROME.homeIndicatorBottom}px;
         transform: translateX(-50%);
-        width: ${STOREFRONT_PHONE_CHROME.homeIndicatorWidth}px;
+        width: ${SHOP_HOME_PAGE_PHONE_CHROME.homeIndicatorWidth}px;
         height: 5px;
         border-radius: 999px;
         background: #1a1916;
@@ -2358,7 +2414,7 @@ function compileStorefrontScreen({ projectId, schema, requirements, validationEr
       .sf-capsule-wrap {
         display: flex;
         justify-content: flex-end;
-        padding: ${STOREFRONT_PHONE_CHROME.capsuleOffsetTop}px ${STOREFRONT_PHONE_CHROME.capsulePaddingX}px 0;
+        padding: ${SHOP_HOME_PAGE_PHONE_CHROME.capsuleOffsetTop}px ${SHOP_HOME_PAGE_PHONE_CHROME.capsulePaddingX}px 0;
       }
       .sf-mini-capsule {
         width: 84px;
@@ -3009,13 +3065,13 @@ function renderGenericPendingImageMark(label = '图片待生成', compact = fals
 
 function renderStatusSignalIcon() {
   return `<svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden="true">
-    ${STOREFRONT_STATUS_SIGNAL_BARS.map((bar) => `<rect x="${bar.x}" y="${bar.y}" width="${bar.width}" height="${bar.height}" rx="${bar.rx}" fill="currentColor" opacity="${bar.opacity}"></rect>`).join('')}
+    ${SHOP_HOME_PAGE_STATUS_SIGNAL_BARS.map((bar) => `<rect x="${bar.x}" y="${bar.y}" width="${bar.width}" height="${bar.height}" rx="${bar.rx}" fill="currentColor" opacity="${bar.opacity}"></rect>`).join('')}
   </svg>`;
 }
 
 function renderStatusWifiIcon() {
   return `<svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden="true">
-    ${STOREFRONT_STATUS_WIFI_PATHS.map((entry) => entry.type === 'circle'
+    ${SHOP_HOME_PAGE_STATUS_WIFI_PATHS.map((entry) => entry.type === 'circle'
       ? `<circle cx="${entry.cx}" cy="${entry.cy}" r="${entry.r}" fill="currentColor"></circle>`
       : `<path d="${entry.d}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>`).join('')}
   </svg>`;
@@ -3023,10 +3079,10 @@ function renderStatusWifiIcon() {
 
 function renderStatusBatteryIcon(className = '') {
   const classAttr = className ? ` class="${className}"` : '';
-  return `<svg${classAttr} viewBox="${STOREFRONT_STATUS_BATTERY.viewBox}" fill="none" aria-hidden="true">
-    <rect x="${STOREFRONT_STATUS_BATTERY.outline.x}" y="${STOREFRONT_STATUS_BATTERY.outline.y}" width="${STOREFRONT_STATUS_BATTERY.outline.width}" height="${STOREFRONT_STATUS_BATTERY.outline.height}" rx="${STOREFRONT_STATUS_BATTERY.outline.rx}" fill="none" stroke="currentColor" stroke-opacity="${STOREFRONT_STATUS_BATTERY.outline.strokeOpacity}"></rect>
-    <rect x="${STOREFRONT_STATUS_BATTERY.nub.x}" y="${STOREFRONT_STATUS_BATTERY.nub.y}" width="${STOREFRONT_STATUS_BATTERY.nub.width}" height="${STOREFRONT_STATUS_BATTERY.nub.height}" rx="${STOREFRONT_STATUS_BATTERY.nub.rx}" fill="currentColor" fill-opacity="${STOREFRONT_STATUS_BATTERY.nub.fillOpacity}"></rect>
-    <rect x="${STOREFRONT_STATUS_BATTERY.fill.x}" y="${STOREFRONT_STATUS_BATTERY.fill.y}" width="${STOREFRONT_STATUS_BATTERY.fill.width}" height="${STOREFRONT_STATUS_BATTERY.fill.height}" rx="${STOREFRONT_STATUS_BATTERY.fill.rx}" fill="currentColor"></rect>
+  return `<svg${classAttr} viewBox="${SHOP_HOME_PAGE_STATUS_BATTERY.viewBox}" fill="none" aria-hidden="true">
+    <rect x="${SHOP_HOME_PAGE_STATUS_BATTERY.outline.x}" y="${SHOP_HOME_PAGE_STATUS_BATTERY.outline.y}" width="${SHOP_HOME_PAGE_STATUS_BATTERY.outline.width}" height="${SHOP_HOME_PAGE_STATUS_BATTERY.outline.height}" rx="${SHOP_HOME_PAGE_STATUS_BATTERY.outline.rx}" fill="none" stroke="currentColor" stroke-opacity="${SHOP_HOME_PAGE_STATUS_BATTERY.outline.strokeOpacity}"></rect>
+    <rect x="${SHOP_HOME_PAGE_STATUS_BATTERY.nub.x}" y="${SHOP_HOME_PAGE_STATUS_BATTERY.nub.y}" width="${SHOP_HOME_PAGE_STATUS_BATTERY.nub.width}" height="${SHOP_HOME_PAGE_STATUS_BATTERY.nub.height}" rx="${SHOP_HOME_PAGE_STATUS_BATTERY.nub.rx}" fill="currentColor" fill-opacity="${SHOP_HOME_PAGE_STATUS_BATTERY.nub.fillOpacity}"></rect>
+    <rect x="${SHOP_HOME_PAGE_STATUS_BATTERY.fill.x}" y="${SHOP_HOME_PAGE_STATUS_BATTERY.fill.y}" width="${SHOP_HOME_PAGE_STATUS_BATTERY.fill.width}" height="${SHOP_HOME_PAGE_STATUS_BATTERY.fill.height}" rx="${SHOP_HOME_PAGE_STATUS_BATTERY.fill.rx}" fill="currentColor"></rect>
   </svg>`;
 }
 
@@ -3625,7 +3681,7 @@ async function runAssetTask(task) {
   }
 }
 
-export function getAssetTaskStatus(projectId) {
+export function getShopHomePageAssetTaskStatus(projectId) {
   const out = [];
   for (const task of assetQueue.tasks.values()) {
     if (task.projectId !== projectId) continue;
@@ -3642,17 +3698,17 @@ export function cleanupAssetTasks(projectId) {
   }
 }
 
-export async function enqueueAssetTasks(projectsRoot, projectId, skillRoot, options = {}) {
+export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, skillRoot, options = {}) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const [requirements, schemaText] = await Promise.all([
     readRequirementsForProject(projectDir),
-    readTextMaybe(path.join(projectDir, STOREFRONT_SCHEMA_FILE)),
+    readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE)),
   ]);
   const styleGuide = await readStyleGuideForProject(projectDir, requirements);
 
   const raw = tryParseJson(schemaText);
   if (!isPlainObject(raw)) {
-    const err = new Error('Generate a valid storefront.schema.json before generating assets.');
+    const err = new Error('Generate a valid shop-home-page.schema.json before generating assets.');
     err.statusCode = 422;
     throw err;
   }
@@ -3668,7 +3724,7 @@ export async function enqueueAssetTasks(projectsRoot, projectId, skillRoot, opti
   const collected = collectAssetTasks(schema, styleGuide, Boolean(options.forceRegenerate));
   if (collected.length === 0) {
     await writeRuntimeState(projectDir, 'assets-ready', 'info', 'No pending storefront image slots required generation.');
-    return { tasks: [], state: await loadStorefrontState(projectsRoot, projectId, skillRoot) };
+    return { tasks: [], state: await loadShopHomePageState(projectsRoot, projectId, skillRoot) };
   }
 
   // Clean up finished tasks for this project before enqueuing new ones
@@ -3706,7 +3762,7 @@ export async function enqueueAssetTasks(projectsRoot, projectId, skillRoot, opti
   // Kick the queue
   queueTryProcess();
 
-  return { tasks: enqueued, state: await loadStorefrontState(projectsRoot, projectId, skillRoot) };
+  return { tasks: enqueued, state: await loadShopHomePageState(projectsRoot, projectId, skillRoot) };
 }
 
 function resolveImageConfig(options) {

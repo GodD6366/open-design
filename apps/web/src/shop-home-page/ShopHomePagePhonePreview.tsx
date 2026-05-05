@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { projectFileUrl } from '../providers/registry';
-import type { StorefrontSchema, StorefrontSchemaModule } from './types';
+import type { ShopHomePageSchema, ShopHomePageSchemaModule } from './types';
 import {
-  STOREFRONT_STATUS_BATTERY,
-  STOREFRONT_STATUS_SIGNAL_BARS,
-  STOREFRONT_STATUS_WIFI_PATHS,
+  SHOP_HOME_PAGE_STATUS_BATTERY,
+  SHOP_HOME_PAGE_STATUS_SIGNAL_BARS,
+  SHOP_HOME_PAGE_STATUS_WIFI_PATHS,
 } from './phoneChrome';
 
 type Props = {
   projectId: string;
-  schema: StorefrontSchema;
+  schema: ShopHomePageSchema;
 };
 
-type DesignContext = StorefrontSchema['design_context'];
+type DesignContext = ShopHomePageSchema['design_context'];
 
 type ImagePromptSchemaLike = {
   content?: {
@@ -71,7 +71,7 @@ type UserAssetsLegacySchemaLike = {
 };
 
 const MODULE_RUNTIME_COPY: Record<
-  StorefrontSchemaModule['type'],
+  ShopHomePageSchemaModule['type'],
   { label: string; alt: string; pendingLabel: string }
 > = {
   top_slider: {
@@ -223,7 +223,7 @@ function stringOr(value: unknown, fallback = '') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
-function moduleTypeLabel(moduleType: StorefrontSchemaModule['type']) {
+function moduleTypeLabel(moduleType: ShopHomePageSchemaModule['type']) {
   return MODULE_RUNTIME_COPY[moduleType]?.label ?? '首页模块';
 }
 
@@ -253,15 +253,15 @@ function blendSuggestion(suggestion: number | undefined, fallback: number, min: 
   return clamp(base, min, max);
 }
 
-function pageWidthFor(schema: StorefrontSchema) {
+function pageWidthFor(schema: ShopHomePageSchema) {
   return clamp(schema.design_context.page_width || 375, 320, 430);
 }
 
-function spacingFor(schema: StorefrontSchema) {
+function spacingFor(schema: ShopHomePageSchema) {
   return clamp(schema.design_context.spacing || 16, 12, 20);
 }
 
-function imageHeightFor(module: StorefrontSchemaModule, index: number, schema: StorefrontSchema) {
+function imageHeightFor(module: ShopHomePageSchemaModule, index: number, schema: ShopHomePageSchema) {
   const width = pageWidthFor(schema);
   const data = module.data as { mode?: string; height?: number };
   const mode = stringOr(data.mode, 'single');
@@ -487,7 +487,7 @@ function resolveUserAssetsEntries(
   });
 }
 
-function userAssetsHeightFor(module: StorefrontSchemaModule, schema: StorefrontSchema) {
+function userAssetsHeightFor(module: ShopHomePageSchemaModule, schema: ShopHomePageSchema) {
   const data = module.data as {
     card_layout?: UserAssetsCardLayoutLike;
     entries?: UserAssetsEntryLike[];
@@ -511,8 +511,8 @@ function userAssetsHeightFor(module: StorefrontSchemaModule, schema: StorefrontS
   return hasEntries || hasBodyImage ? blendSuggestion(data.height, fallback, 124, maxHeight) : fallback;
 }
 
-function resolvePageLayout(schema: StorefrontSchema): StorefrontSchema {
-  const next = JSON.parse(JSON.stringify(schema)) as StorefrontSchema;
+function resolvePageLayout(schema: ShopHomePageSchema): ShopHomePageSchema {
+  const next = JSON.parse(JSON.stringify(schema)) as ShopHomePageSchema;
   next.modules = next.modules.map((module, index, modules) => {
     const previous = index > 0 ? modules[index - 1] : null;
     const spacing = spacingFor(next);
@@ -600,7 +600,7 @@ function buildPendingPalette(designContext: DesignContext): PendingPalette {
   };
 }
 
-function placeholderVariantFor(moduleType: StorefrontSchemaModule['type']): PlaceholderVariant {
+function placeholderVariantFor(moduleType: ShopHomePageSchemaModule['type']): PlaceholderVariant {
   switch (moduleType) {
     case 'top_slider':
       return 'poster';
@@ -735,13 +735,13 @@ function pendingFrameHeight(hasAsset: boolean, height: number) {
   return hasAsset ? undefined : height;
 }
 
-function heroModuleFor(schema: StorefrontSchema) {
+function heroModuleFor(schema: ShopHomePageSchema) {
   const first = schema.modules[0];
   if (!first || first.type !== 'top_slider') return null;
   return first;
 }
 
-function heroHasImage(schema: StorefrontSchema) {
+function heroHasImage(schema: ShopHomePageSchema) {
   const hero = heroModuleFor(schema);
   if (!hero) return false;
   const items = Array.isArray((hero.data as { items?: ImageItemLike[] }).items)
@@ -753,7 +753,7 @@ function heroHasImage(schema: StorefrontSchema) {
 function StatusSignalIcon({ color }: { color: string }) {
   return (
     <svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden>
-      {STOREFRONT_STATUS_SIGNAL_BARS.map((bar) => (
+      {SHOP_HOME_PAGE_STATUS_SIGNAL_BARS.map((bar) => (
         <rect
           key={bar.x}
           x={bar.x}
@@ -772,7 +772,7 @@ function StatusSignalIcon({ color }: { color: string }) {
 function StatusWifiIcon({ color }: { color: string }) {
   return (
     <svg width="16" height="12" viewBox="0 0 18 14" fill="none" aria-hidden>
-      {STOREFRONT_STATUS_WIFI_PATHS.map((entry, index) =>
+      {SHOP_HOME_PAGE_STATUS_WIFI_PATHS.map((entry, index) =>
         entry.type === 'circle' ? (
           <circle key={`circle-${index}`} cx={entry.cx} cy={entry.cy} r={entry.r} fill={color} />
         ) : (
@@ -793,35 +793,35 @@ function StatusBatteryIcon({ color }: { color: string }) {
   return (
     <svg
       className="storefront-phone-battery-icon"
-      viewBox={STOREFRONT_STATUS_BATTERY.viewBox}
+      viewBox={SHOP_HOME_PAGE_STATUS_BATTERY.viewBox}
       fill="none"
       aria-hidden
     >
       <rect
-        x={STOREFRONT_STATUS_BATTERY.outline.x}
-        y={STOREFRONT_STATUS_BATTERY.outline.y}
-        width={STOREFRONT_STATUS_BATTERY.outline.width}
-        height={STOREFRONT_STATUS_BATTERY.outline.height}
-        rx={STOREFRONT_STATUS_BATTERY.outline.rx}
+        x={SHOP_HOME_PAGE_STATUS_BATTERY.outline.x}
+        y={SHOP_HOME_PAGE_STATUS_BATTERY.outline.y}
+        width={SHOP_HOME_PAGE_STATUS_BATTERY.outline.width}
+        height={SHOP_HOME_PAGE_STATUS_BATTERY.outline.height}
+        rx={SHOP_HOME_PAGE_STATUS_BATTERY.outline.rx}
         fill="none"
         stroke={color}
-        strokeOpacity={STOREFRONT_STATUS_BATTERY.outline.strokeOpacity}
+        strokeOpacity={SHOP_HOME_PAGE_STATUS_BATTERY.outline.strokeOpacity}
       />
       <rect
-        x={STOREFRONT_STATUS_BATTERY.nub.x}
-        y={STOREFRONT_STATUS_BATTERY.nub.y}
-        width={STOREFRONT_STATUS_BATTERY.nub.width}
-        height={STOREFRONT_STATUS_BATTERY.nub.height}
-        rx={STOREFRONT_STATUS_BATTERY.nub.rx}
+        x={SHOP_HOME_PAGE_STATUS_BATTERY.nub.x}
+        y={SHOP_HOME_PAGE_STATUS_BATTERY.nub.y}
+        width={SHOP_HOME_PAGE_STATUS_BATTERY.nub.width}
+        height={SHOP_HOME_PAGE_STATUS_BATTERY.nub.height}
+        rx={SHOP_HOME_PAGE_STATUS_BATTERY.nub.rx}
         fill={color}
-        fillOpacity={STOREFRONT_STATUS_BATTERY.nub.fillOpacity}
+        fillOpacity={SHOP_HOME_PAGE_STATUS_BATTERY.nub.fillOpacity}
       />
       <rect
-        x={STOREFRONT_STATUS_BATTERY.fill.x}
-        y={STOREFRONT_STATUS_BATTERY.fill.y}
-        width={STOREFRONT_STATUS_BATTERY.fill.width}
-        height={STOREFRONT_STATUS_BATTERY.fill.height}
-        rx={STOREFRONT_STATUS_BATTERY.fill.rx}
+        x={SHOP_HOME_PAGE_STATUS_BATTERY.fill.x}
+        y={SHOP_HOME_PAGE_STATUS_BATTERY.fill.y}
+        width={SHOP_HOME_PAGE_STATUS_BATTERY.fill.width}
+        height={SHOP_HOME_PAGE_STATUS_BATTERY.fill.height}
+        rx={SHOP_HOME_PAGE_STATUS_BATTERY.fill.rx}
         fill={color}
       />
     </svg>
@@ -1229,7 +1229,7 @@ function PreviewFrame({
 }: {
   projectId: string;
   item: ImageItemLike | undefined;
-  moduleType: StorefrontSchemaModule['type'];
+  moduleType: ShopHomePageSchemaModule['type'];
   designContext: DesignContext;
 }) {
   if (!item) {
@@ -1276,7 +1276,7 @@ function ImageAdModule({
   designContext,
 }: {
   projectId: string;
-  module: StorefrontSchemaModule;
+  module: ShopHomePageSchemaModule;
   designContext: DesignContext;
 }) {
   const data = (module.data ?? {}) as {
@@ -1466,7 +1466,7 @@ function UserAssetsModule({
   designContext,
 }: {
   projectId: string;
-  module: StorefrontSchemaModule;
+  module: ShopHomePageSchemaModule;
   designContext: DesignContext;
 }) {
   const data = (module.data ?? {}) as {
@@ -1612,7 +1612,7 @@ function ModuleRenderer({
   designContext,
 }: {
   projectId: string;
-  module: StorefrontSchemaModule;
+  module: ShopHomePageSchemaModule;
   designContext: DesignContext;
 }) {
   const layout = module.layout ?? {};
@@ -1637,7 +1637,7 @@ function ModuleRenderer({
   );
 }
 
-export function StorefrontPhonePreview({ projectId, schema }: Props) {
+export function ShopHomePagePhonePreview({ projectId, schema }: Props) {
   const resolved = resolvePageLayout(schema);
   const context = resolved.design_context;
   const scrollRef = useRef<HTMLDivElement | null>(null);

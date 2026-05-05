@@ -4,7 +4,8 @@ import type { CreateInput } from './components/NewProjectPanel';
 import { PetOverlay } from './components/pet/PetOverlay';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
-import { StorefrontProjectView } from './components/StorefrontProjectView';
+import { ShopHomePageProjectView } from './components/ShopHomePageProjectView';
+import { shouldRouteToShopHomePageView } from './branch/shop-home-config';
 import {
   SettingsDialog,
   type SettingsSection,
@@ -45,7 +46,6 @@ import type {
   PromptTemplateSummary,
   SkillSummary,
 } from './types';
-import { isShopHomePageKind } from './types';
 
 export function App() {
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
@@ -478,8 +478,8 @@ export function App() {
   return (
     <>
       {activeProject ? (
-        isShopHomePageKind(activeProject.metadata?.kind) ? (
-          <StorefrontProjectView
+        shouldRouteToShopHomePageView(activeProject) ? (
+          <ShopHomePageProjectView
             key={activeProject.id}
             project={activeProject}
             routeFileName={route.kind === 'project' ? route.fileName : null}

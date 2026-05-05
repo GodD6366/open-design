@@ -4,12 +4,12 @@ import {
 } from '../types';
 import type { DesignSystemDetail, ProjectMetadata, SkillDetail } from '../types';
 import {
-  renderStorefrontToneFormBody,
-  renderStorefrontToneSpecBlock,
-  storefrontTonePresetIds,
-} from './storefront-tones';
+  renderShopHomePageToneFormBody,
+  renderShopHomePageToneSpecBlock,
+  shopHomePageTonePresetIds,
+} from './shop-home-page-tones';
 
-const STOREFRONT_VISUAL_FORM = JSON.stringify(
+const SHOP_HOME_PAGE_VISUAL_FORM = JSON.stringify(
   {
     description:
       '再确认色调搭配和视觉参考。支持直接上传参考图、复用项目里已有图片，或粘贴图片直链转存到本地。',
@@ -46,24 +46,24 @@ const STOREFRONT_VISUAL_FORM = JSON.stringify(
         placeholder:
           '例如：沿用手绘涂鸦 icon、奶油纸感背景、超大标题海报、左大右二功能卡布局',
       },
-      ...JSON.parse(renderStorefrontToneFormBody()).questions,
+      ...JSON.parse(renderShopHomePageToneFormBody()).questions,
     ],
   },
   null,
   2,
 );
 
-type StorefrontPromptInput = {
+type ShopHomePagePromptInput = {
   skill?: SkillDetail | null;
   designSystem?: DesignSystemDetail | null;
   metadata?: ProjectMetadata | undefined;
 };
 
-export function composeStorefrontSystemPrompt({
+export function composeShopHomePageSystemPrompt({
   skill,
   designSystem,
   metadata,
-}: StorefrontPromptInput): string {
+}: ShopHomePagePromptInput): string {
   const parts: string[] = [
     '# Storefront Runtime',
     '',
@@ -75,8 +75,8 @@ export function composeStorefrontSystemPrompt({
     '- Never emit `<artifact>`.',
     '- Never write `index.html`.',
     '- Never write preview HTML or any phone frame markup.',
-    '- The primary deliverables are `storefront.requirements.json` and `storefront.schema.json`.',
-    '- When the project has an explicit visual template or reference screenshot, also keep `storefront.style-guide.json` in sync.',
+    '- The primary deliverables are `shop-home-page.requirements.json` and `shop-home-page.schema.json`.',
+    '- When the project has an explicit visual template or reference screenshot, also keep `shop-home-page.style-guide.json` in sync.',
     '- When file writes are done, answer with at most one short Chinese sentence.',
     '',
     '## Conversation workflow',
@@ -85,8 +85,8 @@ export function composeStorefrontSystemPrompt({
     '   - If the opening turn already includes local reference images that are available in the current daemon run, analyze them before emitting the form.',
     '   - Reflect that analysis directly in the form defaults: infer the default `本次需要的模块` selection and prefill `参考图模块分析` with ordered module suggestions from top to bottom.',
     '2. After the user answers that requirements form, your next assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-visual" title="视觉澄清">` block + stop.',
-    '3. After the user answers the visual form, read any referenced project files if needed, then write `storefront.requirements.json` and `storefront.schema.json` in place.',
-    '4. If the user provides a reusable template, template screenshot, or attached visual reference, also update `storefront.style-guide.json` so later schema edits and asset generation keep the same style source.',
+    '3. After the user answers the visual form, read any referenced project files if needed, then write `shop-home-page.requirements.json` and `shop-home-page.schema.json` in place.',
+    '4. If the user provides a reusable template, template screenshot, or attached visual reference, also update `shop-home-page.style-guide.json` so later schema edits and asset generation keep the same style source.',
     '5. If the user later asks for edits, update those same project-local JSON files. Do not switch to an HTML-first workflow.',
     '',
     'The chat UI serializes answered forms as normal user text in this shape:',
@@ -127,15 +127,15 @@ export function composeStorefrontSystemPrompt({
     '',
     '## Turn-2 form body',
     '',
-    '<question-form id="storefront-visual" title="视觉澄清">',
-    STOREFRONT_VISUAL_FORM,
+    '<question-form id="shop-home-page-visual" title="视觉澄清">',
+    SHOP_HOME_PAGE_VISUAL_FORM,
     '</question-form>',
     '',
     'After `</question-form>`, stop immediately.',
     '',
     '## Requirements file contract',
     '',
-    '`storefront.requirements.json` must match this stable shape:',
+    '`shop-home-page.requirements.json` must match this stable shape:',
     '',
     '```json',
     '{',
@@ -190,7 +190,7 @@ export function composeStorefrontSystemPrompt({
     '',
     '## Style guide sidecar',
     '',
-    '`storefront.style-guide.json` is an optional but preferred sidecar when the visual direction comes from a concrete template, screenshot, or reusable industry preset.',
+    '`shop-home-page.style-guide.json` is an optional but preferred sidecar when the visual direction comes from a concrete template, screenshot, or reusable industry preset.',
     '',
     '```json',
     '{',
@@ -220,7 +220,7 @@ export function composeStorefrontSystemPrompt({
     '',
     '## Schema file contract',
     '',
-    '`storefront.schema.json` must match the workspace homepage schema:',
+    '`shop-home-page.schema.json` must match the workspace homepage schema:',
     '',
     '```json',
     '{',
@@ -312,7 +312,7 @@ export function composeStorefrontSystemPrompt({
     '- image behavior: bakery product imagery can be real photography, but overlays may use doodle crowns / arrows / handwritten captions. Avoid glossy mall-banner rendering.',
     '- avoid: neon gradients, tech UI chrome, dense coupon walls, generic e-commerce icon sets, corporate flat illustration.',
     '',
-    renderStorefrontToneSpecBlock(),
+    renderShopHomePageToneSpecBlock(),
   ];
 
   if (isShopHomePageKind(metadata?.kind)) {
@@ -343,7 +343,7 @@ export function composeStorefrontSystemPrompt({
   parts.push(
     '## Storefront tone preset ids',
     '',
-    storefrontTonePresetIds().map((presetId: string) => `- ${presetId}`).join('\n'),
+    shopHomePageTonePresetIds().map((presetId: string) => `- ${presetId}`).join('\n'),
   );
 
   return parts.join('\n\n');

@@ -1,9 +1,9 @@
 ---
-name: storefront-homepage
+name: shop-home-page
 description: |
   Chat-driven storefront homepage planning for OD. Use when the task is a
   merchant / shop homepage that must end in workspace-compatible
-  `storefront.requirements.json` and `storefront.schema.json`, with mobile
+  `shop-home-page.requirements.json` and `shop-home-page.schema.json`, with mobile
   preview compiled by the host.
 triggers:
   - "storefront homepage"
@@ -16,7 +16,7 @@ od:
   scenario: marketing
   preview:
     type: shopHomePage
-    entry: storefront.preview.html
+    entry: shop-home-page.preview.html
   design_system:
     requires: false
   default_for: shopHomePage
@@ -29,21 +29,21 @@ This skill is **schema-first** and **chat-driven**.
 
 The canonical outputs are:
 
-- `storefront.requirements.json`
-- `storefront.style-guide.json`
-- `storefront.schema.json`
+- `shop-home-page.requirements.json`
+- `shop-home-page.style-guide.json`
+- `shop-home-page.schema.json`
 
 The host is responsible for:
 
-- compiling `storefront.screen.html`
-- compiling `storefront.preview.html`
+- compiling `shop-home-page.screen.html`
+- compiling `shop-home-page.preview.html`
 - rendering the iPhone frame
 - generating images later
 
 ## Resource map
 
 ```text
-storefront-homepage/
+shop-home-page/
 ├── SKILL.md
 ├── assets/
 │   ├── requirements.template.json

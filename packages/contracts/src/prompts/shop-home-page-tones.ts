@@ -1,4 +1,4 @@
-import TONE_PRESETS_RAW from '../storefront/tone-presets.json' with { type: 'json' };
+import TONE_PRESETS_RAW from '../shop-home-page/tone-presets.json' with { type: 'json' };
 
 export interface StorefrontTonePreset {
   id: string;
@@ -31,14 +31,14 @@ export interface StorefrontTonePreset {
   };
 }
 
-const STOREFRONT_TONE_PRESETS = TONE_PRESETS_RAW as StorefrontTonePreset[];
+const SHOP_HOME_PAGE_TONE_PRESETS = TONE_PRESETS_RAW as StorefrontTonePreset[];
 
-export function getStorefrontTonePresets(): StorefrontTonePreset[] {
-  return STOREFRONT_TONE_PRESETS;
+export function getShopHomePageTonePresets(): StorefrontTonePreset[] {
+  return SHOP_HOME_PAGE_TONE_PRESETS;
 }
 
-export function renderStorefrontToneFormBody(): string {
-  const cards = STOREFRONT_TONE_PRESETS.map((preset) => ({
+export function renderShopHomePageToneFormBody(): string {
+  const cards = SHOP_HOME_PAGE_TONE_PRESETS.map((preset) => ({
     id: preset.id,
     label: preset.label,
     mood: preset.summary,
@@ -64,7 +64,7 @@ export function renderStorefrontToneFormBody(): string {
           id: 'tone_palette',
           label: '色调搭配',
           type: 'direction-cards',
-          options: STOREFRONT_TONE_PRESETS.map((preset) => preset.id),
+          options: SHOP_HOME_PAGE_TONE_PRESETS.map((preset) => preset.id),
           cards,
         },
         {
@@ -80,19 +80,19 @@ export function renderStorefrontToneFormBody(): string {
   );
 }
 
-export function renderStorefrontToneSpecBlock(): string {
+export function renderShopHomePageToneSpecBlock(): string {
   const lines: string[] = [
     '## Storefront tone presets',
     '',
-    'When the storefront visual form includes a `tone_palette` id, treat it as a deterministic preset. Write its label into `storefront.requirements.json.style.tone`, write its accent into `style.primary_color` unless the user provided `accent_override`, write the preset id into `storefront.style-guide.json.preset_id`, and carry its `toneKeywords` into `storefront.style-guide.json.analysis.tone_keywords`.',
+    'When the shop-home-page visual form includes a `tone_palette` id, treat it as a deterministic preset. Write its label into `shop-home-page.requirements.json.style.tone`, write its accent into `style.primary_color` unless the user provided `accent_override`, write the preset id into `shop-home-page.style-guide.json.preset_id`, and carry its `toneKeywords` into `shop-home-page.style-guide.json.analysis.tone_keywords`.',
     '',
     'If `brand_reference_mode` says the user already has a brand/template reference, the reference images and brand notes outrank the tone preset. In that case, keep the reference-led style guide, but you may still use the chosen tone as a soft color preference.',
     '',
-    'If the visual form contains `reference_images`, those values are already project-local filenames. Copy them into `storefront.style-guide.json.reference_images` verbatim. Never keep remote image URLs there.',
+    'If the visual form contains `reference_images`, those values are already project-local filenames. Copy them into `shop-home-page.style-guide.json.reference_images` verbatim. Never keep remote image URLs there.',
     '',
   ];
 
-  for (const preset of STOREFRONT_TONE_PRESETS) {
+  for (const preset of SHOP_HOME_PAGE_TONE_PRESETS) {
     lines.push(`### ${preset.label}  \`(id: ${preset.id})\``);
     lines.push('');
     lines.push(`**Summary:** ${preset.summary}`);
@@ -131,6 +131,6 @@ export function renderStorefrontToneSpecBlock(): string {
   return lines.join('\n');
 }
 
-export function storefrontTonePresetIds(): string[] {
-  return STOREFRONT_TONE_PRESETS.map((preset) => preset.id);
+export function shopHomePageTonePresetIds(): string[] {
+  return SHOP_HOME_PAGE_TONE_PRESETS.map((preset) => preset.id);
 }

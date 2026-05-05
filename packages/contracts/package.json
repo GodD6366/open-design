@@ -9,13 +9,13 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./storefront": {
-      "types": "./src/prompts/storefront.ts",
-      "default": "./src/prompts/storefront.ts"
+    "./shop-home-page": {
+      "types": "./src/prompts/shop-home-page.ts",
+      "default": "./src/prompts/shop-home-page.ts"
     },
-    "./storefront-tones": {
-      "types": "./src/prompts/storefront-tones.ts",
-      "default": "./src/prompts/storefront-tones.ts"
+    "./shop-home-page-tones": {
+      "types": "./src/prompts/shop-home-page-tones.ts",
+      "default": "./src/prompts/shop-home-page-tones.ts"
     },
     "./critique": {
       "types": "./src/critique.ts",

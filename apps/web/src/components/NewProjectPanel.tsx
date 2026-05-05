@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getCreateEntryPolicy } from '../branch/shop-home-config';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
@@ -84,7 +85,8 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   other: 'newproj.tabOther',
 };
 
-const CREATE_TABS: CreateTab[] = [SHOP_HOMEPAGE_KIND];
+const CREATE_ENTRY_POLICY = getCreateEntryPolicy();
+const CREATE_TABS: CreateTab[] = CREATE_ENTRY_POLICY.visibleTabs;
 
 export function NewProjectPanel({
   skills,
@@ -100,7 +102,7 @@ export function NewProjectPanel({
   const t = useT();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
-  const [tab, setTab] = useState<CreateTab>(SHOP_HOMEPAGE_KIND);
+  const [tab, setTab] = useState<CreateTab>(CREATE_ENTRY_POLICY.defaultTab);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [tabScroll, setTabScroll] = useState({ left: false, right: false });
   const [name, setName] = useState('');

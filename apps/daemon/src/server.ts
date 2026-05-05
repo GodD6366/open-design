@@ -8,7 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { composeSystemPrompt } from './prompts/system.js';
-import { composeStorefrontSystemPrompt } from '@open-design/contracts/storefront';
+import { composeShopHomePageSystemPrompt } from '@open-design/contracts/shop-home-page';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   detectAgents,
@@ -39,15 +39,20 @@ import { loadCraftSections } from './craft.js';
 import { stageActiveSkill } from './cwd-aliases.js';
 import { generateMedia } from './media.js';
 import {
-  applyStorefrontSchemaText,
-  clearSchemaImageSlot,
-  enqueueAssetTasks,
-  getAssetTaskStatus,
-  loadStorefrontState,
-  STOREFRONT_PREVIEW_FILE,
-  STOREFRONT_SCREEN_FILE,
-  storefrontSkillDir,
-} from './storefront.js';
+  applyShopHomePageSchemaText,
+  enqueueShopHomePageAssetTasks,
+  getShopHomePageAssetTaskStatus,
+  loadShopHomePageState,
+  migrateLegacyStorefrontProjectFiles,
+  SHOP_HOME_PAGE_PREVIEW_FILE,
+  SHOP_HOME_PAGE_SCREEN_FILE,
+  shopHomePageSkillDir,
+} from './shop-home-page.js';
+import {
+  isBranchShopHomePageProject,
+  LEGACY_STOREFRONT_KIND,
+  SHOP_HOME_PAGE_KIND,
+} from './branch/shop-home-config.ts';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -136,14 +141,7 @@ export function resolveProjectRoot(moduleDir: string): string {
 
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
-const STOREFRONT_SKILL_DIR = storefrontSkillDir(PROJECT_ROOT);
-const SHOP_HOMEPAGE_KIND = 'shopHomePage';
-const LEGACY_STOREFRONT_KIND = 'storefront';
-
-function isShopHomePageProject(project) {
-  const kind = project?.metadata?.kind;
-  return kind === SHOP_HOMEPAGE_KIND || kind === LEGACY_STOREFRONT_KIND;
-}
+const SHOP_HOME_PAGE_SKILL_DIR = shopHomePageSkillDir(PROJECT_ROOT);
 
 export function normalizeCommentAttachments(input) {
   if (!Array.isArray(input)) return [];
@@ -1766,58 +1764,74 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/storefront/state/:projectId', async (req, res) => {
+  app.get('/api/shop-home-page/state/:projectId', async (req, res) => {
     try {
       const project = getProject(db, req.params.projectId);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
-      if (!isShopHomePageProject(project)) {
+      if (!isBranchShopHomePageProject(project)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
       }
-      const state = await loadStorefrontState(PROJECTS_DIR, req.params.projectId);
+      await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, req.params.projectId);
+      const state = await loadShopHomePageState(
+        PROJECTS_DIR,
+        req.params.projectId,
+        SHOP_HOME_PAGE_SKILL_DIR,
+      );
       res.json({ state });
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
-  app.post('/api/storefront/apply-schema', express.json({ limit: '2mb' }), async (req, res) => {
+  app.post('/api/shop-home-page/apply-schema', express.json({ limit: '2mb' }), async (req, res) => {
     try {
       const { projectId, schemaText } = req.body || {};
       const project = typeof projectId === 'string' ? getProject(db, projectId) : null;
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
-      if (!isShopHomePageProject(project)) {
+      if (!isBranchShopHomePageProject(project)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
       }
       if (typeof schemaText !== 'string') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'schemaText required');
       }
-      await applyStorefrontSchemaText(PROJECTS_DIR, projectId, schemaText);
-      const state = await loadStorefrontState(PROJECTS_DIR, projectId);
+      await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, projectId);
+      await applyShopHomePageSchemaText(
+        PROJECTS_DIR,
+        projectId,
+        SHOP_HOME_PAGE_SKILL_DIR,
+        schemaText,
+      );
+      const state = await loadShopHomePageState(
+        PROJECTS_DIR,
+        projectId,
+        SHOP_HOME_PAGE_SKILL_DIR,
+      );
       res.json({ state });
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
-  app.post('/api/storefront/generate-assets/enqueue', express.json({ limit: '1mb' }), async (req, res) => {
+  app.post('/api/shop-home-page/generate-assets/enqueue', express.json({ limit: '1mb' }), async (req, res) => {
     try {
       const { projectId, forceRegenerate } = req.body || {};
       const project = typeof projectId === 'string' ? getProject(db, projectId) : null;
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
-      if (!isShopHomePageProject(project)) {
+      if (!isBranchShopHomePageProject(project)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
       }
+      await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, projectId);
       const imageConfig = (await readMaskedConfig(RUNTIME_DATA_DIR))?.providers?.openai;
-      const { tasks, state } = await enqueueAssetTasks(
+      const { tasks, state } = await enqueueShopHomePageAssetTasks(
         PROJECTS_DIR,
         projectId,
-        STOREFRONT_SKILL_DIR,
+        SHOP_HOME_PAGE_SKILL_DIR,
         {
           forceRegenerate: Boolean(forceRegenerate),
           imageApiKey: imageConfig?.apiKey,
@@ -1830,16 +1844,17 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
-  app.get('/api/storefront/generate-tasks/:projectId', async (req, res) => {
+  app.get('/api/shop-home-page/generate-tasks/:projectId', async (req, res) => {
     try {
       const project = getProject(db, req.params.projectId);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
-      if (!isShopHomePageProject(project)) {
+      if (!isBranchShopHomePageProject(project)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
       }
-      const tasks = getAssetTaskStatus(PROJECTS_DIR, req.params.projectId);
+      await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, req.params.projectId);
+      const tasks = getShopHomePageAssetTaskStatus(req.params.projectId);
       res.json({ tasks });
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -2404,12 +2419,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
 
-    if (isShopHomePageProject(project)) {
-      const storefrontPrompt = composeStorefrontSystemPrompt({
+    if (isBranchShopHomePageProject(project)) {
+      const shopHomePagePrompt = composeShopHomePageSystemPrompt({
         skill: skillBody
           ? {
-              id: effectiveSkillId ?? 'storefront-homepage',
-              name: skillName ?? 'storefront-homepage',
+              id: effectiveSkillId ?? 'shop-home-page',
+              name: skillName ?? 'shop-home-page',
               description: '',
               triggers: [],
               mode: skillMode ?? SHOP_HOMEPAGE_KIND,
@@ -2434,8 +2449,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         metadata,
       });
       return {
-        prompt: storefrontPrompt,
-        activeSkillDir: activeSkillDir ?? STOREFRONT_SKILL_DIR,
+        prompt: shopHomePagePrompt,
+        activeSkillDir: activeSkillDir ?? SHOP_HOME_PAGE_SKILL_DIR,
       };
     }
 

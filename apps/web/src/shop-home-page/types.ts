@@ -1,6 +1,6 @@
 import type { ProjectFile } from '../types';
 
-export type StorefrontModuleType =
+export type ShopHomePageModuleType =
   | 'top_slider'
   | 'user_assets'
   | 'banner'
@@ -8,19 +8,19 @@ export type StorefrontModuleType =
   | 'shop_info'
   | 'image_ad';
 
-export interface StorefrontModuleSpec {
-  type: StorefrontModuleType;
+export interface ShopHomePageModuleSpec {
+  type: ShopHomePageModuleType;
   content: string;
   itemCount?: number;
   aspectRatio?: string;
 }
 
-export interface StorefrontRequirements {
+export interface ShopHomePageRequirements {
   status: 'needs_confirmation' | 'confirmed';
   source_prompt: string;
-  module_specs: StorefrontModuleSpec[];
-  modules?: StorefrontModuleType[];
-  module_content?: Partial<Record<StorefrontModuleType, string>>;
+  module_specs: ShopHomePageModuleSpec[];
+  modules?: ShopHomePageModuleType[];
+  module_content?: Partial<Record<ShopHomePageModuleType, string>>;
   style: {
     industry: string;
     brand_name: string;
@@ -41,7 +41,7 @@ export interface StorefrontRequirements {
   confirmation_questions?: string[];
 }
 
-export interface StorefrontStyleGuide {
+export interface ShopHomePageStyleGuide {
   version: string;
   preset_id: string;
   reference_images: string[];
@@ -58,9 +58,9 @@ export interface StorefrontStyleGuide {
   };
 }
 
-export interface StorefrontSchemaModule {
+export interface ShopHomePageSchemaModule {
   id: string;
-  type: StorefrontModuleType;
+  type: ShopHomePageModuleType;
   source?: 'system' | 'ai';
   variant?: string;
   layout?: {
@@ -74,7 +74,7 @@ export interface StorefrontSchemaModule {
   data: Record<string, unknown>;
 }
 
-export interface StorefrontSchema {
+export interface ShopHomePageSchema {
   page_id: string;
   version: string;
   layout_mode: 'overlay' | 'flow';
@@ -93,10 +93,10 @@ export interface StorefrontSchema {
     spacing: number;
     page_width: number;
   };
-  modules: StorefrontSchemaModule[];
+  modules: ShopHomePageSchemaModule[];
 }
 
-export interface StorefrontLogEntry {
+export interface ShopHomePageLogEntry {
   at: number;
   level: 'info' | 'error';
   message: string;
@@ -109,13 +109,13 @@ export interface AssetTask {
   error?: string | null;
 }
 
-export interface StorefrontState {
+export interface ShopHomePageState {
   projectId: string;
-  requirements: StorefrontRequirements;
+  requirements: ShopHomePageRequirements;
   requirementsText: string;
-  styleGuide: StorefrontStyleGuide;
+  styleGuide: ShopHomePageStyleGuide;
   styleGuideText: string;
-  schema: StorefrontSchema | null;
+  schema: ShopHomePageSchema | null;
   schemaText: string;
   previewFileName: string | null;
   previewUrl: string | null;
@@ -123,7 +123,7 @@ export interface StorefrontState {
   screenUrl: string | null;
   previewUpdatedAt: number | null;
   files: ProjectFile[];
-  logs: StorefrontLogEntry[];
+  logs: ShopHomePageLogEntry[];
   status: string;
   validationErrors: string[];
 }

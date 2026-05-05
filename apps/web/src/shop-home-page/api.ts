@@ -1,8 +1,8 @@
 import type {
   AssetTask,
-  StorefrontModuleSpec,
-  StorefrontModuleType,
-  StorefrontState,
+  ShopHomePageModuleSpec,
+  ShopHomePageModuleType,
+  ShopHomePageState,
 } from './types';
 
 const DEFAULT_ACTION_BUTTON_SELECTION = ['到店自取', '外卖点单'];
@@ -12,11 +12,11 @@ function normalizeAspectRatio(value: unknown, fallback = '1:1'): string {
 }
 
 function normalizeModuleSpecs(
-  input: StorefrontState['requirements'] | undefined,
-): StorefrontModuleSpec[] {
+  input: ShopHomePageState['requirements'] | undefined,
+): ShopHomePageModuleSpec[] {
   if (Array.isArray(input?.module_specs) && input.module_specs.length > 0) {
     return input.module_specs
-      .filter((spec): spec is StorefrontModuleSpec => Boolean(spec && typeof spec === 'object'))
+      .filter((spec): spec is ShopHomePageModuleSpec => Boolean(spec && typeof spec === 'object'))
       .map((spec) => ({
         type: spec.type,
         content: typeof spec.content === 'string' ? spec.content : '',
@@ -43,12 +43,12 @@ function normalizeModuleSpecs(
   }));
 }
 
-function deriveModules(specs: StorefrontModuleSpec[]): StorefrontModuleType[] {
+function deriveModules(specs: ShopHomePageModuleSpec[]): ShopHomePageModuleType[] {
   return specs.map((spec) => spec.type);
 }
 
-function deriveModuleContent(specs: StorefrontModuleSpec[]): Partial<Record<StorefrontModuleType, string>> {
-  const content: Partial<Record<StorefrontModuleType, string>> = {};
+function deriveModuleContent(specs: ShopHomePageModuleSpec[]): Partial<Record<ShopHomePageModuleType, string>> {
+  const content: Partial<Record<ShopHomePageModuleType, string>> = {};
   specs.forEach((spec) => {
     if (!(spec.type in content)) {
       content[spec.type] = spec.content;
@@ -57,7 +57,7 @@ function deriveModuleContent(specs: StorefrontModuleSpec[]): Partial<Record<Stor
   return content;
 }
 
-function normalizeActionButtons(input: StorefrontState['requirements']['action_buttons'] | undefined) {
+function normalizeActionButtons(input: ShopHomePageState['requirements']['action_buttons'] | undefined) {
   const selected = Array.isArray(input?.selected)
     ? [...new Set(input.selected.filter((value): value is string => typeof value === 'string'))]
     : [];
@@ -71,9 +71,9 @@ function normalizeActionButtons(input: StorefrontState['requirements']['action_b
   return { selected, custom };
 }
 
-function normalizeStorefrontRequirements(
-  input: StorefrontState['requirements'] | undefined,
-): StorefrontState['requirements'] {
+function normalizeShopHomePageRequirements(
+  input: ShopHomePageState['requirements'] | undefined,
+): ShopHomePageState['requirements'] {
   const module_specs = normalizeModuleSpecs(input);
   return {
     status: input?.status === 'confirmed' ? 'confirmed' : 'needs_confirmation',
@@ -101,10 +101,10 @@ function normalizeStorefrontRequirements(
   };
 }
 
-function normalizeStorefrontState(state: StorefrontState): StorefrontState {
+function normalizeShopHomePageState(state: ShopHomePageState): ShopHomePageState {
   return {
     ...state,
-    requirements: normalizeStorefrontRequirements(state?.requirements),
+    requirements: normalizeShopHomePageRequirements(state?.requirements),
     requirementsText: state?.requirementsText ?? '',
     styleGuide: state?.styleGuide ?? {
       version: '1.0',
@@ -153,30 +153,30 @@ async function jsonOrThrow<T>(resp: Response): Promise<T> {
   return await resp.json() as T;
 }
 
-export async function fetchStorefrontState(projectId: string): Promise<StorefrontState> {
-  const resp = await fetch(`/api/storefront/state/${encodeURIComponent(projectId)}`);
-  const json = await jsonOrThrow<{ state: StorefrontState }>(resp);
-  return normalizeStorefrontState(json.state);
+export async function fetchShopHomePageState(projectId: string): Promise<ShopHomePageState> {
+  const resp = await fetch(`/api/shop-home-page/state/${encodeURIComponent(projectId)}`);
+  const json = await jsonOrThrow<{ state: ShopHomePageState }>(resp);
+  return normalizeShopHomePageState(json.state);
 }
 
-export async function applyStorefrontSchema(
+export async function applyShopHomePageSchema(
   projectId: string,
   schemaText: string,
-): Promise<StorefrontState> {
-  const resp = await fetch('/api/storefront/apply-schema', {
+): Promise<ShopHomePageState> {
+  const resp = await fetch('/api/shop-home-page/apply-schema', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId, schemaText }),
   });
-  const json = await jsonOrThrow<{ state: StorefrontState }>(resp);
-  return normalizeStorefrontState(json.state);
+  const json = await jsonOrThrow<{ state: ShopHomePageState }>(resp);
+  return normalizeShopHomePageState(json.state);
 }
 
-export async function enqueueStorefrontAssets(
+export async function enqueueShopHomePageAssets(
   projectId: string,
   forceRegenerate = false,
-): Promise<{ tasks: AssetTask[]; state: StorefrontState }> {
-  const resp = await fetch('/api/storefront/generate-assets/enqueue', {
+): Promise<{ tasks: AssetTask[]; state: ShopHomePageState }> {
+  const resp = await fetch('/api/shop-home-page/generate-assets/enqueue', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -184,14 +184,14 @@ export async function enqueueStorefrontAssets(
       forceRegenerate,
     }),
   });
-  const json = await jsonOrThrow<{ tasks: AssetTask[]; state: StorefrontState }>(resp);
-  return { tasks: json.tasks, state: normalizeStorefrontState(json.state) };
+  const json = await jsonOrThrow<{ tasks: AssetTask[]; state: ShopHomePageState }>(resp);
+  return { tasks: json.tasks, state: normalizeShopHomePageState(json.state) };
 }
 
-export async function fetchStorefrontAssetTasks(
+export async function fetchShopHomePageAssetTasks(
   projectId: string,
 ): Promise<AssetTask[]> {
-  const resp = await fetch(`/api/storefront/generate-tasks/${encodeURIComponent(projectId)}`);
+  const resp = await fetch(`/api/shop-home-page/generate-tasks/${encodeURIComponent(projectId)}`);
   const json = await jsonOrThrow<{ tasks: AssetTask[] }>(resp);
   return json.tasks;
 }

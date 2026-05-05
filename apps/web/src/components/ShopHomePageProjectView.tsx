@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  composeStorefrontSystemPrompt,
-} from '../prompts/storefront';
-import { getStorefrontTonePresets } from '../prompts/storefront-tones';
+  composeShopHomePageSystemPrompt,
+} from '../prompts/shop-home-page';
+import { getShopHomePageTonePresets } from '../prompts/shop-home-page-tones';
 import { streamMessage } from '../providers/anthropic';
 import { streamViaDaemon } from '../providers/daemon';
 import {
@@ -37,60 +37,60 @@ import type {
   SkillSummary,
 } from '../types';
 import {
-  fetchStorefrontState,
-  applyStorefrontSchema,
-  enqueueStorefrontAssets,
-  fetchStorefrontAssetTasks,
-} from '../storefront/api';
-import { StorefrontPhonePreview } from '../storefront/StorefrontPhonePreview';
+  fetchShopHomePageState,
+  applyShopHomePageSchema,
+  enqueueShopHomePageAssets,
+  fetchShopHomePageAssetTasks,
+} from '../shop-home-page/api';
+import { ShopHomePagePhonePreview } from '../shop-home-page/ShopHomePagePhonePreview';
 import {
-  STOREFRONT_PREVIEW_FILE,
-  STOREFRONT_REQUIREMENTS_FILE,
-  STOREFRONT_STYLE_GUIDE_FILE,
-  STOREFRONT_SCHEMA_FILE,
-  STOREFRONT_SCREEN_FILE,
-} from '../storefront/constants';
+  SHOP_HOME_PAGE_PREVIEW_FILE,
+  SHOP_HOME_PAGE_REQUIREMENTS_FILE,
+  SHOP_HOME_PAGE_STYLE_GUIDE_FILE,
+  SHOP_HOME_PAGE_SCHEMA_FILE,
+  SHOP_HOME_PAGE_SCREEN_FILE,
+} from '../shop-home-page/constants';
 import type {
   AssetTask,
-  StorefrontState,
-} from '../storefront/types';
+  ShopHomePageState,
+} from '../shop-home-page/types';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
 
-type StorefrontPanel = 'schema' | 'logs' | 'files' | null;
+type ShopHomePagePanel = 'schema' | 'logs' | 'files' | null;
 
-const STOREFRONT_FILE_META = [
+const SHOP_HOME_PAGE_FILE_META = [
   {
-    fileName: STOREFRONT_REQUIREMENTS_FILE,
+    fileName: SHOP_HOME_PAGE_REQUIREMENTS_FILE,
     title: '需求结构',
     description: '承接左侧澄清后的业务需求与模块约束。',
   },
   {
-    fileName: STOREFRONT_STYLE_GUIDE_FILE,
+    fileName: SHOP_HOME_PAGE_STYLE_GUIDE_FILE,
     title: '风格指南',
     description: '保存模板风格分析、参考图和生成规则。',
   },
   {
-    fileName: STOREFRONT_SCHEMA_FILE,
+    fileName: SHOP_HOME_PAGE_SCHEMA_FILE,
     title: '页面结构',
     description: '店铺首页唯一事实源，右侧预览基于它实时渲染。',
   },
   {
-    fileName: STOREFRONT_SCREEN_FILE,
+    fileName: SHOP_HOME_PAGE_SCREEN_FILE,
     title: '调试屏幕页',
     description: '用于调试结构编译结果的完整页面文件。',
   },
   {
-    fileName: STOREFRONT_PREVIEW_FILE,
+    fileName: SHOP_HOME_PAGE_PREVIEW_FILE,
     title: '预览页面',
     description: '结构编译后的预览文件，可单独打开检查。',
   },
 ] as const;
 
-const STOREFRONT_TONE_LABELS: Record<string, string> = Object.fromEntries(
-  getStorefrontTonePresets().map((preset) => [
+const SHOP_HOME_PAGE_TONE_LABELS: Record<string, string> = Object.fromEntries(
+  getShopHomePageTonePresets().map((preset) => [
     preset.id,
     preset.label,
   ]),
@@ -123,7 +123,7 @@ interface Props {
   onProjectsRefresh: () => void;
 }
 
-export function StorefrontProjectView({
+export function ShopHomePageProjectView({
   project,
   routeFileName,
   config,
@@ -142,7 +142,7 @@ export function StorefrontProjectView({
   onProjectChange,
   onProjectsRefresh,
 }: Props) {
-  const [activePanel, setActivePanel] = useState<StorefrontPanel>(null);
+  const [activePanel, setActivePanel] = useState<ShopHomePagePanel>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -150,7 +150,7 @@ export function StorefrontProjectView({
   const [error, setError] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [runtimeState, setRuntimeState] = useState<StorefrontState | null>(null);
+  const [runtimeState, setRuntimeState] = useState<ShopHomePageState | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeBusy, setRuntimeBusy] = useState<string | null>(null);
   const [generateQueue, setGenerateQueue] = useState<AssetTask[]>([]);
@@ -241,7 +241,7 @@ export function StorefrontProjectView({
     setOpenRequest({ name, nonce: Date.now() });
   }, []);
 
-  const hydrateRuntimeState = useCallback((next: StorefrontState) => {
+  const hydrateRuntimeState = useCallback((next: ShopHomePageState) => {
     setRuntimeState(next);
     setSchemaEditor(next.schemaText);
     setSchemaDirty(false);
@@ -252,7 +252,7 @@ export function StorefrontProjectView({
     const silent = options?.silent === true;
     if (!silent) setRuntimeLoading(true);
     try {
-      const state = await fetchStorefrontState(project.id);
+      const state = await fetchShopHomePageState(project.id);
       hydrateRuntimeState(state);
     } catch (err) {
       setRuntimeError(localizeStorefrontText(String(err instanceof Error ? err.message : err)));
@@ -283,7 +283,7 @@ export function StorefrontProjectView({
       designCache.current.set(project.designSystemId, designSystem);
     }
 
-    return composeStorefrontSystemPrompt({
+    return composeShopHomePageSystemPrompt({
       skill,
       designSystem,
       metadata: project.metadata,
@@ -519,7 +519,7 @@ export function StorefrontProjectView({
     setRuntimeBusy('apply-schema');
     setRuntimeError(null);
     try {
-      const next = await applyStorefrontSchema(project.id, schemaEditor);
+      const next = await applyShopHomePageSchema(project.id, schemaEditor);
       hydrateRuntimeState(next);
       await refreshProjectFiles();
       onTouchProject();
@@ -535,7 +535,7 @@ export function StorefrontProjectView({
     setRuntimeError(null);
     handledTerminalTaskIdsRef.current = new Set();
     try {
-      const result = await enqueueStorefrontAssets(project.id, false);
+      const result = await enqueueShopHomePageAssets(project.id, false);
       hydrateRuntimeState(result.state);
       if (result.tasks.length === 0) {
         setRuntimeBusy(null);
@@ -557,7 +557,7 @@ export function StorefrontProjectView({
     let cancelled = false;
     const poll = async () => {
       try {
-        const tasks = await fetchStorefrontAssetTasks(project.id);
+        const tasks = await fetchShopHomePageAssetTasks(project.id);
         if (cancelled) return;
 
         setGenerateQueue(tasks);
@@ -609,7 +609,7 @@ export function StorefrontProjectView({
 
   const projectMeta = useMemo(() => {
     const skillName = skills.find((skill) => skill.id === project.skillId)?.name;
-    const localizedSkillName = skillName === 'storefront-homepage' ? '店铺首页技能' : skillName;
+    const localizedSkillName = skillName === 'shop-home-page' ? '店铺首页技能' : skillName;
     const designSystemName = designSystems.find((designSystem) => designSystem.id === project.designSystemId)?.title;
     return [localizedSkillName, designSystemName, '对话式店铺首页']
       .filter(Boolean)
@@ -657,7 +657,7 @@ export function StorefrontProjectView({
   const runtimeLogs = runtimeState?.logs ?? [];
   const hasSchemaText = schemaEditor.trim().length > 0;
   const runtimeStatusLabel = storefrontStatusLabel(runtimeState?.status ?? 'idle');
-  const fileEntries = STOREFRONT_FILE_META.map(({ fileName, title, description }) => ({
+  const fileEntries = SHOP_HOME_PAGE_FILE_META.map(({ fileName, title, description }) => ({
     fileName,
     title,
     description,
@@ -667,9 +667,9 @@ export function StorefrontProjectView({
     ? `已确认模块：${confirmedModules.map(storefrontModuleLabel).join(' → ')}`
     : '等待左侧完成需求澄清';
   const previewMeta = `当前风格：${storefrontStylePresetLabel(stylePresetId)} · ${previewSummary}`;
-  const storefrontPreviewTab = useMemo(
+  const shopHomePagePreviewTab = useMemo(
     () => ({
-      id: '__storefront_preview__',
+      id: '__shop_home_page_preview__',
       label: '手机预览',
       icon: 'eye' as const,
       render: () => (
@@ -747,7 +747,7 @@ export function StorefrontProjectView({
             {runtimeLoading ? (
               <div className="storefront-runtime-empty">正在加载预览...</div>
             ) : runtimeState?.schema ? (
-              <StorefrontPhonePreview
+              <ShopHomePagePhonePreview
                 key={`${project.id}-${runtimeState.previewUpdatedAt ?? 0}`}
                 projectId={project.id}
                 schema={runtimeState.schema}
@@ -871,7 +871,7 @@ export function StorefrontProjectView({
           openRequest={openRequest}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
-          leadingTab={storefrontPreviewTab}
+          leadingTab={shopHomePagePreviewTab}
         />
       </div>
 
@@ -1088,8 +1088,8 @@ function storefrontModuleLabel(moduleType: string): string {
 }
 
 function storefrontStylePresetLabel(presetId: string): string {
-  if (STOREFRONT_TONE_LABELS[presetId]) {
-    return STOREFRONT_TONE_LABELS[presetId];
+  if (SHOP_HOME_PAGE_TONE_LABELS[presetId]) {
+    return SHOP_HOME_PAGE_TONE_LABELS[presetId];
   }
   switch (presetId) {
     case 'auto':

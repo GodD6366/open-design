@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { getForcedLocale } from '../branch/shop-home-config';
 import { de } from './locales/de';
 import { en } from './locales/en';
 import { esES } from './locales/es-ES';
@@ -50,7 +51,7 @@ const DICTS: Record<Locale, Dict> = {
 };
 
 const LS_KEY = 'open-design:locale';
-const FORCED_LOCALE: Locale = 'zh-CN';
+const FORCED_LOCALE: Locale = getForcedLocale();
 
 function detectInitialLocale(): Locale {
   return FORCED_LOCALE;
