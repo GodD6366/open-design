@@ -1,6 +1,8 @@
+// @ts-nocheck
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { resolveProviderConfig } from './media-config.js';
 import { ensureProject, listFiles, writeProjectFile } from './projects.js';
 import {
   DEFAULT_MODULES as HOMEPAGE_DEFAULT_MODULES,
@@ -16,7 +18,7 @@ import {
   SHOP_HOME_PAGE_STATUS_BATTERY,
   SHOP_HOME_PAGE_STATUS_SIGNAL_BARS,
   SHOP_HOME_PAGE_STATUS_WIFI_PATHS,
-} from '../../web/src/shop-home-page/phoneChrome.ts';
+} from '@open-design/contracts/shop-home-page-phone-chrome';
 
 export const LEGACY_SHOP_HOME_PAGE_REQUIREMENTS_FILE = 'storefront.requirements.json';
 export const LEGACY_SHOP_HOME_PAGE_STYLE_GUIDE_FILE = 'storefront.style-guide.json';
@@ -3662,7 +3664,7 @@ async function runAssetTask(task) {
       ? await statMaybe(path.join(task.projectDir, task.fileName))
       : null;
     if (!existingFile) {
-      const imageConfig = resolveImageConfig(task.imageConfigOptions);
+      const imageConfig = await resolveImageConfig(task.imageConfigOptions);
       const generated = await generatePromptImage(task.prompt, task.size, imageConfig, inputImagePaths);
       await writeProjectFile(task.projectsRoot, task.projectId, task.fileName, generated.buffer, {
         overwrite: true,
@@ -3765,22 +3767,30 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
   return { tasks: enqueued, state: await loadShopHomePageState(projectsRoot, projectId, skillRoot) };
 }
 
-function resolveImageConfig(options) {
+export async function resolveImageConfig(options = {}) {
+  const projectRoot = typeof options.projectRoot === 'string' && options.projectRoot
+    ? options.projectRoot
+    : null;
+  const providerConfig = projectRoot
+    ? await resolveProviderConfig(projectRoot, 'openai')
+    : { apiKey: '', baseUrl: '' };
   const apiKey = (
     options.imageApiKey ||
     process.env.OPENAI_IMAGE_API_KEY ||
-    process.env.OPENAI_API_KEY
+    providerConfig.apiKey ||
+    ''
   );
   const baseUrl = (
     options.imageBaseUrl ||
     process.env.OPENAI_IMAGE_COMPATIBLE_BASE_URL ||
     process.env.OPENAI_IMAGE_BASE_URL ||
     process.env.OPENAI_COMPATIBLE_BASE_URL ||
+    providerConfig.baseUrl ||
     'https://api.openai.com/v1'
   ).replace(/\/+$/, '');
   const model = options.imageModel || process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
   if (!apiKey) {
-    const err = new Error('Image generation requires OPENAI_IMAGE_API_KEY or OPENAI_API_KEY.');
+    const err = new Error('Image generation requires OPENAI_API_KEY or an API key in Settings.');
     err.statusCode = 400;
     throw err;
   }

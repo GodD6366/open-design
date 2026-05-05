@@ -1153,8 +1153,8 @@ function localizeStorefrontText(input: string): string {
   if (!trimmed) return '';
 
   const exact: Record<string, string> = {
-    'Image generation requires OPENAI_API_KEY or an API key in Settings.': '素材生成需要在 .env 中配置 OPENAI_IMAGE_API_KEY 或 OPENAI_API_KEY。',
-    'Image generation requires OPENAI_IMAGE_API_KEY or OPENAI_API_KEY.': '素材生成需要在 .env 中配置 OPENAI_IMAGE_API_KEY 或 OPENAI_API_KEY。',
+    'Image generation requires OPENAI_API_KEY or an API key in Settings.': '素材生成需要先在设置中配置 OpenAI API Key，或在 .env 中配置 OPENAI_IMAGE_API_KEY / OPENAI_API_KEY。',
+    'Image generation requires OPENAI_IMAGE_API_KEY or OPENAI_API_KEY.': '素材生成需要先在设置中配置 OpenAI API Key，或在 .env 中配置 OPENAI_IMAGE_API_KEY / OPENAI_API_KEY。',
     'storefront.schema.json must be valid JSON.': '页面结构文件必须是合法的 JSON。',
     'Generate a valid storefront.schema.json before generating assets.': '请先生成合法的页面结构文件，再生成素材。',
     'storefront.schema.json is not valid JSON after the agent run.': '智能体执行后，页面结构文件仍不是合法的 JSON。',

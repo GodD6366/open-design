@@ -17,6 +17,10 @@
       "types": "./src/prompts/shop-home-page-tones.ts",
       "default": "./src/prompts/shop-home-page-tones.ts"
     },
+    "./shop-home-page-phone-chrome": {
+      "types": "./src/shop-home-page-phone-chrome.ts",
+      "default": "./src/shop-home-page-phone-chrome.ts"
+    },
     "./critique": {
       "types": "./src/critique.ts",
       "default": "./src/critique.ts"

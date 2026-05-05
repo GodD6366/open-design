@@ -8,6 +8,7 @@ import {
   resolveProviderConfig,
   writeConfig,
 } from '../src/media-config.js';
+import { resolveImageConfig } from '../src/shop-home-page.js';
 
 const OPENAI_ENV_KEYS = [
   'OD_OPENAI_API_KEY',
@@ -15,20 +16,27 @@ const OPENAI_ENV_KEYS = [
   'AZURE_API_KEY',
   'AZURE_OPENAI_API_KEY',
 ];
+const SHOP_HOME_PAGE_IMAGE_ENV_KEYS = [
+  'OPENAI_IMAGE_API_KEY',
+  'OPENAI_IMAGE_COMPATIBLE_BASE_URL',
+  'OPENAI_IMAGE_BASE_URL',
+  'OPENAI_COMPATIBLE_BASE_URL',
+  'OPENAI_IMAGE_MODEL',
+];
 
 describe('media-config OpenAI OAuth fallback', () => {
   let homeDir: string;
   let projectRoot: string;
   const originalHome = process.env.HOME;
   const originalEnv = Object.fromEntries(
-    OPENAI_ENV_KEYS.map((key) => [key, process.env[key]]),
+    [...OPENAI_ENV_KEYS, ...SHOP_HOME_PAGE_IMAGE_ENV_KEYS].map((key) => [key, process.env[key]]),
   );
 
   beforeEach(async () => {
     homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-home-'));
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-project-'));
     process.env.HOME = homeDir;
-    for (const key of OPENAI_ENV_KEYS) {
+    for (const key of [...OPENAI_ENV_KEYS, ...SHOP_HOME_PAGE_IMAGE_ENV_KEYS]) {
       delete process.env[key];
     }
   });
@@ -39,7 +47,7 @@ describe('media-config OpenAI OAuth fallback', () => {
     } else {
       process.env.HOME = originalHome;
     }
-    for (const key of OPENAI_ENV_KEYS) {
+    for (const key of [...OPENAI_ENV_KEYS, ...SHOP_HOME_PAGE_IMAGE_ENV_KEYS]) {
       if (originalEnv[key] == null) {
         delete process.env[key];
       } else {
@@ -48,6 +56,49 @@ describe('media-config OpenAI OAuth fallback', () => {
     }
     await rm(homeDir, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  describe('shop-home-page image config', () => {
+    it('reuses stored OpenAI media settings for storefront asset generation', async () => {
+      await writeStoredMediaConfig({
+        providers: {
+          openai: {
+            apiKey: 'stored-openai-key',
+            baseUrl: 'https://stored-openai.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveImageConfig({ projectRoot });
+
+      expect(resolved).toEqual({
+        apiKey: 'stored-openai-key',
+        baseUrl: 'https://stored-openai.test/v1',
+        model: 'gpt-image-1',
+      });
+    });
+
+    it('lets storefront-specific env vars override stored OpenAI media settings', async () => {
+      await writeStoredMediaConfig({
+        providers: {
+          openai: {
+            apiKey: 'stored-openai-key',
+            baseUrl: 'https://stored-openai.test/v1',
+          },
+        },
+      });
+      process.env.OPENAI_IMAGE_API_KEY = 'env-image-key';
+      process.env.OPENAI_IMAGE_BASE_URL = 'https://env-image.test/v1/';
+      process.env.OPENAI_IMAGE_MODEL = 'gpt-image-2';
+
+      const resolved = await resolveImageConfig({ projectRoot });
+
+      expect(resolved).toEqual({
+        apiKey: 'env-image-key',
+        baseUrl: 'https://env-image.test/v1',
+        model: 'gpt-image-2',
+      });
+    });
   });
 
   async function writeHomeJson(relPath: string, data: unknown) {

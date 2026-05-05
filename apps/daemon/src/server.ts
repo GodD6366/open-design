@@ -1827,15 +1827,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
       }
       await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, projectId);
-      const imageConfig = (await readMaskedConfig(RUNTIME_DATA_DIR))?.providers?.openai;
       const { tasks, state } = await enqueueShopHomePageAssetTasks(
         PROJECTS_DIR,
         projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
         {
           forceRegenerate: Boolean(forceRegenerate),
-          imageApiKey: imageConfig?.apiKey,
-          imageBaseUrl: imageConfig?.baseUrl,
+          projectRoot: PROJECT_ROOT,
         },
       );
       res.json({ tasks, state });

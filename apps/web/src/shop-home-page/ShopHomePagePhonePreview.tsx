@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { projectFileUrl } from '../providers/registry';
 import type { ShopHomePageSchema, ShopHomePageSchemaModule } from './types';
 import {
+  SHOP_HOME_PAGE_PHONE_CHROME,
   SHOP_HOME_PAGE_STATUS_BATTERY,
   SHOP_HOME_PAGE_STATUS_SIGNAL_BARS,
   SHOP_HOME_PAGE_STATUS_WIFI_PATHS,
-} from './phoneChrome';
+} from '@open-design/contracts/shop-home-page-phone-chrome';
 
 type Props = {
   projectId: string;
