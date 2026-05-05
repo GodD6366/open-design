@@ -16,4 +16,43 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('When shared `reference_images` come from a full-page storefront screenshot');
     expect(out).toContain('Do not copy unrelated screenshot UI into module assets.');
   });
+
+  it('documents straight-edge zero-padding asset prompts', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+    });
+
+    expect(out).toContain('layout.padding = 0');
+    expect(out).toContain('constraints.no_padding = true');
+    expect(out).toContain('constraints.no_rounded_corners = true');
+    expect(out).toContain('clean white straight-edge blocks');
+    expect(out).not.toContain('large white rounded cards');
+  });
+
+  it('requires visible user_assets references to flow into entry reference_images', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+    });
+
+    expect(out).toContain('copy that screenshot filename into each `user_assets.data.entries[*].reference_images` by default');
+    expect(out).toContain('Do not leave new `user_assets` entries at `reference_images: []`');
+    expect(out).toContain('it must not be interpreted as permission to copy the membership summary card, bottom navigation, host-app chrome');
+  });
+
+  it('documents localized reference regions for top_slider and user_assets', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+    });
+
+    expect(out).toContain('"reference_regions"');
+    expect(out).toContain('`reference_regions.top_slider` is the hero-only crop');
+    expect(out).toContain('`reference_regions.user_assets.entries[]` is optional');
+    expect(out).toContain('the final icon subject, title, and subtitle must still follow the current button requirement');
+  });
 });

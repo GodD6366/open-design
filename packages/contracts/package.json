@@ -21,6 +21,10 @@
       "types": "./src/shop-home-page-phone-chrome.ts",
       "default": "./src/shop-home-page-phone-chrome.ts"
     },
+    "./shop-home-page-reference-regions": {
+      "types": "./src/shop-home-page-reference-regions.ts",
+      "default": "./src/shop-home-page-reference-regions.ts"
+    },
     "./critique": {
       "types": "./src/critique.ts",
       "default": "./src/critique.ts"

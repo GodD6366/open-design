@@ -20,6 +20,14 @@ import {
   SHOP_HOME_PAGE_STATUS_SIGNAL_BARS,
   SHOP_HOME_PAGE_STATUS_WIFI_PATHS,
 } from '@open-design/contracts/shop-home-page-phone-chrome';
+import {
+  getShopHomePageTopSliderReferenceImages,
+  getShopHomePageUserAssetsReferenceImages,
+  normalizeShopHomePageReferenceRegions,
+  shopHomePageTopSliderReferenceFileName,
+  shopHomePageUserAssetsEntryReferenceFileName,
+  shopHomePageUserAssetsStripReferenceFileName,
+} from '@open-design/contracts/shop-home-page-reference-regions';
 
 export const LEGACY_SHOP_HOME_PAGE_REQUIREMENTS_FILE = 'storefront.requirements.json';
 export const LEGACY_SHOP_HOME_PAGE_STYLE_GUIDE_FILE = 'storefront.style-guide.json';
@@ -229,14 +237,14 @@ const BAKERY_STYLE_GUIDE_PRESET = {
     icon_style:
       'Hand-drawn doodle icons and wordmarks, black marker-like strokes, slightly uneven outlines, playful and cute instead of corporate.',
     background_style:
-      'Warm cream paper tone with large white rounded cards, very sparse orange/yellow accent marks, airy whitespace, and soft warm shadows.',
+      'Warm cream paper tone with clean white straight-edge blocks, very sparse orange/yellow accent marks, airy whitespace, and soft warm shadows.',
     layout_style:
       'Oversized poster hero first, then a floating member/action card, then clean supporting entry-card rows that still follow the confirmed layout mode.',
     tone_keywords: ['bakery', 'hand-drawn', 'cream', 'playful', 'poster', 'warm'],
   },
   generation_rules: {
     must: [
-      'Use warm cream paper-like backgrounds with mostly black typography and doodle accents.',
+      'Use warm cream paper-like backgrounds with mostly black typography, doodle accents, and straight-edge content blocks.',
       'Keep icons, arrows, crowns, and wordmarks sketchy and hand-drawn rather than polished UI glyphs.',
       'Preserve poster-like hierarchy: oversized hero headline, generous whitespace, and simple module stacking.',
       'Bakery product imagery may be photographic, but overlays can include doodle arrows, crowns, handwritten labels, and rough strokes.',
@@ -394,6 +402,11 @@ const IMAGE_FILE_PREFIX = {
   shop_info: 'shop-info',
   image_ad: 'image-ad',
 };
+
+const ZERO_PADDING_GENERATION_NOTES = [
+  '画面必须使用直角外轮廓输出：不要圆角卡片、圆角白底块、圆角外框或任何圆角包装层。',
+  '不要内边距、安全边、留白边框；主体、文字和装饰元素按满幅构图直接铺开，不要再额外套一层卡片。',
+];
 
 function imagePromptAllowsBrand(moduleType) {
   return BRAND_PROMPT_MODULES.has(moduleType);
@@ -715,6 +728,7 @@ function coerceStyleGuide(raw, requirements) {
         ? input.reference_images
         : base.reference_images,
     ),
+    reference_regions: normalizeShopHomePageReferenceRegions(input.reference_regions),
     analysis: {
       source_summary: stringOr(input.analysis?.source_summary, base.analysis.source_summary),
       icon_style: stringOr(input.analysis?.icon_style, base.analysis.icon_style),
@@ -777,6 +791,7 @@ function toPublicStyleGuide(styleGuide) {
     reference_images: normalizeReferenceImages(
       Array.isArray(styleGuide?.reference_images) ? styleGuide.reference_images : [],
     ),
+    reference_regions: normalizeShopHomePageReferenceRegions(styleGuide?.reference_regions),
     analysis: {
       source_summary: stringOr(styleGuide?.analysis?.source_summary),
       icon_style: stringOr(styleGuide?.analysis?.icon_style),
@@ -789,6 +804,35 @@ function toPublicStyleGuide(styleGuide) {
       avoid: uniqueStrings(Array.isArray(styleGuide?.generation_rules?.avoid) ? styleGuide.generation_rules.avoid : []),
     },
   };
+}
+
+function normalizedStyleGuideReferenceRegions(styleGuide) {
+  return normalizeShopHomePageReferenceRegions(styleGuide?.reference_regions);
+}
+
+function defaultReferenceImagesForModule(styleGuide, moduleType, options = {}) {
+  const referenceRegions = normalizedStyleGuideReferenceRegions(styleGuide);
+  const sharedReferenceImages = normalizeReferenceImages(
+    Array.isArray(styleGuide?.reference_images) ? styleGuide.reference_images : [],
+  );
+
+  if (moduleType === 'top_slider') {
+    const scopedReferenceImages = getShopHomePageTopSliderReferenceImages(
+      referenceRegions,
+    );
+    return scopedReferenceImages.length > 0
+      ? scopedReferenceImages
+      : sharedReferenceImages;
+  }
+
+  if (moduleType === 'user_assets') {
+    return getShopHomePageUserAssetsReferenceImages(
+      referenceRegions,
+      stringOr(options.entryLabel),
+    );
+  }
+
+  return sharedReferenceImages;
 }
 
 function normalizeAspectRatioHint(value, fallback = '1:1') {
@@ -1161,7 +1205,7 @@ function createUserAssetsEntriesFromLabels(labels, slots, designContext, styleGu
   });
 }
 
-function createSeedSchema(requirements, styleGuide) {
+export function createSeedSchema(requirements, styleGuide) {
   const req = coerceRequirements(requirements);
   const guide = coerceStyleGuide(styleGuide, req);
   const designContextBase = resolveDesignContextBase(guide, req);
@@ -1282,7 +1326,7 @@ function createSeedImageItem(spec, index, requirements, designContext, styleGuid
     id: `${moduleType}_${index + 1}`,
     image: '',
     image_prompt_schema: promptSchema,
-    reference_images: styleGuide?.reference_images?.length ? [...styleGuide.reference_images] : undefined,
+    reference_images: defaultReferenceImagesForModule(styleGuide, moduleType),
     alt: promptSchema.content.title || `${storefrontModuleLabel(moduleType)} ${index + 1}`,
     aspect_ratio: promptSchema.layout.ratio,
   };
@@ -1349,7 +1393,7 @@ function createDefaultImagePromptSchema(spec, requirements, designContext, style
     layout: {
       ratio,
       structure,
-      padding: 24,
+      padding: 0,
       full_bleed: true,
     },
     style: {
@@ -1409,6 +1453,8 @@ function createDefaultImagePromptSchema(spec, requirements, designContext, style
       no_border: true,
       no_divider: true,
       no_margin_lr: true,
+      no_rounded_corners: true,
+      no_padding: true,
       full_bleed: true,
       ui_only: true,
       ...(moduleType === 'top_slider'
@@ -1478,6 +1524,7 @@ function createDefaultUserAssetsEntryPromptSchema(
       ratio: sizeSpec.ratio,
       structure:
         templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE ? 'hotzone_freeform' : 'storefront_entry_card',
+      padding: 0,
       card_size_px:
         templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE
           ? null
@@ -1519,6 +1566,8 @@ function createDefaultUserAssetsEntryPromptSchema(
       no_logo: true,
       no_brand_mark: true,
       no_shop_slogan: true,
+      no_rounded_corners: true,
+      no_padding: true,
       follow_page_icon_style: true,
       lock_card_size: templateType !== USER_ASSETS_TEMPLATE_TYPES.HOTZONE,
     },
@@ -1605,10 +1654,14 @@ function createDefaultUserAssetsEntry(
     ),
     reference_images: normalizeReferenceImages(
       Array.isArray(entrySeed?.reference_images)
-        ? entrySeed.reference_images
-        : Array.isArray(styleGuide?.reference_images)
-          ? styleGuide.reference_images
-          : [],
+        ? entrySeed.reference_images.length > 0
+          ? entrySeed.reference_images
+          : defaultReferenceImagesForModule(styleGuide, 'user_assets', {
+              entryLabel: stringOr(entrySeed?.title, promptSchema.entry.title),
+            })
+        : defaultReferenceImagesForModule(styleGuide, 'user_assets', {
+            entryLabel: stringOr(entrySeed?.title, promptSchema.entry.title),
+          }),
     ),
     alt: stringOr(entrySeed?.alt, promptSchema.content.title),
     no_cache: entrySeed?.no_cache === true,
@@ -1822,13 +1875,21 @@ function normalizeImageItem(spec, item, index, requirements, designContext, styl
   const promptSchema = isPlainObject(item.image_prompt_schema)
     ? item.image_prompt_schema
     : fallback.image_prompt_schema;
+  const topSliderScopedRefs =
+    type === 'top_slider'
+      ? getShopHomePageTopSliderReferenceImages(
+          normalizedStyleGuideReferenceRegions(styleGuide),
+        )
+      : [];
   const normalized = {
     id: stringOr(item.id, fallback.id),
     image: stringOr(item.image),
     image_prompt_schema: normalizePromptSchema(type, promptSchema, fallback.image_prompt_schema),
     reference_images: normalizeReferenceImages(
       Array.isArray(item.reference_images)
-        ? item.reference_images
+        ? item.reference_images.length > 0
+          ? item.reference_images
+          : topSliderScopedRefs
         : fallback.reference_images ?? [],
     ),
     no_cache: item.no_cache === true,
@@ -3414,20 +3475,21 @@ export function collectAssetTasks(schema, styleGuide, forceRegenerate, available
         const sizeSpec = slotSizeSpecForUserAssetsSlot(slot);
         const fileName = `${IMAGE_FILE_PREFIX.user_assets}-${index + 1}.png`;
         const sequentialReference = !isHotzone && index > 0 && firstEntryFileName;
+        const referenceEntryFileName = sequentialReference ? firstEntryFileName : null;
         tasks.push({
           fileName,
           prompt: sequentialReference ? null : buildUserAssetsEntryPrompt(entry, slot, module.data.card_layout, styleGuide),
           buildPromptFn: sequentialReference
             ? () => buildUserAssetsEntryPrompt(entry, slot, module.data.card_layout, styleGuide)
             : null,
-          dependsOnFileName: sequentialReference ? firstEntryFileName : null,
+          dependsOnFileName: referenceEntryFileName,
           size:
             templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE
               ? '1024x1024'
               : resolveSizeFromDimensions(sizeSpec.width, sizeSpec.height),
           inputImagePaths: [],
           buildInputImagePathsFn: (projectDir) =>
-            collectUserAssetsReferenceImagePaths(entry, firstEntryFileName, projectDir),
+            collectUserAssetsReferenceImagePaths(entry, referenceEntryFileName, projectDir),
           assign: (resolvedFileName) => {
             entry.image = resolvedFileName;
             entry.no_cache = false;
@@ -3487,7 +3549,10 @@ function resolveReusableProjectImage(fileName, availableFiles) {
 }
 
 function buildImagePrompt(moduleType, item, styleGuide) {
-  const promptSchema = deepClone(item.image_prompt_schema ?? {});
+  const promptSchema = enforceStraightEdgeZeroPaddingPrompt(
+    deepClone(item.image_prompt_schema ?? {}),
+    { includeFullBleed: true },
+  );
   const styleNotes = buildStyleGenerationNotes(styleGuide, moduleType);
   const referenceUsageNotes = buildStorefrontReferenceUsageNotes({
     moduleType,
@@ -3498,6 +3563,7 @@ function buildImagePrompt(moduleType, item, styleGuide) {
     promptSchema.generation_notes = [
       ...styleNotes,
       ...referenceUsageNotes,
+      ...ZERO_PADDING_GENERATION_NOTES,
       '活动横幅定位为首页入口导流：只保留短标题和短副标题，不要价格、券墙、复杂按钮或多层促销信息。',
       '不要在画面中展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
       '横幅必须和商品图明显区分：使用横向色块、轻图形、纹理、插画或贴纸式元素；避免做成商品摄影卡片、白底商品图或与商品模块相同的背景画风。',
@@ -3508,6 +3574,7 @@ function buildImagePrompt(moduleType, item, styleGuide) {
     promptSchema.generation_notes = [
       ...styleNotes,
       ...referenceUsageNotes,
+      ...ZERO_PADDING_GENERATION_NOTES,
       `商品图必须是带转化动作的营销卡片，购买行动点属于图片内容本身；请将“${cta}”直接设计在画面里，例如按钮、行动条或购买引导区。`,
       '不要在商品图中展示店铺 Logo、品牌角标、店铺名称水印或 logo placeholder；画面重点放在商品主体、卖点和购买行动点。',
       hasReferenceImages
@@ -3518,12 +3585,15 @@ function buildImagePrompt(moduleType, item, styleGuide) {
     promptSchema.generation_notes = [
       ...styleNotes,
       ...referenceUsageNotes,
+      ...ZERO_PADDING_GENERATION_NOTES,
       Array.isArray(item.reference_images) && item.reference_images.length > 0
         ? '该广告块来自参考图中的未映射视觉块：保留参考图里的构图比例、主体层级、背景处理和视觉语气，不要改写成通用商品卡或标准横幅。'
         : '该广告块用于承接参考页中的独立视觉块，保持强视觉表达，不要退化成普通商品卡。',
     ];
   } else if (styleNotes.length > 0 || referenceUsageNotes.length > 0) {
-    promptSchema.generation_notes = [...styleNotes, ...referenceUsageNotes];
+    promptSchema.generation_notes = [...styleNotes, ...referenceUsageNotes, ...ZERO_PADDING_GENERATION_NOTES];
+  } else {
+    promptSchema.generation_notes = [...ZERO_PADDING_GENERATION_NOTES];
   }
   if (Array.isArray(item.reference_images) && item.reference_images.length > 0) {
     promptSchema.reference_style = {
@@ -3535,7 +3605,9 @@ function buildImagePrompt(moduleType, item, styleGuide) {
 }
 
 function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
-  const promptSchema = deepClone(entry?.image_prompt_schema ?? {});
+  const promptSchema = enforceStraightEdgeZeroPaddingPrompt(
+    deepClone(entry?.image_prompt_schema ?? {}),
+  );
   const styleNotes = buildUserAssetsGenerationNotes(styleGuide);
   const referenceUsageNotes = buildStorefrontReferenceUsageNotes({
     moduleType: 'user_assets',
@@ -3545,10 +3617,12 @@ function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
   promptSchema.generation_notes = [
     ...styleNotes,
     ...referenceUsageNotes,
+    ...ZERO_PADDING_GENERATION_NOTES,
     `当前入口卡片布局为 ${userAssetsTemplateTypeLabel(cardLayout?.template_type)}，当前卡片槽位是 ${stringOr(slot?.id, 'slot')}。`,
     '客户资产入口卡片只表达当前这个功能入口，不要在一张图里额外生成别的按钮卡片、额外小入口或整组宫格。',
     '入口卡片中的 icon、标题、副标题必须保留在卡片内部，跟随页面整体风格，但背景保持纯白，不要渐变、纹理、插画场景或摄影背景。',
     '不要展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
+    '当前入口图必须完整填满 schema 给出的卡位尺寸，不要再额外套圆角白底卡片、内边距衬板或留白外框。',
   ];
   if (cardLayout?.template_type === USER_ASSETS_TEMPLATE_TYPES.LEFT_ONE_RIGHT_TWO) {
     promptSchema.generation_notes.push(
@@ -3595,20 +3669,64 @@ function collectImageItemReferenceImagePaths(item, priorGeneratedFileName, proje
   return [...new Set(paths)];
 }
 
+function localizedStorefrontReferenceSets(styleGuide) {
+  const referenceRegions = normalizedStyleGuideReferenceRegions(styleGuide);
+  const topSliderReferences = new Set(
+    referenceRegions?.top_slider
+      ? [shopHomePageTopSliderReferenceFileName(referenceRegions.top_slider)]
+      : [],
+  );
+  const userAssetsStripReferences = new Set(
+    referenceRegions?.user_assets?.strip
+      ? [shopHomePageUserAssetsStripReferenceFileName(referenceRegions.user_assets.strip)]
+      : [],
+  );
+  const userAssetsEntryReferences = new Set(
+    (referenceRegions?.user_assets?.entries ?? []).map((entry, index) =>
+      shopHomePageUserAssetsEntryReferenceFileName(entry, index),
+    ),
+  );
+  return {
+    all: new Set([
+      ...topSliderReferences,
+      ...userAssetsStripReferences,
+      ...userAssetsEntryReferences,
+    ]),
+    topSliderReferences,
+    userAssetsStripReferences,
+    userAssetsEntryReferences,
+  };
+}
+
 function splitStorefrontReferenceImages(referenceImages, styleGuide) {
   const normalizedReferenceImages = normalizeReferenceImages(referenceImages);
   const styleGuideReferenceSet = new Set(
     normalizeReferenceImages(Array.isArray(styleGuide?.reference_images) ? styleGuide.reference_images : []),
   );
+  const localizedReferenceSets = localizedStorefrontReferenceSets(styleGuide);
   const styleGuideReferences = normalizedReferenceImages.filter((referenceImage) =>
     styleGuideReferenceSet.has(referenceImage),
   );
+  const scopedReferences = normalizedReferenceImages.filter((referenceImage) =>
+    localizedReferenceSets.all.has(referenceImage),
+  );
   const moduleSpecificReferences = normalizedReferenceImages.filter((referenceImage) =>
-    !styleGuideReferenceSet.has(referenceImage),
+    !styleGuideReferenceSet.has(referenceImage) &&
+    !localizedReferenceSets.all.has(referenceImage),
   );
   return {
     normalizedReferenceImages,
     styleGuideReferences,
+    scopedReferences,
+    topSliderReferences: normalizedReferenceImages.filter((referenceImage) =>
+      localizedReferenceSets.topSliderReferences.has(referenceImage),
+    ),
+    userAssetsStripReferences: normalizedReferenceImages.filter((referenceImage) =>
+      localizedReferenceSets.userAssetsStripReferences.has(referenceImage),
+    ),
+    userAssetsEntryReferences: normalizedReferenceImages.filter((referenceImage) =>
+      localizedReferenceSets.userAssetsEntryReferences.has(referenceImage),
+    ),
     moduleSpecificReferences,
   };
 }
@@ -3621,6 +3739,9 @@ export function buildStorefrontReferenceUsageNotes({
   const {
     normalizedReferenceImages,
     styleGuideReferences,
+    topSliderReferences,
+    userAssetsStripReferences,
+    userAssetsEntryReferences,
     moduleSpecificReferences,
   } = splitStorefrontReferenceImages(referenceImages, styleGuide);
   if (normalizedReferenceImages.length === 0) return [];
@@ -3647,6 +3768,22 @@ export function buildStorefrontReferenceUsageNotes({
     }
   }
 
+  if (moduleType === 'top_slider' && topSliderReferences.length > 0) {
+    notes.push('已提供头图 hero 局部参考图：只沿用首屏海报的主体构图、品牌气质和插画氛围，不要把客户资产入口条、会员卡或其他下方模块拼进 hero。');
+  }
+
+  if (moduleType === 'user_assets') {
+    if (userAssetsEntryReferences.length > 0) {
+      notes.push('已提供当前入口的局部参考图：icon 主体轮廓和局部构图可参考它，但标题、副标题和按钮语义必须按当前需求生成，不要照抄参考图原文案。');
+    }
+    if (userAssetsStripReferences.length > 0) {
+      notes.push('同时提供了客户资产图标区局部参考：只用于统一笔触、配色和留白节奏，不要把整条图标区直接缩印成单张入口卡。');
+    }
+    if (userAssetsEntryReferences.length === 0 && userAssetsStripReferences.length > 0) {
+      notes.push('当前入口没有单独主体参考图时，只沿用客户资产图标区的风格线索；具体按钮图案和文字按当前需求生成，不要借用同一条参考里其他按钮的主体。');
+    }
+  }
+
   if (moduleSpecificReferences.length > 0 && moduleType === 'goods') {
     notes.push('已提供更具体的商品参考图：可参考其中的商品主体、包装、摆盘、材质和摄影/插画方式，但仍需保持当前页面的统一品牌风格。');
   }
@@ -3669,23 +3806,52 @@ function buildUserAssetsGenerationNotes(styleGuide) {
   return uniqueStrings(notes.filter(Boolean));
 }
 
+function sanitizeStorefrontPromptCue(value) {
+  return stringOr(value)
+    .replace(/large white rounded cards/gi, 'clean white straight-edge blocks')
+    .replace(/white rounded cards/gi, 'white straight-edge blocks')
+    .replace(/rounded cards?/gi, 'straight-edge blocks')
+    .replace(/rounded white cards?/gi, 'straight-edge white blocks')
+    .replace(/圆角白底块/g, '直角白底模块')
+    .replace(/圆角卡片/g, '直角模块')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function enforceStraightEdgeZeroPaddingPrompt(promptSchema, { includeFullBleed = false } = {}) {
+  const next = isPlainObject(promptSchema) ? promptSchema : {};
+  const layout = isPlainObject(next.layout) ? next.layout : {};
+  const constraints = isPlainObject(next.constraints) ? next.constraints : {};
+  next.layout = {
+    ...layout,
+    padding: 0,
+    ...(includeFullBleed ? { full_bleed: true } : {}),
+  };
+  next.constraints = {
+    ...constraints,
+    no_rounded_corners: true,
+    no_padding: true,
+  };
+  return next;
+}
+
 function buildStyleGenerationNotes(styleGuide, moduleType) {
   const notes = [];
   const guide = coerceStyleGuide(styleGuide, null);
   if (guide.analysis?.icon_style) {
-    notes.push(`视觉风格参考：${guide.analysis.icon_style}`);
+    notes.push(`视觉风格参考：${sanitizeStorefrontPromptCue(guide.analysis.icon_style)}`);
   }
   if (guide.analysis?.background_style) {
-    notes.push(`背景风格参考：${guide.analysis.background_style}`);
+    notes.push(`背景风格参考：${sanitizeStorefrontPromptCue(guide.analysis.background_style)}`);
   }
   if (guide.analysis?.layout_style && moduleType === 'user_assets') {
-    notes.push(`布局风格参考：${guide.analysis.layout_style}`);
+    notes.push(`布局风格参考：${sanitizeStorefrontPromptCue(guide.analysis.layout_style)}`);
   }
   if (Array.isArray(guide.generation_rules?.must)) {
-    notes.push(...guide.generation_rules.must);
+    notes.push(...guide.generation_rules.must.map((value) => sanitizeStorefrontPromptCue(value)).filter(Boolean));
   }
   if (Array.isArray(guide.generation_rules?.avoid) && guide.generation_rules.avoid.length > 0) {
-    notes.push(`避免：${guide.generation_rules.avoid.join('；')}`);
+    notes.push(`避免：${guide.generation_rules.avoid.map((value) => sanitizeStorefrontPromptCue(value)).filter(Boolean).join('；')}`);
   }
   if (guide.preset_id === 'bakery-handdrawn-cream') {
     if (moduleType === 'top_slider') {
@@ -4134,7 +4300,7 @@ function normalizeReferenceImages(values) {
 function findStorefrontTonePresetId(value) {
   const needle = stringOr(value).trim().toLowerCase();
   if (!needle) return '';
-  const match = STOREFRONT_TONE_PRESETS.find(
+  const match = SHOP_HOME_PAGE_TONE_PRESETS.find(
     (preset) =>
       preset.id.toLowerCase() === needle ||
       stringOr(preset.label).trim().toLowerCase() === needle,

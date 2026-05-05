@@ -42,6 +42,7 @@ import {
   enqueueShopHomePageAssets,
   fetchShopHomePageAssetTasks,
 } from '../shop-home-page/api';
+import { syncShopHomePageScopedReferences } from '../shop-home-page/scoped-references';
 import { ShopHomePagePhonePreview } from '../shop-home-page/ShopHomePagePhonePreview';
 import {
   SHOP_HOME_PAGE_PREVIEW_FILE,
@@ -243,6 +244,7 @@ export function ShopHomePageProjectView({
 
   const hydrateRuntimeState = useCallback((next: ShopHomePageState) => {
     setRuntimeState(next);
+    setProjectFiles(Array.isArray(next.files) ? next.files : []);
     setSchemaEditor(next.schemaText);
     setSchemaDirty(false);
     setRuntimeError(null);
@@ -252,7 +254,13 @@ export function ShopHomePageProjectView({
     const silent = options?.silent === true;
     if (!silent) setRuntimeLoading(true);
     try {
-      const state = await fetchShopHomePageState(project.id);
+      let state = await fetchShopHomePageState(project.id);
+      const syncResult = await syncShopHomePageScopedReferences(project.id, state);
+      if (syncResult.nextSchemaText) {
+        state = await applyShopHomePageSchema(project.id, syncResult.nextSchemaText);
+      } else if (syncResult.wroteFiles) {
+        state = await fetchShopHomePageState(project.id);
+      }
       hydrateRuntimeState(state);
     } catch (err) {
       setRuntimeError(localizeStorefrontText(String(err instanceof Error ? err.message : err)));
@@ -519,16 +527,18 @@ export function ShopHomePageProjectView({
     setRuntimeBusy('apply-schema');
     setRuntimeError(null);
     try {
-      const next = await applyShopHomePageSchema(project.id, schemaEditor);
-      hydrateRuntimeState(next);
-      await refreshProjectFiles();
+      await applyShopHomePageSchema(project.id, schemaEditor);
+      await Promise.all([
+        refreshProjectFiles(),
+        refreshRuntimeState({ silent: true }),
+      ]);
       onTouchProject();
     } catch (err) {
       setRuntimeError(localizeStorefrontText(String(err instanceof Error ? err.message : err)));
     } finally {
       setRuntimeBusy(null);
     }
-  }, [hydrateRuntimeState, onTouchProject, project.id, refreshProjectFiles, schemaEditor]);
+  }, [onTouchProject, project.id, refreshProjectFiles, refreshRuntimeState, schemaEditor]);
 
   const handleGenerateAssets = useCallback(async () => {
     setRuntimeBusy('generate-assets');

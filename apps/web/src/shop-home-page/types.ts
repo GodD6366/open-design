@@ -1,3 +1,4 @@
+import type { ShopHomePageReferenceRegions } from '@open-design/contracts/shop-home-page-reference-regions';
 import type { ProjectFile } from '../types';
 
 export type ShopHomePageModuleType =
@@ -45,6 +46,7 @@ export interface ShopHomePageStyleGuide {
   version: string;
   preset_id: string;
   reference_images: string[];
+  reference_regions?: ShopHomePageReferenceRegions;
   analysis: {
     source_summary: string;
     icon_style: string;

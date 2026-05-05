@@ -1,3 +1,6 @@
+import {
+  normalizeShopHomePageReferenceRegions,
+} from '@open-design/contracts/shop-home-page-reference-regions';
 import type {
   AssetTask,
   ShopHomePageModuleSpec,
@@ -102,25 +105,31 @@ function normalizeShopHomePageRequirements(
 }
 
 function normalizeShopHomePageState(state: ShopHomePageState): ShopHomePageState {
+  const baseStyleGuide = state?.styleGuide ?? {
+    version: '1.0',
+    preset_id: 'auto',
+    reference_images: [],
+    analysis: {
+      source_summary: '',
+      icon_style: '',
+      background_style: '',
+      layout_style: '',
+      tone_keywords: [],
+    },
+    generation_rules: {
+      must: [],
+      avoid: [],
+    },
+  };
   return {
     ...state,
     requirements: normalizeShopHomePageRequirements(state?.requirements),
     requirementsText: state?.requirementsText ?? '',
-    styleGuide: state?.styleGuide ?? {
-      version: '1.0',
-      preset_id: 'auto',
-      reference_images: [],
-      analysis: {
-        source_summary: '',
-        icon_style: '',
-        background_style: '',
-        layout_style: '',
-        tone_keywords: [],
-      },
-      generation_rules: {
-        must: [],
-        avoid: [],
-      },
+    styleGuide: {
+      ...baseStyleGuide,
+      reference_regions: normalizeShopHomePageReferenceRegions(
+        state?.styleGuide?.reference_regions,
+      ),
     },
     styleGuideText: state?.styleGuideText ?? '',
     schemaText: state?.schemaText ?? '',
