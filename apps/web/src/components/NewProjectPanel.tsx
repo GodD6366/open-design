@@ -1674,7 +1674,10 @@ function buildMetadata(input: {
     ? { inspirationDesignSystemIds: input.inspirationIds }
     : {};
   if (input.tab === SHOP_HOMEPAGE_KIND) {
-    return { kind: SHOP_HOMEPAGE_KIND };
+    return {
+      kind: SHOP_HOMEPAGE_KIND,
+      imageModel: input.imageModel,
+    };
   }
   if (input.tab === 'prototype') {
     return { kind, fidelity: input.fidelity, ...inspirations };

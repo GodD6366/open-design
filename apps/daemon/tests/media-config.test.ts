@@ -8,6 +8,7 @@ import {
   resolveProviderConfig,
   writeConfig,
 } from '../src/media-config.js';
+import { DEFAULT_IMAGE_MODEL } from '../src/media-models.js';
 import { resolveImageConfig } from '../src/shop-home-page.js';
 
 const OPENAI_ENV_KEYS = [
@@ -74,7 +75,7 @@ describe('media-config OpenAI OAuth fallback', () => {
       expect(resolved).toEqual({
         apiKey: 'stored-openai-key',
         baseUrl: 'https://stored-openai.test/v1',
-        model: 'gpt-image-1',
+        model: DEFAULT_IMAGE_MODEL,
       });
     });
 
@@ -97,6 +98,28 @@ describe('media-config OpenAI OAuth fallback', () => {
         apiKey: 'env-image-key',
         baseUrl: 'https://env-image.test/v1',
         model: 'gpt-image-2',
+      });
+    });
+
+    it('lets an explicit storefront imageModel override the shared default', async () => {
+      await writeStoredMediaConfig({
+        providers: {
+          openai: {
+            apiKey: 'stored-openai-key',
+            baseUrl: 'https://stored-openai.test/v1',
+          },
+        },
+      });
+
+      const resolved = await resolveImageConfig({
+        projectRoot,
+        imageModel: 'gpt-image-1-mini',
+      });
+
+      expect(resolved).toEqual({
+        apiKey: 'stored-openai-key',
+        baseUrl: 'https://stored-openai.test/v1',
+        model: 'gpt-image-1-mini',
       });
     });
   });

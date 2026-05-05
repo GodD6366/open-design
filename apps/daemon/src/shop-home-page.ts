@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_IMAGE_MODEL } from './media-models.js';
 import { resolveProviderConfig } from './media-config.js';
 import { ensureProject, listFiles, writeProjectFile } from './projects.js';
 import {
@@ -3385,7 +3386,7 @@ function resolveUserAssetsLayoutMetrics(cardLayout) {
   };
 }
 
-function collectAssetTasks(schema, styleGuide, forceRegenerate) {
+export function collectAssetTasks(schema, styleGuide, forceRegenerate, availableFiles = new Set()) {
   const tasks = [];
 
   for (const module of schema.modules) {
@@ -3393,16 +3394,17 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
       const entries = Array.isArray(module.data.entries) ? module.data.entries.filter(isPlainObject) : [];
       const templateType = normalizeUserAssetsTemplateType(module.data.card_layout?.template_type);
       const isHotzone = templateType === USER_ASSETS_TEMPLATE_TYPES.HOTZONE;
-      const hasLegacyBodyImage = Boolean(stringOr(module.data.body_image));
-      if (!forceRegenerate && hasLegacyBodyImage && !entries.some((entry) => stringOr(entry.image))) {
+      const hasLegacyBodyImage = Boolean(resolveReusableProjectImage(module.data.body_image, availableFiles));
+      if (!forceRegenerate && hasLegacyBodyImage && !entries.some((entry) => resolveReusableProjectImage(entry.image, availableFiles))) {
         continue;
       }
 
       let firstEntryFileName = null;
       entries.forEach((entry, index) => {
-        if (!forceRegenerate && stringOr(entry.image)) {
+        const existingImageFileName = resolveReusableProjectImage(entry.image, availableFiles);
+        if (!forceRegenerate && existingImageFileName) {
           if (!isHotzone && index === 0) {
-            firstEntryFileName = stringOr(entry.image);
+            firstEntryFileName = existingImageFileName;
           }
           return;
         }
@@ -3443,7 +3445,11 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
     if (!Array.isArray(module.data.items)) continue;
     let firstGoodsFileName = null;
     module.data.items.forEach((item, index) => {
-      if (!forceRegenerate && stringOr(item.image)) return;
+      const existingImageFileName = resolveReusableProjectImage(item.image, availableFiles);
+      if (!forceRegenerate && existingImageFileName) {
+        if (module.type === 'goods' && index === 0) firstGoodsFileName = existingImageFileName;
+        return;
+      }
       const fileName = `${IMAGE_FILE_PREFIX[module.type]}-${index + 1}.png`;
       const isSubsequentGoods = module.type === 'goods' && index > 0 && firstGoodsFileName !== null;
       tasks.push({
@@ -3473,35 +3479,51 @@ function collectAssetTasks(schema, styleGuide, forceRegenerate) {
   return tasks;
 }
 
+function resolveReusableProjectImage(fileName, availableFiles) {
+  const normalizedFileName = stringOr(fileName);
+  if (!normalizedFileName) return '';
+  if (!(availableFiles instanceof Set)) return normalizedFileName;
+  return availableFiles.has(normalizedFileName) ? normalizedFileName : '';
+}
+
 function buildImagePrompt(moduleType, item, styleGuide) {
   const promptSchema = deepClone(item.image_prompt_schema ?? {});
   const styleNotes = buildStyleGenerationNotes(styleGuide, moduleType);
+  const referenceUsageNotes = buildStorefrontReferenceUsageNotes({
+    moduleType,
+    referenceImages: item?.reference_images,
+    styleGuide,
+  });
   if (moduleType === 'banner') {
     promptSchema.generation_notes = [
       ...styleNotes,
+      ...referenceUsageNotes,
       '活动横幅定位为首页入口导流：只保留短标题和短副标题，不要价格、券墙、复杂按钮或多层促销信息。',
       '不要在画面中展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
       '横幅必须和商品图明显区分：使用横向色块、轻图形、纹理、插画或贴纸式元素；避免做成商品摄影卡片、白底商品图或与商品模块相同的背景画风。',
     ];
   } else if (moduleType === 'goods') {
     const cta = stringOr(promptSchema.promotion?.cta, '立即购买');
+    const hasReferenceImages = Array.isArray(item.reference_images) && item.reference_images.length > 0;
     promptSchema.generation_notes = [
       ...styleNotes,
+      ...referenceUsageNotes,
       `商品图必须是带转化动作的营销卡片，购买行动点属于图片内容本身；请将“${cta}”直接设计在画面里，例如按钮、行动条或购买引导区。`,
       '不要在商品图中展示店铺 Logo、品牌角标、店铺名称水印或 logo placeholder；画面重点放在商品主体、卖点和购买行动点。',
-      Array.isArray(item.reference_images) && item.reference_images.length > 0
-        ? '已提供参考图：请沿用参考图中的商品主体、包装或摆盘方式、摄影风格、材质质感和整体气质。'
+      hasReferenceImages
+        ? '有参考图时，只复用与当前商品模块直接相关的主体、摆盘或局部风格信息；不要把参考页里其他运营条、导航、会员区或无关 UI 元素带进商品图。'
         : '未提供参考图：可以根据提示词自由发挥商品主体、场景和购买引导，但必须保持强转化视觉。',
     ];
   } else if (moduleType === 'image_ad') {
     promptSchema.generation_notes = [
       ...styleNotes,
+      ...referenceUsageNotes,
       Array.isArray(item.reference_images) && item.reference_images.length > 0
         ? '该广告块来自参考图中的未映射视觉块：保留参考图里的构图比例、主体层级、背景处理和视觉语气，不要改写成通用商品卡或标准横幅。'
         : '该广告块用于承接参考页中的独立视觉块，保持强视觉表达，不要退化成普通商品卡。',
     ];
-  } else if (styleNotes.length > 0) {
-    promptSchema.generation_notes = styleNotes;
+  } else if (styleNotes.length > 0 || referenceUsageNotes.length > 0) {
+    promptSchema.generation_notes = [...styleNotes, ...referenceUsageNotes];
   }
   if (Array.isArray(item.reference_images) && item.reference_images.length > 0) {
     promptSchema.reference_style = {
@@ -3515,8 +3537,14 @@ function buildImagePrompt(moduleType, item, styleGuide) {
 function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
   const promptSchema = deepClone(entry?.image_prompt_schema ?? {});
   const styleNotes = buildUserAssetsGenerationNotes(styleGuide);
+  const referenceUsageNotes = buildStorefrontReferenceUsageNotes({
+    moduleType: 'user_assets',
+    referenceImages: entry?.reference_images,
+    styleGuide,
+  });
   promptSchema.generation_notes = [
     ...styleNotes,
+    ...referenceUsageNotes,
     `当前入口卡片布局为 ${userAssetsTemplateTypeLabel(cardLayout?.template_type)}，当前卡片槽位是 ${stringOr(slot?.id, 'slot')}。`,
     '客户资产入口卡片只表达当前这个功能入口，不要在一张图里额外生成别的按钮卡片、额外小入口或整组宫格。',
     '入口卡片中的 icon、标题、副标题必须保留在卡片内部，跟随页面整体风格，但背景保持纯白，不要渐变、纹理、插画场景或摄影背景。',
@@ -3565,6 +3593,65 @@ function collectImageItemReferenceImagePaths(item, priorGeneratedFileName, proje
     paths.push(path.join(projectDir, fileName));
   }
   return [...new Set(paths)];
+}
+
+function splitStorefrontReferenceImages(referenceImages, styleGuide) {
+  const normalizedReferenceImages = normalizeReferenceImages(referenceImages);
+  const styleGuideReferenceSet = new Set(
+    normalizeReferenceImages(Array.isArray(styleGuide?.reference_images) ? styleGuide.reference_images : []),
+  );
+  const styleGuideReferences = normalizedReferenceImages.filter((referenceImage) =>
+    styleGuideReferenceSet.has(referenceImage),
+  );
+  const moduleSpecificReferences = normalizedReferenceImages.filter((referenceImage) =>
+    !styleGuideReferenceSet.has(referenceImage),
+  );
+  return {
+    normalizedReferenceImages,
+    styleGuideReferences,
+    moduleSpecificReferences,
+  };
+}
+
+export function buildStorefrontReferenceUsageNotes({
+  moduleType,
+  referenceImages,
+  styleGuide,
+} = {}) {
+  const {
+    normalizedReferenceImages,
+    styleGuideReferences,
+    moduleSpecificReferences,
+  } = splitStorefrontReferenceImages(referenceImages, styleGuide);
+  if (normalizedReferenceImages.length === 0) return [];
+
+  const notes = [];
+  if (styleGuideReferences.length > 0) {
+    notes.push(
+      '若参考图是整页店铺截图，只借鉴其中可复用的背景肌理、插画或 icon 笔触、配色气质，以及当前可见模块的构图语言；不要照搬会员条、底部导航、状态栏、悬浮按钮或未确认的下一屏内容。',
+    );
+    if (moduleType === 'top_slider') {
+      notes.push('顶部主视觉只参考首屏海报的背景氛围、插画语言和品牌气质，不要把其他功能区或运营条直接拼进 hero。');
+    } else if (moduleType === 'user_assets') {
+      notes.push('客户资产入口卡片只沿用 icon 笔触、配色语气和留白关系，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
+    } else if (moduleType === 'banner') {
+      notes.push('Banner 只参考整页风格里的色块、纹理和插画语气，不要直接搬用会员条、商品卡、导航条或其他运营模块。');
+    } else if (moduleType === 'goods') {
+      notes.push(
+        moduleSpecificReferences.length > 0
+          ? '若同时提供了更具体的商品参考图，商品主体、包装和摆盘优先跟随那些更具体的参考；整页截图只用于页面风格定向。'
+          : '当前参考图主要用于页面风格定向，不代表商品主体参考；商品主体、摆盘和购买引导需按当前商品文案重新设计。',
+      );
+    } else if (moduleType === 'shop_info') {
+      notes.push('品牌信息长图只参考整体品牌语气和插画背景，不要直接复刻参考页里的会员权益、交易入口或其他运营型 UI。');
+    }
+  }
+
+  if (moduleSpecificReferences.length > 0 && moduleType === 'goods') {
+    notes.push('已提供更具体的商品参考图：可参考其中的商品主体、包装、摆盘、材质和摄影/插画方式，但仍需保持当前页面的统一品牌风格。');
+  }
+
+  return uniqueStrings(notes.filter(Boolean));
 }
 
 function buildUserAssetsGenerationNotes(styleGuide) {
@@ -3665,6 +3752,7 @@ async function runAssetTask(task) {
       : null;
     if (!existingFile) {
       const imageConfig = await resolveImageConfig(task.imageConfigOptions);
+      console.log(`[storefront] 生图配置: model=${imageConfig.model} task=${task.fileName}`);
       const generated = await generatePromptImage(task.prompt, task.size, imageConfig, inputImagePaths);
       await writeProjectFile(task.projectsRoot, task.projectId, task.fileName, generated.buffer, {
         overwrite: true,
@@ -3702,9 +3790,10 @@ export function cleanupAssetTasks(projectId) {
 
 export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, skillRoot, options = {}) {
   const projectDir = await ensureProject(projectsRoot, projectId);
-  const [requirements, schemaText] = await Promise.all([
+  const [requirements, schemaText, projectFiles] = await Promise.all([
     readRequirementsForProject(projectDir),
     readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE)),
+    listFiles(projectsRoot, projectId),
   ]);
   const styleGuide = await readStyleGuideForProject(projectDir, requirements);
 
@@ -3723,7 +3812,19 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
     throw err;
   }
 
-  const collected = collectAssetTasks(schema, styleGuide, Boolean(options.forceRegenerate));
+  const availableFiles = new Set(
+    Array.isArray(projectFiles)
+      ? projectFiles
+        .map((file) => stringOr(file?.name))
+        .filter(Boolean)
+      : [],
+  );
+  const collected = collectAssetTasks(
+    schema,
+    styleGuide,
+    Boolean(options.forceRegenerate),
+    availableFiles,
+  );
   if (collected.length === 0) {
     await writeRuntimeState(projectDir, 'assets-ready', 'info', 'No pending storefront image slots required generation.');
     return { tasks: [], state: await loadShopHomePageState(projectsRoot, projectId, skillRoot) };
@@ -3788,7 +3889,7 @@ export async function resolveImageConfig(options = {}) {
     providerConfig.baseUrl ||
     'https://api.openai.com/v1'
   ).replace(/\/+$/, '');
-  const model = options.imageModel || process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+  const model = options.imageModel || process.env.OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL;
   if (!apiKey) {
     const err = new Error('Image generation requires OPENAI_API_KEY or an API key in Settings.');
     err.statusCode = 400;

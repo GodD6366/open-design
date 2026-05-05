@@ -16,7 +16,9 @@
 - In the storefront homepage flow, `hotzone` is only for more than 5 entries or explicit hotzone/freeform requests, and fixed layouts generate cards sequentially with the first card used as the reference image for later cards.
 - In the storefront homepage flow, if the opening turn already contains local reference images, let the current daemon agent analyze them in the first clarification turn and use that result to prefill ordered `module_specs`; unmatched reference blocks should fall back to repeatable `image_ad` modules with ratio hints.
 - In the storefront homepage flow, image-bearing modules should keep project-local `reference_images` so downstream asset generation can use real input images instead of text-only prompts.
+- In the storefront homepage flow, full-page reference screenshots only confirm modules visible in the current frame; do not infer off-screen modules, and downstream image generation must explicitly distinguish reusable style cues from UI elements that should be ignored.
 - In the storefront homepage flow, image asset generation must reuse the daemon OpenAI credential resolution path so Settings, env vars, and OpenAI OAuth behave consistently.
+- In the storefront homepage flow, image asset generation defaults to `gpt-image-2`; existing projects without stored `imageModel` metadata fall back there at runtime.
 - In the storefront homepage preview, pending image placeholders should fully fill their module bounds and keep the waiting mark visually centered instead of leaving trailing blank space.
 - In the storefront homepage preview contract, `storefront.screen.html` is inner content only; system status UI and phone chrome belong to the outer preview/debug hosts.
 - When `shopHomePage` behavior changes on this branch, update this file in the same change with the new high-level direction. Keep the notes behavioral and concise; do not turn `AGENTS.md` into an implementation log.

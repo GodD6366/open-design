@@ -1833,6 +1833,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         SHOP_HOME_PAGE_SKILL_DIR,
         {
           forceRegenerate: Boolean(forceRegenerate),
+          imageModel:
+            typeof project.metadata?.imageModel === 'string' && project.metadata.imageModel
+              ? project.metadata.imageModel
+              : undefined,
           projectRoot: PROJECT_ROOT,
         },
       );

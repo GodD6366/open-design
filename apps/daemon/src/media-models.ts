@@ -104,6 +104,9 @@ export const MEDIA_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4'];
 export const VIDEO_LENGTHS_SEC = [3, 5, 8, 10, 15, 30];
 export const AUDIO_DURATIONS_SEC = [5, 10, 15, 30, 60, 120];
 
+export const DEFAULT_IMAGE_MODEL =
+  IMAGE_MODELS.find((m) => m.default)?.id ?? IMAGE_MODELS[0].id;
+
 export function findMediaModel(id) {
   const all = [
     ...IMAGE_MODELS,
