@@ -231,4 +231,96 @@ describe('collectAssetTasks', () => {
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('文字尺度、信息密度');
     expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('超大标题');
   });
+
+  it('adds component-analysis guidance to every referenced image prompt', () => {
+    const styleGuide = {
+      reference_images: ['page-shot.png'],
+      analysis: {
+        icon_style: '手绘 icon',
+        background_style: '暖橙纸感',
+        layout_style: '首屏 hero 稀疏构图，下方客户资产入口区',
+      },
+      generation_rules: {
+        must: [],
+        avoid: [],
+      },
+    };
+    const schema = createSeedSchema(buildRequirements(), styleGuide);
+    const tasks = collectAssetTasks(schema, styleGuide, true, new Set());
+
+    for (const task of tasks.filter((candidate) => candidate.prompt)) {
+      const prompt = JSON.parse(task.prompt ?? '{}');
+      expect(prompt.generation_notes.join('\n')).toContain(
+        '先理解参考图，对图片内容进行组件分析，然后对实际要绘制的组件进行参考，不要被其他不相关内容影响。',
+      );
+    }
+  });
+
+  it('keeps top_slider runtime prompts scoped away from customer asset reference regions', () => {
+    const styleGuide = {
+      reference_images: ['page-shot.png'],
+      analysis: {
+        icon_style: '黑色手绘 doodle icon',
+        background_style: '暖橙纸感背景',
+        layout_style: '海报式 hero 在上，下方悬浮欢迎卡承接客户资产三列入口，再衔接 Banner 和商品区。',
+      },
+      generation_rules: {
+        must: [
+          '整体保持上方海报 hero、下方悬浮欢迎卡、三列入口、Banner 和商品区的海报式节奏。',
+          '借鉴暖橙纸感与黑色手绘笔触。',
+        ],
+        avoid: [],
+      },
+    };
+    const schema = createSeedSchema(buildRequirements(), styleGuide);
+    const tasks = collectAssetTasks(schema, styleGuide, true, new Set());
+    const topSliderTask = tasks.find((task) => task.fileName === 'top-slider-1.png');
+    const topSliderPrompt = JSON.parse(topSliderTask?.prompt ?? '{}');
+    const notes = topSliderPrompt.generation_notes.join('\n');
+
+    expect(notes).toContain('借鉴暖橙纸感与黑色手绘笔触');
+    expect(notes).toContain('参考区域仅限整页截图最上方 hero 组件');
+    expect(notes).not.toContain('下方悬浮欢迎卡承接客户资产三列入口');
+    expect(notes).not.toContain('整体保持上方海报 hero、下方悬浮欢迎卡、三列入口、Banner 和商品区的海报式节奏');
+    expect(topSliderPrompt.constraints.reference_region).toBe('top_hero_only');
+    expect(topSliderPrompt.constraints.forbid_customer_asset_buttons).toBe(true);
+    expect(topSliderPrompt.constraints.forbid_lower_page_ui).toBe(true);
+  });
+
+  it('reduces conflicting visual descriptors when runtime prompts use reference images', () => {
+    const styleGuide = {
+      preset_id: 'bakery-handdrawn-cream',
+      reference_images: ['page-shot.png'],
+      analysis: {
+        background_style: 'warm cream paper',
+        layout_style: 'sparse hero layout',
+      },
+      generation_rules: {
+        must: [],
+        avoid: [],
+      },
+    };
+    const schema = createSeedSchema(buildRequirements(), styleGuide) as any;
+    const topSlider = schema.modules.find((module: any) => module.type === 'top_slider');
+    const promptSchema = topSlider.data.items[0].image_prompt_schema;
+    promptSchema.style.background_type = 'illustrated_paper';
+    promptSchema.style.visual_feel = 'handdrawn_poster';
+    promptSchema.product.visual_type = 'photo';
+    promptSchema.product.scene = 'composition';
+
+    const tasks = collectAssetTasks(schema, styleGuide, true, new Set());
+    const topSliderTask = tasks.find((task) => task.fileName === 'top-slider-1.png');
+    const topSliderPrompt = JSON.parse(topSliderTask?.prompt ?? '{}');
+
+    expect(topSliderPrompt.style.background_type).toBeUndefined();
+    expect(topSliderPrompt.style.visual_feel).toBeUndefined();
+    expect(topSliderPrompt.product.visual_type).toBeUndefined();
+    expect(topSliderPrompt.product.scene).toBeUndefined();
+    expect(JSON.stringify(topSliderPrompt)).not.toContain('handdrawn_poster');
+    expect(JSON.stringify(topSliderPrompt)).not.toContain('"visual_type":"photo"');
+    expect(topSliderPrompt.layout.ratio).toBe('3:4');
+    expect(topSliderPrompt.layout.structure).toBe('poster_hero');
+    expect(topSliderPrompt.constraints.no_padding).toBe(true);
+    expect(topSliderPrompt.reference_style.reference_images).toEqual(['page-shot.png']);
+  });
 });

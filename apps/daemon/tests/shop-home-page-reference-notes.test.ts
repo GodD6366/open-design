@@ -55,8 +55,11 @@ describe('buildStorefrontReferenceUsageNotes', () => {
 
     expect(notes.join('\n')).toContain('顶部主视觉要参考首屏 hero 的空间分布');
     expect(notes.join('\n')).toContain('文字数量和标题尺度');
+    expect(notes.join('\n')).toContain('先理解参考图，对图片内容进行组件分析');
     expect(notes.join('\n')).toContain('不要为了“海报感”新增醒目的大号中文标题');
     expect(notes.join('\n')).toContain('不要把客户资产三宫格');
+    expect(notes.join('\n')).toContain('参考区域仅限整页截图最上方 hero 组件');
+    expect(notes.join('\n')).toContain('客户资产三宫格、入口按钮、会员/欢迎卡、下方 Banner、商品区和品牌故事区都属于其他组件');
   });
 
   it('keeps banners sparse when a shared storefront screenshot is the only reference', () => {

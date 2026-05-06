@@ -400,6 +400,15 @@ const ZERO_PADDING_GENERATION_NOTES = [
   '不要内边距、安全边、留白边框；画布边缘直出但不要因此放大标题、增加文字或塞满装饰，不要再额外套一层卡片。',
 ];
 
+const STOREFRONT_REFERENCE_COMPONENT_ANALYSIS_NOTE =
+  '先理解参考图，对图片内容进行组件分析，然后对实际要绘制的组件进行参考，不要被其他不相关内容影响。';
+
+const TOP_SLIDER_CROSS_MODULE_CUE_RE =
+  /(user_assets|客户资产|入口卡|入口区|功能入口|入口按钮|按钮区|三列入口|三宫格|欢迎卡|会员卡|会员总卡|会员\/欢迎卡|悬浮欢迎|悬浮会员|下方|底部|banner|Banner|商品|goods|shop_info|品牌故事)/i;
+
+const USER_ASSETS_CROSS_MODULE_CUE_RE =
+  /(top_slider|首屏\s*hero|顶部\s*hero|顶部主视觉|主视觉|品牌海报|海报式|poster\s*hero|品牌字标|居中店名|店名|首屏|hero\s*composition)/i;
+
 function imagePromptAllowsBrand(moduleType) {
   return BRAND_PROMPT_MODULES.has(moduleType);
 }
@@ -3532,6 +3541,11 @@ function buildImagePrompt(moduleType, item, styleGuide) {
     deepClone(item.image_prompt_schema ?? {}),
     { includeFullBleed: true },
   );
+  const hasReferenceImages = Array.isArray(item.reference_images) && item.reference_images.length > 0;
+  sanitizeReferenceLedPromptSchema(promptSchema, {
+    moduleType,
+    hasReferenceImages,
+  });
   const styleNotes = buildStyleGenerationNotes(styleGuide, moduleType);
   const referenceUsageNotes = buildStorefrontReferenceUsageNotes({
     moduleType,
@@ -3549,7 +3563,6 @@ function buildImagePrompt(moduleType, item, styleGuide) {
     ];
   } else if (moduleType === 'goods') {
     const cta = stringOr(promptSchema.promotion?.cta, '立即购买');
-    const hasReferenceImages = Array.isArray(item.reference_images) && item.reference_images.length > 0;
     promptSchema.generation_notes = [
       ...styleNotes,
       ...referenceUsageNotes,
@@ -3587,6 +3600,11 @@ function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
   const promptSchema = enforceStraightEdgeZeroPaddingPrompt(
     deepClone(entry?.image_prompt_schema ?? {}),
   );
+  const hasReferenceImages = Array.isArray(entry?.reference_images) && entry.reference_images.length > 0;
+  sanitizeReferenceLedPromptSchema(promptSchema, {
+    moduleType: 'user_assets',
+    hasReferenceImages,
+  });
   const styleNotes = buildUserAssetsGenerationNotes(styleGuide);
   const referenceUsageNotes = buildStorefrontReferenceUsageNotes({
     moduleType: 'user_assets',
@@ -3666,6 +3684,59 @@ function splitStorefrontReferenceImages(referenceImages, styleGuide) {
   };
 }
 
+function sanitizeReferenceLedPromptSchema(promptSchema, { moduleType, hasReferenceImages } = {}) {
+  if (!hasReferenceImages || !isPlainObject(promptSchema)) return promptSchema;
+
+  const style = isPlainObject(promptSchema.style) ? { ...promptSchema.style } : null;
+  const product = isPlainObject(promptSchema.product) ? { ...promptSchema.product } : null;
+
+  if (style) {
+    delete style.background_type;
+    delete style.visual_feel;
+    promptSchema.style = style;
+  }
+  if (product) {
+    delete product.visual_type;
+    delete product.scene;
+    promptSchema.product = product;
+  }
+
+  const constraints = isPlainObject(promptSchema.constraints) ? { ...promptSchema.constraints } : {};
+  if (moduleType === 'top_slider') {
+    promptSchema.constraints = {
+      ...constraints,
+      reference_region: 'top_hero_only',
+      forbid_customer_asset_buttons: true,
+      forbid_member_or_welcome_card: true,
+      forbid_lower_page_ui: true,
+    };
+  } else if (moduleType === 'user_assets') {
+    promptSchema.constraints = {
+      ...constraints,
+      reference_region: 'customer_asset_icon_card_only',
+      forbid_hero_products: true,
+      forbid_brand_hero_wordmark: true,
+      forbid_member_summary_ui: true,
+    };
+  } else {
+    promptSchema.constraints = constraints;
+  }
+
+  return promptSchema;
+}
+
+function moduleScopedStorefrontCue(value, moduleType) {
+  const cue = sanitizeStorefrontPromptCue(value);
+  if (!cue) return '';
+  if (moduleType === 'top_slider' && TOP_SLIDER_CROSS_MODULE_CUE_RE.test(cue)) {
+    return '';
+  }
+  if (moduleType === 'user_assets' && USER_ASSETS_CROSS_MODULE_CUE_RE.test(cue)) {
+    return '';
+  }
+  return cue;
+}
+
 export function buildStorefrontReferenceUsageNotes({
   moduleType,
   referenceImages,
@@ -3679,6 +3750,7 @@ export function buildStorefrontReferenceUsageNotes({
   if (normalizedReferenceImages.length === 0) return [];
 
   const notes = [];
+  notes.push(STOREFRONT_REFERENCE_COMPONENT_ANALYSIS_NOTE);
   if (styleGuideReferences.length > 0) {
     notes.push(
       '若参考图是整页店铺截图，必须同时参考其中可复用的背景肌理、插画或 icon 笔触、配色气质、当前可见模块的构图语言、留白比例、信息密度、文字数量和标题尺度；不要照搬会员条、底部导航、状态栏、悬浮按钮或未确认的下一屏内容。',
@@ -3686,6 +3758,7 @@ export function buildStorefrontReferenceUsageNotes({
     );
     if (moduleType === 'top_slider') {
       notes.push('顶部主视觉要参考首屏 hero 的空间分布、主体数量、留白比例、文字数量和标题尺度；不要为了“海报感”新增醒目的大号中文标题、额外 slogan、CTA、标签或密集涂鸦。');
+      notes.push('顶部主视觉的参考区域仅限整页截图最上方 hero 组件；客户资产三宫格、入口按钮、会员/欢迎卡、下方 Banner、商品区和品牌故事区都属于其他组件，不得移植到轮播头图。');
     } else if (moduleType === 'user_assets') {
       notes.push('客户资产入口卡片只沿用可见入口图标区的 icon 笔触、配色语气、留白关系、标题层级、文字尺度和信息密度，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
     } else if (moduleType === 'banner') {
@@ -3722,11 +3795,17 @@ function buildUserAssetsGenerationNotes(styleGuide) {
   if (guide.analysis?.icon_style) {
     notes.push(`入口 icon 风格参考页面视觉：${guide.analysis.icon_style}`);
   }
-  if (guide.analysis?.layout_style) {
-    notes.push(`布局风格参考：${sanitizeStorefrontPromptCue(guide.analysis.layout_style)}`);
+  const layoutStyle = moduleScopedStorefrontCue(guide.analysis?.layout_style, 'user_assets');
+  if (layoutStyle) {
+    notes.push(`布局风格参考：${layoutStyle}`);
   }
   if (Array.isArray(guide.generation_rules?.avoid) && guide.generation_rules.avoid.length > 0) {
-    notes.push(`避免：${guide.generation_rules.avoid.join('；')}`);
+    const avoidNotes = guide.generation_rules.avoid
+      .map((value) => moduleScopedStorefrontCue(value, 'user_assets'))
+      .filter(Boolean);
+    if (avoidNotes.length > 0) {
+      notes.push(`避免：${avoidNotes.join('；')}`);
+    }
   }
   if (guide.preset_id === 'bakery-handdrawn-cream') {
     notes.push('入口 icon 可以保留手绘涂鸦感和暖橙点缀，但背景仍必须是纯白，不要奶油纸感底纹或海报背景。');
@@ -3772,14 +3851,20 @@ function buildStyleGenerationNotes(styleGuide, moduleType) {
   if (guide.analysis?.background_style) {
     notes.push(`背景风格参考：${sanitizeStorefrontPromptCue(guide.analysis.background_style)}`);
   }
-  if (guide.analysis?.layout_style) {
-    notes.push(`布局风格参考：${sanitizeStorefrontPromptCue(guide.analysis.layout_style)}`);
+  const layoutStyle = moduleScopedStorefrontCue(guide.analysis?.layout_style, moduleType);
+  if (layoutStyle) {
+    notes.push(`布局风格参考：${layoutStyle}`);
   }
   if (Array.isArray(guide.generation_rules?.must)) {
-    notes.push(...guide.generation_rules.must.map((value) => sanitizeStorefrontPromptCue(value)).filter(Boolean));
+    notes.push(...guide.generation_rules.must.map((value) => moduleScopedStorefrontCue(value, moduleType)).filter(Boolean));
   }
   if (Array.isArray(guide.generation_rules?.avoid) && guide.generation_rules.avoid.length > 0) {
-    notes.push(`避免：${guide.generation_rules.avoid.map((value) => sanitizeStorefrontPromptCue(value)).filter(Boolean).join('；')}`);
+    const avoidNotes = guide.generation_rules.avoid
+      .map((value) => moduleScopedStorefrontCue(value, moduleType))
+      .filter(Boolean);
+    if (avoidNotes.length > 0) {
+      notes.push(`避免：${avoidNotes.join('；')}`);
+    }
   }
   if (guide.preset_id === 'bakery-handdrawn-cream') {
     if (moduleType === 'top_slider') {
