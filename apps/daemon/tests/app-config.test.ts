@@ -351,4 +351,37 @@ describe('app-config origin guard', () => {
       delete process.env.OD_WEB_PORT;
     }
   });
+
+  it('allows GET from a private LAN web origin when daemon uses wildcard bind', async () => {
+    const webPort = port + 1;
+    process.env.OD_BIND_HOST = '0.0.0.0';
+    process.env.OD_WEB_PORT = String(webPort);
+    try {
+      const res = await httpRequest(`${baseUrl}/api/app-config`, {
+        headers: {
+          Host: `127.0.0.1:${port}`,
+          Origin: `http://172.18.172.190:${webPort}`,
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_WEB_PORT;
+      delete process.env.OD_BIND_HOST;
+    }
+  });
+
+  it('allows direct same-origin Host/Origin on a private LAN address when daemon uses wildcard bind', async () => {
+    process.env.OD_BIND_HOST = '0.0.0.0';
+    try {
+      const res = await httpRequest(`${baseUrl}/api/app-config`, {
+        headers: {
+          Host: `172.18.172.190:${port}`,
+          Origin: `http://172.18.172.190:${port}`,
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_BIND_HOST;
+    }
+  });
 });

@@ -32,6 +32,7 @@ describe('normalizeDaemonProxyOriginHeader', () => {
       normalizeDaemonProxyOriginHeader({
         daemonOrigin: 'http://127.0.0.1:7456',
         origin: 'http://127.0.0.1:3000',
+        requestHost: undefined,
         webPort: 3000,
       }),
     ).toBe('http://127.0.0.1:7456');
@@ -42,7 +43,19 @@ describe('normalizeDaemonProxyOriginHeader', () => {
       normalizeDaemonProxyOriginHeader({
         daemonOrigin: 'http://127.0.0.1:7456',
         origin: 'http://localhost:3000',
+        requestHost: undefined,
         webPort: 3000,
+      }),
+    ).toBe('http://127.0.0.1:7456');
+  });
+
+  it('normalizes the current request host origin for LAN access', () => {
+    expect(
+      normalizeDaemonProxyOriginHeader({
+        daemonOrigin: 'http://127.0.0.1:7456',
+        origin: 'http://172.18.172.190:5175',
+        requestHost: '172.18.172.190:5175',
+        webPort: 5175,
       }),
     ).toBe('http://127.0.0.1:7456');
   });
@@ -52,6 +65,7 @@ describe('normalizeDaemonProxyOriginHeader', () => {
       normalizeDaemonProxyOriginHeader({
         daemonOrigin: 'http://127.0.0.1:7456',
         origin: 'https://example.com',
+        requestHost: '172.18.172.190:5175',
         webPort: 3000,
       }),
     ).toBe('https://example.com');
@@ -62,6 +76,7 @@ describe('normalizeDaemonProxyOriginHeader', () => {
       normalizeDaemonProxyOriginHeader({
         daemonOrigin: 'http://127.0.0.1:7456',
         origin: undefined,
+        requestHost: undefined,
         webPort: 3000,
       }),
     ).toBeUndefined();
@@ -69,6 +84,7 @@ describe('normalizeDaemonProxyOriginHeader', () => {
       normalizeDaemonProxyOriginHeader({
         daemonOrigin: 'http://127.0.0.1:7456',
         origin: 'null',
+        requestHost: undefined,
         webPort: 3000,
       }),
     ).toBe('null');

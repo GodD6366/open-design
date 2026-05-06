@@ -8,6 +8,108 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * as it appears in the real daemon, so we test the actual logic
  * including OD_WEB_PORT, Origin: null scoping, and non-loopback host.
  */
+function normalizeHostname(hostname) {
+  return String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, '$1');
+}
+
+function isWildcardBindHost(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return normalized === '0.0.0.0' || normalized === '::';
+}
+
+function isLoopbackHostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return (
+    normalized === '127.0.0.1' ||
+    normalized === 'localhost' ||
+    normalized === '::1'
+  );
+}
+
+function isPrivateIpv4Hostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  const match =
+    /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(normalized);
+  if (!match) return false;
+  const octets = match.slice(1).map(Number);
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 100 && second >= 64 && second <= 127)
+  );
+}
+
+function isPrivateIpv6Hostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return (
+    normalized === '::1' ||
+    normalized.startsWith('fe80:') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd')
+  );
+}
+
+function isLocalNetworkHostname(hostname) {
+  return (
+    isLoopbackHostname(hostname) ||
+    isPrivateIpv4Hostname(hostname) ||
+    isPrivateIpv6Hostname(hostname)
+  );
+}
+
+function isAllowedBrowserHostname(hostname, bindHost) {
+  const normalizedHost = normalizeHostname(hostname);
+  const normalizedBindHost = normalizeHostname(bindHost);
+  if (isLoopbackHostname(normalizedHost)) return true;
+  if (normalizedHost === normalizedBindHost) return true;
+  if (isWildcardBindHost(normalizedBindHost)) {
+    return isLocalNetworkHostname(normalizedHost);
+  }
+  return false;
+}
+
+function resolveAllowedBrowserPorts(port) {
+  const ports = [port];
+  const webPort = Number(process.env.OD_WEB_PORT);
+  if (webPort && webPort !== port) ports.push(webPort);
+  return ports;
+}
+
+function parseOriginHeader(origin) {
+  try {
+    const parsed = new URL(String(origin));
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    const port =
+      parsed.port === ''
+        ? parsed.protocol === 'https:'
+          ? 443
+          : 80
+        : Number(parsed.port);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
+    return { hostname: normalizeHostname(parsed.hostname), port };
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedBrowserOrigin(origin, ports, bindHost) {
+  const parsed = parseOriginHeader(origin);
+  if (parsed == null || !ports.includes(parsed.port)) return false;
+  return isAllowedBrowserHostname(parsed.hostname, bindHost);
+}
+
 function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.
@@ -27,18 +129,8 @@ function createOriginMiddleware(resolvedPort, host = '127.0.0.1') {
     if (!resolvedPort) {
       return res.status(403).json({ error: 'Server initializing' });
     }
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    const allowedOrigins = new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
-    if (!allowedOrigins.has(String(origin))) {
+    const ports = resolveAllowedBrowserPorts(resolvedPort);
+    if (!isAllowedBrowserOrigin(String(origin), ports, host)) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
@@ -320,5 +412,57 @@ describe('origin validation: non-loopback bind host', () => {
       origin: `http://evil.com:${port}`,
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('origin validation: wildcard bind host', () => {
+  let server;
+  let port;
+
+  beforeAll(
+    () =>
+      new Promise((resolve) => {
+        const tempApp = makeTestApp(0, '0.0.0.0');
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = tempServer.address().port;
+          tempServer.close(() => {
+            const realApp = makeTestApp(port, '0.0.0.0');
+            server = realApp.listen(port, '127.0.0.1', () => resolve());
+          });
+        });
+      }),
+  );
+
+  afterAll(
+    () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  );
+
+  it('allows browser requests from private LAN origins on the trusted web port', async () => {
+    const webPort = port + 1000;
+    process.env.OD_WEB_PORT = String(webPort);
+    try {
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: `http://172.18.172.190:${webPort}`,
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_WEB_PORT;
+    }
+  });
+
+  it('still blocks public origins when wildcard binding is used', async () => {
+    const webPort = port + 1000;
+    process.env.OD_WEB_PORT = String(webPort);
+    try {
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: `http://8.8.8.8:${webPort}`,
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_WEB_PORT;
+    }
   });
 });

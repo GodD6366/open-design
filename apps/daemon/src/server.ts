@@ -221,6 +221,125 @@ function finiteAttachmentNumber(value) {
   return Number.isFinite(value) ? Math.round(value) : 0;
 }
 
+function normalizeHostname(hostname) {
+  return String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, '$1');
+}
+
+function isWildcardBindHost(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return normalized === '0.0.0.0' || normalized === '::';
+}
+
+function isLoopbackHostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return (
+    normalized === '127.0.0.1' ||
+    normalized === 'localhost' ||
+    normalized === '::1'
+  );
+}
+
+function isPrivateIpv4Hostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  const match =
+    /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(normalized);
+  if (!match) return false;
+  const octets = match.slice(1).map(Number);
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 100 && second >= 64 && second <= 127)
+  );
+}
+
+function isPrivateIpv6Hostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return (
+    normalized === '::1' ||
+    normalized.startsWith('fe80:') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd')
+  );
+}
+
+function isLocalNetworkHostname(hostname) {
+  return (
+    isLoopbackHostname(hostname) ||
+    isPrivateIpv4Hostname(hostname) ||
+    isPrivateIpv6Hostname(hostname)
+  );
+}
+
+function isAllowedBrowserHostname(hostname, bindHost) {
+  const normalizedHost = normalizeHostname(hostname);
+  const normalizedBindHost = normalizeHostname(bindHost);
+  if (isLoopbackHostname(normalizedHost)) return true;
+  if (normalizedHost === normalizedBindHost) return true;
+  if (isWildcardBindHost(normalizedBindHost)) {
+    return isLocalNetworkHostname(normalizedHost);
+  }
+  return false;
+}
+
+function resolveAllowedBrowserPorts(port) {
+  const ports = [port];
+  const webPort = Number(process.env.OD_WEB_PORT);
+  if (webPort && webPort !== port) ports.push(webPort);
+  return ports;
+}
+
+function parseOriginHeader(origin) {
+  try {
+    const parsed = new URL(String(origin));
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    const port =
+      parsed.port === ''
+        ? parsed.protocol === 'https:'
+          ? 443
+          : 80
+        : Number(parsed.port);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
+    return { hostname: normalizeHostname(parsed.hostname), port };
+  } catch {
+    return null;
+  }
+}
+
+function parseHostHeader(hostHeader) {
+  try {
+    const parsed = new URL(`http://${String(hostHeader || '')}`);
+    const port = parsed.port === '' ? 80 : Number(parsed.port);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
+    return { hostname: normalizeHostname(parsed.hostname), port };
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedBrowserOrigin(origin, ports, bindHost) {
+  const parsed = parseOriginHeader(origin);
+  if (parsed == null || !ports.includes(parsed.port)) return false;
+  return isAllowedBrowserHostname(parsed.hostname, bindHost);
+}
+
+function isAllowedBrowserHostHeader(hostHeader, ports, bindHost) {
+  const parsed = parseHostHeader(hostHeader);
+  if (parsed == null || !ports.includes(parsed.port)) return false;
+  return isAllowedBrowserHostname(parsed.hostname, bindHost);
+}
+
 function formatAttachmentPosition(position) {
   return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
 }
@@ -656,21 +775,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   // Shared by the global origin middleware and isLocalSameOrigin() so
   // both use the same policy (loopback + explicit bind host, HTTP + HTTPS,
   // OD_WEB_PORT support).
-  function buildAllowedOrigins() {
-    const ports = [resolvedPort];
-    const webPort = Number(process.env.OD_WEB_PORT);
-    if (webPort && webPort !== resolvedPort) ports.push(webPort);
-    const schemes = ['http', 'https'];
-    const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-    return new Set(
-      ports.flatMap((p) => [
-        ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-        // When bound to a specific non-loopback address (e.g. Tailscale,
-        // LAN IP, or 0.0.0.0), allow browser requests from that address
-        // too so the documented --host escape hatch remains usable.
-        ...schemes.map((s) => `${s}://${host}:${p}`),
-      ]),
-    );
+  function isAllowedBrowserRequestOrigin(origin) {
+    return isAllowedBrowserOrigin(origin, resolveAllowedBrowserPorts(resolvedPort), host);
   }
 
   // Routes that serve content to sandboxed iframes (Origin: null) for
@@ -702,7 +808,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       return res.status(403).json({ error: 'Server initializing' });
     }
 
-    if (!buildAllowedOrigins().has(String(origin))) {
+    if (!isAllowedBrowserRequestOrigin(String(origin))) {
       return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     }
     next();
@@ -3532,34 +3638,14 @@ export function isLocalSameOrigin(req, port) {
   // bind host — matching the global origin middleware policy exactly.
   const host = String(req.headers.host || '');
   const origin = req.headers.origin;
-
-  // Build allowed set inline (same logic as buildAllowedOrigins in
-  // startServer, but self-contained so the exported helper works
-  // without closing over server-scoped variables).
-  const ports = [port];
-  const webPort = Number(process.env.OD_WEB_PORT);
-  if (webPort && webPort !== port) ports.push(webPort);
   const bindHost = process.env.OD_BIND_HOST || '127.0.0.1';
-  const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
-  const allowedHosts = new Set(
-    ports.flatMap((p) => [
-      ...loopbackHosts.map((h) => `${h}:${p}`),
-      `${bindHost}:${p}`,
-    ]),
-  );
+  const ports = resolveAllowedBrowserPorts(port);
 
   // Reject unknown Host first (DNS rebinding / Host header attack)
-  if (!allowedHosts.has(host)) return false;
+  if (!isAllowedBrowserHostHeader(host, ports, bindHost)) return false;
 
   // Non-browser client with valid Host → allow
   if (origin == null || origin === '') return true;
 
-  const schemes = ['http', 'https'];
-  const allowedOrigins = new Set(
-    ports.flatMap((p) => [
-      ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
-    ]),
-  );
-  return allowedOrigins.has(String(origin));
+  return isAllowedBrowserOrigin(String(origin), ports, bindHost);
 }

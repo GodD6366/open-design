@@ -114,6 +114,7 @@ export function resolveDaemonProxyTarget(
 export function normalizeDaemonProxyOriginHeader(options: {
   daemonOrigin: string;
   origin: string | undefined;
+  requestHost: string | undefined;
   webPort: number;
 }): string | undefined {
   if (options.origin == null || options.origin.length === 0) return options.origin;
@@ -123,6 +124,13 @@ export function normalizeDaemonProxyOriginHeader(options: {
   const allowedWebOrigins = new Set(
     schemes.flatMap((scheme) => loopbackHosts.map((host) => `${scheme}://${host}:${options.webPort}`)),
   );
+
+  if (options.requestHost != null && options.requestHost.length > 0) {
+    const requestOriginCandidates = schemes.map((scheme) => `${scheme}://${options.requestHost}`);
+    if (requestOriginCandidates.includes(options.origin)) {
+      return options.daemonOrigin;
+    }
+  }
 
   return allowedWebOrigins.has(options.origin) ? options.daemonOrigin : options.origin;
 }
@@ -138,6 +146,7 @@ async function proxyToDaemon(
   const origin = normalizeDaemonProxyOriginHeader({
     daemonOrigin: target.origin,
     origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+    requestHost: typeof request.headers.host === "string" ? request.headers.host : undefined,
     webPort,
   });
   if (origin == null || origin.length === 0) {
