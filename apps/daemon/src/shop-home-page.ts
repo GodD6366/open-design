@@ -819,6 +819,31 @@ function sharedStyleGuideReferenceImages(styleGuide) {
   );
 }
 
+const USER_ASSETS_VISIBLE_REFERENCE_RE =
+  /(user_assets|客户资产|入口卡|入口区|功能入口|入口按钮|按钮区|三列入口|三宫格|欢迎卡|会员卡|会员总卡|会员\/欢迎卡|entry[- ]?cards?|customer[- ]?assets?|member\/action card|action card|supporting entry)/i;
+
+function styleGuideIndicatesVisibleUserAssets(styleGuide) {
+  const text = [
+    stringOr(styleGuide?.analysis?.source_summary),
+    stringOr(styleGuide?.analysis?.icon_style),
+    stringOr(styleGuide?.analysis?.background_style),
+    stringOr(styleGuide?.analysis?.layout_style),
+    ...(Array.isArray(styleGuide?.generation_rules?.must) ? styleGuide.generation_rules.must : []),
+    ...(Array.isArray(styleGuide?.generation_rules?.avoid) ? styleGuide.generation_rules.avoid : []),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return USER_ASSETS_VISIBLE_REFERENCE_RE.test(text);
+}
+
+function defaultReferenceImagesForModule(moduleType, styleGuide) {
+  const refs = sharedStyleGuideReferenceImages(styleGuide);
+  if (refs.length === 0) return refs;
+  if (moduleType === 'top_slider' || moduleType === 'image_ad') return refs;
+  if (moduleType === 'user_assets' && styleGuideIndicatesVisibleUserAssets(styleGuide)) return refs;
+  return [];
+}
+
 function isLegacyScopedReferenceImage(value) {
   const fileName = stringOr(value);
   return (
@@ -1328,7 +1353,7 @@ function createSeedImageItem(spec, index, requirements, designContext, styleGuid
     id: `${moduleType}_${index + 1}`,
     image: '',
     image_prompt_schema: promptSchema,
-    reference_images: sharedStyleGuideReferenceImages(styleGuide),
+    reference_images: defaultReferenceImagesForModule(moduleType, styleGuide),
     alt: promptSchema.content.title || `${storefrontModuleLabel(moduleType)} ${index + 1}`,
     aspect_ratio: promptSchema.layout.ratio,
   };
@@ -1657,7 +1682,7 @@ function createDefaultUserAssetsEntry(
     reference_images: normalizeReferenceImages(
       Array.isArray(entrySeed?.reference_images)
         ? normalizeLegacyScopedReferenceImages(entrySeed.reference_images, styleGuide)
-        : sharedStyleGuideReferenceImages(styleGuide),
+        : defaultReferenceImagesForModule('user_assets', styleGuide),
     ),
     alt: stringOr(entrySeed?.alt, promptSchema.content.title),
     no_cache: entrySeed?.no_cache === true,

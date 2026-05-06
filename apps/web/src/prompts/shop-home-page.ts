@@ -278,6 +278,7 @@ export function composeShopHomePageSystemPrompt({
     '- If a style guide exists, keep schema copy, `design_context`, `user_assets.data.card_layout`, `user_assets.data.entries[*].image_prompt_schema`, and any `reference_images` aligned with it.',
     '- Every image-bearing module may carry local `reference_images`; keep those filenames intact so downstream asset generation can use image-edit mode instead of text-only generation.',
     '- When shared `reference_images` come from a full-page storefront screenshot, treat them as page-style references by default. Only more specific module refs should control product subjects, packaging, staging, CTA widgets, or other module-local details.',
+    '- Full-page storefront screenshot `reference_images` are module-scoped. Attach the screenshot only to modules visibly represented in the current frame, or to modules with explicit module-local references; do not attach it to absent modules such as `shop_info`, `goods`, or `banner` just for style.',
     '- If a full-page storefront screenshot visibly includes `user_assets` in the current frame, copy that screenshot filename into each `user_assets.data.entries[*].reference_images` by default. Only replace or narrow it when the user provides more specific entry-local references.',
     '- Keep shared `reference_images` as the full reference screenshot when that is the only source. Do not generate or depend on module-local crop files such as `top-slider-ref-hero.png` or `user-assets-ref-strip.png`.',
     '',

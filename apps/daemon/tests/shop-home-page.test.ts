@@ -65,6 +65,9 @@ describe('createSeedSchema', () => {
   it('keeps shared full-page screenshots as the default reference source', () => {
     const schema = createSeedSchema(buildRequirements(), {
       reference_images: ['page-shot.png'],
+      analysis: {
+        layout_style: '海报感 hero 居首，浮动会员卡片，三等分功能入口排布。',
+      },
     });
 
     const topSliderRefs = schema.modules
@@ -73,10 +76,38 @@ describe('createSeedSchema', () => {
     const userAssetsEntries = schema.modules
       .find((module: any) => module.type === 'user_assets')
       ?.data?.entries;
+    const shopInfoRefs = schema.modules
+      .find((module: any) => module.type === 'shop_info')
+      ?.data?.items?.[0]?.reference_images;
+    const goodsRefs = schema.modules
+      .find((module: any) => module.type === 'goods')
+      ?.data?.items?.[0]?.reference_images;
 
     expect(topSliderRefs).toEqual(['page-shot.png']);
     expect(userAssetsEntries?.[0]?.reference_images).toEqual(['page-shot.png']);
     expect(userAssetsEntries?.[1]?.reference_images).toEqual(['page-shot.png']);
+    expect(shopInfoRefs).toEqual([]);
+    expect(goodsRefs).toEqual([]);
+  });
+
+  it('does not inherit shared full-page screenshots for shop_info when the frame only evidences hero and entries', () => {
+    const schema = createSeedSchema(buildRequirements(), {
+      reference_images: ['page-shot.png'],
+      analysis: {
+        source_summary: '首屏烘焙海报，下方会员欢迎卡和三列入口',
+        layout_style: '海报感 hero 居首，浮动会员卡片，三等分功能入口排布。',
+      },
+      generation_rules: {
+        must: ['参考图可见的 hero 组件空间分布、产品数量、留白比例、文字数量和标题尺度'],
+        avoid: [],
+      },
+    });
+
+    const shopInfoRefs = schema.modules
+      .find((module: any) => module.type === 'shop_info')
+      ?.data?.items?.[0]?.reference_images;
+
+    expect(shopInfoRefs).toEqual([]);
   });
 
   it('migrates legacy crop-only reference images back to shared full-page screenshots', async () => {
@@ -90,7 +121,9 @@ describe('createSeedSchema', () => {
       version: '1.0',
       preset_id: 'auto',
       reference_images: ['page-shot.png'],
-      analysis: {},
+      analysis: {
+        layout_style: '海报感 hero 居首，浮动会员卡片，三等分功能入口排布。',
+      },
       generation_rules: {},
     };
     const schema = createSeedSchema(requirements as any, styleGuide as any) as any;
@@ -216,7 +249,6 @@ describe('collectAssetTasks', () => {
     expect(goodsPrompt.generation_notes.join('\n')).toContain('不要内边距');
     expect(goodsPrompt.generation_notes.join('\n')).toContain('straight-edge blocks');
     expect(goodsPrompt.generation_notes.join('\n')).not.toContain('rounded cards');
-    expect(goodsPrompt.generation_notes.join('\n')).toContain('信息密度不得高于参考图对应区域');
     expect(goodsPrompt.generation_notes.join('\n')).toContain('布局风格参考');
 
     expect(nextGoodsPrompt.layout.padding).toBe(0);
@@ -228,7 +260,6 @@ describe('collectAssetTasks', () => {
     expect(userAssetsPrompt.constraints.no_rounded_corners).toBe(true);
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('完整填满 schema 给出的卡位尺寸');
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('布局风格参考');
-    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('文字尺度、信息密度');
     expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('超大标题');
   });
 
@@ -248,7 +279,11 @@ describe('collectAssetTasks', () => {
     const schema = createSeedSchema(buildRequirements(), styleGuide);
     const tasks = collectAssetTasks(schema, styleGuide, true, new Set());
 
-    for (const task of tasks.filter((candidate) => candidate.prompt)) {
+    for (const task of tasks.filter((candidate) => {
+      if (!candidate.prompt) return false;
+      if (candidate.fileName.startsWith('top-slider-')) return true;
+      return candidate.fileName.startsWith('user-assets-entry-');
+    })) {
       const prompt = JSON.parse(task.prompt ?? '{}');
       expect(prompt.generation_notes.join('\n')).toContain(
         '先理解参考图，对图片内容进行组件分析，然后对实际要绘制的组件进行参考，不要被其他不相关内容影响。',

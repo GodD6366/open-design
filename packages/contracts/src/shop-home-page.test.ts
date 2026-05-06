@@ -14,6 +14,7 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('Reference screenshots only prove the modules visible in that frame.');
     expect(out).toContain('Use `generation_rules.must` and `generation_rules.avoid` to state the reference scope explicitly.');
     expect(out).toContain('When shared `reference_images` come from a full-page storefront screenshot');
+    expect(out).toContain('Full-page storefront screenshot `reference_images` are module-scoped.');
     expect(out).toContain('Do not copy unrelated screenshot UI into module assets.');
     expect(out).toContain('composition, whitespace, information density, text amount, and title scale');
     expect(out).toContain('spatial distribution, product count, whitespace ratio, text amount, and title scale');
@@ -46,6 +47,7 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('copy that screenshot filename into each `user_assets.data.entries[*].reference_images` by default');
     expect(out).toContain('Do not leave new `user_assets` entries at `reference_images: []`');
     expect(out).toContain('it must not be interpreted as permission to copy the membership summary card, bottom navigation, host-app chrome');
+    expect(out).toContain('do not attach it to absent modules such as `shop_info`, `goods`, or `banner` just for style');
   });
 
   it('limits full-page screenshots to hero scope for top_slider and icon-area scope for user_assets', () => {
