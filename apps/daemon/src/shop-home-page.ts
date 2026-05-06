@@ -231,15 +231,15 @@ const BAKERY_STYLE_GUIDE_PRESET = {
     background_style:
       'Warm cream paper tone with clean white straight-edge blocks, very sparse orange/yellow accent marks, airy whitespace, and soft warm shadows.',
     layout_style:
-      'Oversized poster hero first, then a floating member/action card, then clean supporting entry-card rows that still follow the confirmed layout mode.',
+      'Reference-sized poster hero first, then a floating member/action card, then clean supporting entry-card rows; preserve the source title scale, sparse text budget, information density, and whitespace rhythm while still following the confirmed layout mode.',
     tone_keywords: ['bakery', 'hand-drawn', 'cream', 'playful', 'poster', 'warm'],
   },
   generation_rules: {
     must: [
       'Use warm cream paper-like backgrounds with mostly black typography, doodle accents, and straight-edge content blocks.',
       'Keep icons, arrows, crowns, and wordmarks sketchy and hand-drawn rather than polished UI glyphs.',
-      'Preserve poster-like hierarchy: oversized hero headline, generous whitespace, and simple module stacking.',
-      'Bakery product imagery may be photographic, but overlays can include doodle arrows, crowns, handwritten labels, and rough strokes.',
+      'Preserve poster-like hierarchy using the reference image title scale, generous whitespace, sparse information density, and simple module stacking.',
+      'Bakery product imagery may be photographic, but overlays should stay as sparse as the reference and only include doodle arrows, crowns, handwritten labels, or rough strokes when they do not raise the visual density.',
     ],
     avoid: [
       'no neon gradients or glossy mall-banner rendering',
@@ -397,7 +397,7 @@ const IMAGE_FILE_PREFIX = {
 
 const ZERO_PADDING_GENERATION_NOTES = [
   '画面必须使用直角外轮廓输出：不要圆角卡片、圆角白底块、圆角外框或任何圆角包装层。',
-  '不要内边距、安全边、留白边框；主体、文字和装饰元素按满幅构图直接铺开，不要再额外套一层卡片。',
+  '不要内边距、安全边、留白边框；画布边缘直出但不要因此放大标题、增加文字或塞满装饰，不要再额外套一层卡片。',
 ];
 
 function imagePromptAllowsBrand(moduleType) {
@@ -3681,31 +3681,32 @@ export function buildStorefrontReferenceUsageNotes({
   const notes = [];
   if (styleGuideReferences.length > 0) {
     notes.push(
-      '若参考图是整页店铺截图，只借鉴其中可复用的背景肌理、插画或 icon 笔触、配色气质，以及当前可见模块的构图语言；不要照搬会员条、底部导航、状态栏、悬浮按钮或未确认的下一屏内容。',
+      '若参考图是整页店铺截图，必须同时参考其中可复用的背景肌理、插画或 icon 笔触、配色气质、当前可见模块的构图语言、留白比例、信息密度、文字数量和标题尺度；不要照搬会员条、底部导航、状态栏、悬浮按钮或未确认的下一屏内容。',
+      '共享参考图会约束版式与密度：当前模块的信息密度不得高于参考图对应区域，文字块数量、字重和字号层级要接近参考图；不要生成未请求的大标题、营销口号、促销标签或满屏装饰。',
     );
     if (moduleType === 'top_slider') {
-      notes.push('顶部主视觉只参考首屏海报的背景氛围、插画语言和品牌气质，不要把其他功能区或运营条直接拼进 hero。');
+      notes.push('顶部主视觉要参考首屏 hero 的空间分布、主体数量、留白比例、文字数量和标题尺度；不要为了“海报感”新增醒目的大号中文标题、额外 slogan、CTA、标签或密集涂鸦。');
     } else if (moduleType === 'user_assets') {
-      notes.push('客户资产入口卡片只沿用 icon 笔触、配色语气和留白关系，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
+      notes.push('客户资产入口卡片只沿用可见入口图标区的 icon 笔触、配色语气、留白关系、标题层级、文字尺度和信息密度，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
     } else if (moduleType === 'banner') {
-      notes.push('Banner 只参考整页风格里的色块、纹理和插画语气，不要直接搬用会员条、商品卡、导航条或其他运营模块。');
+      notes.push('Banner 参考整页风格里的色块、纹理、插画语气、留白和文字密度；保持轻量，不要直接搬用会员条、商品卡、导航条或其他运营模块。');
     } else if (moduleType === 'goods') {
       notes.push(
         moduleSpecificReferences.length > 0
-          ? '若同时提供了更具体的商品参考图，商品主体、包装和摆盘优先跟随那些更具体的参考；整页截图只用于页面风格定向。'
-          : '当前参考图主要用于页面风格定向，不代表商品主体参考；商品主体、摆盘和购买引导需按当前商品文案重新设计。',
+          ? '若同时提供了更具体的商品参考图，商品主体、包装和摆盘优先跟随那些更具体的参考；整页截图仍用于页面风格、留白、信息密度和文字尺度定向。'
+          : '当前参考图主要用于页面风格、构图密度、留白和文字尺度定向，不代表商品主体参考；商品主体、摆盘和购买引导需按当前商品文案重新设计。',
       );
     } else if (moduleType === 'shop_info') {
-      notes.push('品牌信息长图只参考整体品牌语气和插画背景，不要直接复刻参考页里的会员权益、交易入口或其他运营型 UI。');
+      notes.push('品牌信息长图参考整体品牌语气、插画背景、留白和文字密度，不要直接复刻参考页里的会员权益、交易入口或其他运营型 UI。');
     }
   }
 
   if (moduleType === 'user_assets') {
-    notes.push('客户资产入口只模仿整页参考图里可见图标区的笔触、留白、标题层级和配色节奏；具体按钮图案、标题和副标题必须按当前入口需求生成，不要借用 hero 商品主体、会员汇总卡、其他按钮主体或原文案。');
+    notes.push('客户资产入口只模仿整页参考图里可见图标区的笔触、留白、标题层级、文字尺度、信息密度和配色节奏；具体按钮图案、标题和副标题必须按当前入口需求生成，不要借用 hero 商品主体、会员汇总卡、其他按钮主体或原文案。');
   }
 
   if (moduleType === 'top_slider') {
-    notes.push('顶部主视觉只参考整页图中的首屏 hero 氛围、构图和品牌气质，不要把客户资产三宫格、会员卡、活动 Banner 或下方内容直接带进轮播头图。');
+    notes.push('顶部主视觉只参考整页图中的首屏 hero 氛围、构图、留白、文字数量、标题尺度和品牌气质，不要把客户资产三宫格、会员卡、活动 Banner 或下方内容直接带进轮播头图。');
   }
 
   if (moduleSpecificReferences.length > 0 && moduleType === 'goods') {
@@ -3720,6 +3721,9 @@ function buildUserAssetsGenerationNotes(styleGuide) {
   const guide = coerceStyleGuide(styleGuide, null);
   if (guide.analysis?.icon_style) {
     notes.push(`入口 icon 风格参考页面视觉：${guide.analysis.icon_style}`);
+  }
+  if (guide.analysis?.layout_style) {
+    notes.push(`布局风格参考：${sanitizeStorefrontPromptCue(guide.analysis.layout_style)}`);
   }
   if (Array.isArray(guide.generation_rules?.avoid) && guide.generation_rules.avoid.length > 0) {
     notes.push(`避免：${guide.generation_rules.avoid.join('；')}`);
@@ -3768,7 +3772,7 @@ function buildStyleGenerationNotes(styleGuide, moduleType) {
   if (guide.analysis?.background_style) {
     notes.push(`背景风格参考：${sanitizeStorefrontPromptCue(guide.analysis.background_style)}`);
   }
-  if (guide.analysis?.layout_style && moduleType === 'user_assets') {
+  if (guide.analysis?.layout_style) {
     notes.push(`布局风格参考：${sanitizeStorefrontPromptCue(guide.analysis.layout_style)}`);
   }
   if (Array.isArray(guide.generation_rules?.must)) {
@@ -3779,11 +3783,11 @@ function buildStyleGenerationNotes(styleGuide, moduleType) {
   }
   if (guide.preset_id === 'bakery-handdrawn-cream') {
     if (moduleType === 'top_slider') {
-      notes.push('顶部主视觉优先做成手绘感海报：超大标题、奶油色底、可加入涂鸦皇冠/箭头/吐司边缘橙色高光。');
+      notes.push('顶部主视觉优先做成参考图驱动的手绘感海报：标题大小、文字数量、主体数量和留白比例跟随参考图，不要额外放大中文标题或塞满涂鸦装饰。');
     } else if (moduleType === 'user_assets') {
-      notes.push('客户资产入口卡片可以保留手绘招牌感标题和轻涂鸦细节，但布局仍需服从当前 schema 里的实际卡片模式。');
+      notes.push('客户资产入口卡片可以保留手绘招牌感标题和轻涂鸦细节，但文字尺度、信息密度和布局仍需服从参考图与当前 schema 里的实际卡片模式。');
     } else if (moduleType === 'goods') {
-      notes.push('商品图主体可以是真实烘焙产品摄影，但允许少量手绘箭头、贴纸和标题覆盖，不要做成标准商城白底商品图。');
+      notes.push('商品图主体可以是真实烘焙产品摄影，但只允许参考图密度范围内的少量手绘箭头、贴纸和标题覆盖，不要做成标准商城白底商品图。');
     }
   }
   return uniqueStrings(notes.filter(Boolean));

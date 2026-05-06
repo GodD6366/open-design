@@ -11,7 +11,9 @@ describe('buildStorefrontReferenceUsageNotes', () => {
       },
     });
 
-    expect(notes.join('\n')).toContain('当前参考图主要用于页面风格定向');
+    expect(notes.join('\n')).toContain('当前参考图主要用于页面风格、构图密度');
+    expect(notes.join('\n')).toContain('信息密度不得高于参考图对应区域');
+    expect(notes.join('\n')).toContain('留白和文字尺度定向');
     expect(notes.join('\n')).toContain('不要照搬会员条、底部导航、状态栏、悬浮按钮');
   });
 
@@ -37,7 +39,8 @@ describe('buildStorefrontReferenceUsageNotes', () => {
       },
     });
 
-    expect(notes.join('\n')).toContain('客户资产入口卡片只沿用 icon 笔触');
+    expect(notes.join('\n')).toContain('可见入口图标区的 icon 笔触');
+    expect(notes.join('\n')).toContain('文字尺度和信息密度');
     expect(notes.join('\n')).toContain('具体按钮图案、标题和副标题必须按当前入口需求生成');
   });
 
@@ -50,7 +53,23 @@ describe('buildStorefrontReferenceUsageNotes', () => {
       },
     });
 
-    expect(notes.join('\n')).toContain('顶部主视觉只参考首屏海报的背景氛围');
+    expect(notes.join('\n')).toContain('顶部主视觉要参考首屏 hero 的空间分布');
+    expect(notes.join('\n')).toContain('文字数量和标题尺度');
+    expect(notes.join('\n')).toContain('不要为了“海报感”新增醒目的大号中文标题');
     expect(notes.join('\n')).toContain('不要把客户资产三宫格');
+  });
+
+  it('keeps banners sparse when a shared storefront screenshot is the only reference', () => {
+    const notes = buildStorefrontReferenceUsageNotes({
+      moduleType: 'banner',
+      referenceImages: ['page-shot.png'],
+      styleGuide: {
+        reference_images: ['page-shot.png'],
+      },
+    });
+
+    expect(notes.join('\n')).toContain('Banner 参考整页风格里的色块');
+    expect(notes.join('\n')).toContain('留白和文字密度');
+    expect(notes.join('\n')).toContain('保持轻量');
   });
 });

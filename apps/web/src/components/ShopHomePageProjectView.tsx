@@ -42,6 +42,7 @@ import {
   enqueueShopHomePageAssets,
   fetchShopHomePageAssetTasks,
 } from '../shop-home-page/api';
+import { createClientId } from '../utils/id';
 import { ShopHomePagePhonePreview } from '../shop-home-page/ShopHomePagePhonePreview';
 import {
   SHOP_HOME_PAGE_PREVIEW_FILE,
@@ -305,12 +306,12 @@ export function ShopHomePageProjectView({
       setError(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: createClientId(),
         role: 'user',
         content: prompt,
         attachments: attachments.length > 0 ? attachments : undefined,
       };
-      const assistantId = crypto.randomUUID();
+      const assistantId = createClientId();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',

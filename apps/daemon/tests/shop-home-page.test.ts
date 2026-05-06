@@ -186,17 +186,18 @@ describe('collectAssetTasks', () => {
   });
 
   it('forces straight-edge zero-padding rules in runtime image prompts', () => {
-    const schema = createSeedSchema(buildRequirements(), null);
     const styleGuide = {
       reference_images: ['page-shot.png'],
       analysis: {
         background_style: 'Warm cream paper tone with large white rounded cards and airy whitespace.',
+        layout_style: 'Airy storefront reference with sparse composition, low information density, small title scale, and large empty areas.',
       },
       generation_rules: {
         must: ['Use rounded cards when appropriate.'],
         avoid: [],
       },
     };
+    const schema = createSeedSchema(buildRequirements(), styleGuide);
 
     const tasks = collectAssetTasks(schema, styleGuide, true, new Set());
     const goodsTask = tasks.find((task) => task.fileName === 'goods-1.png');
@@ -215,6 +216,8 @@ describe('collectAssetTasks', () => {
     expect(goodsPrompt.generation_notes.join('\n')).toContain('不要内边距');
     expect(goodsPrompt.generation_notes.join('\n')).toContain('straight-edge blocks');
     expect(goodsPrompt.generation_notes.join('\n')).not.toContain('rounded cards');
+    expect(goodsPrompt.generation_notes.join('\n')).toContain('信息密度不得高于参考图对应区域');
+    expect(goodsPrompt.generation_notes.join('\n')).toContain('布局风格参考');
 
     expect(nextGoodsPrompt.layout.padding).toBe(0);
     expect(nextGoodsPrompt.constraints.no_padding).toBe(true);
@@ -224,5 +227,8 @@ describe('collectAssetTasks', () => {
     expect(userAssetsPrompt.constraints.no_padding).toBe(true);
     expect(userAssetsPrompt.constraints.no_rounded_corners).toBe(true);
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('完整填满 schema 给出的卡位尺寸');
+    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('布局风格参考');
+    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('文字尺度、信息密度');
+    expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('超大标题');
   });
 });

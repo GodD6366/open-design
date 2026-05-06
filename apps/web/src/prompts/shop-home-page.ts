@@ -13,7 +13,7 @@ const SHOP_HOME_PAGE_VISUAL_FORM = JSON.stringify(
   {
     description:
       '再确认色调搭配和视觉参考。支持直接上传参考图、复用项目里已有图片，或粘贴图片直链转存到本地。',
-    submitLabel: '生成 Storefront Schema',
+    submitLabel: '生成店铺首页',
     questions: [
       {
         id: 'brand_reference_mode',

@@ -31,6 +31,9 @@ const allowedExactPaths = new Set([
   // executed directly by Node and are not loaded by the app runtime.
   "scripts/import-prompt-templates.mjs",
   "scripts/postinstall.mjs",
+  // Compatibility mirror of sibling homepage-agent/shared.js consumed by the
+  // daemon through a native `.js` import while that shared helper remains JS.
+  "apps/daemon/src/lib/homepage-agent-shared.js",
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
