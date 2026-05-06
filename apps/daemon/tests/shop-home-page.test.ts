@@ -1,8 +1,15 @@
+import os from 'node:os';
 import path from 'node:path';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
 
-import { collectAssetTasks, createSeedSchema } from '../src/shop-home-page.js';
+import {
+  collectAssetTasks,
+  createSeedSchema,
+  loadShopHomePageState,
+  shopHomePageSkillDir,
+} from '../src/shop-home-page.js';
 
 function buildRequirements() {
   return {
@@ -55,37 +62,9 @@ describe('createSeedSchema', () => {
     expect(firstEntryPrompt.constraints.no_rounded_corners).toBe(true);
   });
 
-  it('prefers localized hero and user_assets crop references over shared full-page screenshots', () => {
+  it('keeps shared full-page screenshots as the default reference source', () => {
     const schema = createSeedSchema(buildRequirements(), {
       reference_images: ['page-shot.png'],
-      reference_regions: {
-        top_slider: {
-          source_image: 'page-shot.png',
-          x: 0.08,
-          y: 0.05,
-          width: 0.84,
-          height: 0.34,
-        },
-        user_assets: {
-          strip: {
-            source_image: 'page-shot.png',
-            x: 0.1,
-            y: 0.4,
-            width: 0.7,
-            height: 0.12,
-          },
-          entries: [
-            {
-              source_image: 'page-shot.png',
-              x: 0.11,
-              y: 0.41,
-              width: 0.16,
-              height: 0.1,
-              target_label: '到店自取',
-            },
-          ],
-        },
-      },
     });
 
     const topSliderRefs = schema.modules
@@ -95,14 +74,58 @@ describe('createSeedSchema', () => {
       .find((module: any) => module.type === 'user_assets')
       ?.data?.entries;
 
-    expect(topSliderRefs).toEqual(['top-slider-ref-hero.png']);
-    expect(userAssetsEntries?.[0]?.reference_images).toEqual([
-      'user-assets-ref-entry-1.png',
-      'user-assets-ref-strip.png',
-    ]);
-    expect(userAssetsEntries?.[1]?.reference_images).toEqual([
-      'user-assets-ref-strip.png',
-    ]);
+    expect(topSliderRefs).toEqual(['page-shot.png']);
+    expect(userAssetsEntries?.[0]?.reference_images).toEqual(['page-shot.png']);
+    expect(userAssetsEntries?.[1]?.reference_images).toEqual(['page-shot.png']);
+  });
+
+  it('migrates legacy crop-only reference images back to shared full-page screenshots', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-1';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+    const requirements = buildRequirements();
+    const styleGuide = {
+      version: '1.0',
+      preset_id: 'auto',
+      reference_images: ['page-shot.png'],
+      analysis: {},
+      generation_rules: {},
+    };
+    const schema = createSeedSchema(requirements as any, styleGuide as any) as any;
+    schema.modules.find((module: any) => module.type === 'top_slider').data.items[0].reference_images = ['top-slider-ref-hero.png'];
+    const userAssetsEntries = schema.modules.find((module: any) => module.type === 'user_assets').data.entries;
+    userAssetsEntries[0].reference_images = ['user-assets-ref-strip.png'];
+    userAssetsEntries[1].reference_images = ['user-assets-ref-entry-1.png'];
+
+    await writeFile(
+      path.join(projectDir, 'shop-home-page.requirements.json'),
+      `${JSON.stringify(requirements, null, 2)}\n`,
+    );
+    await writeFile(
+      path.join(projectDir, 'shop-home-page.style-guide.json'),
+      `${JSON.stringify(styleGuide, null, 2)}\n`,
+    );
+    await writeFile(
+      path.join(projectDir, 'shop-home-page.schema.json'),
+      `${JSON.stringify(schema, null, 2)}\n`,
+    );
+
+    const state = await loadShopHomePageState(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+    );
+    const savedSchema = JSON.parse(
+      await readFile(path.join(projectDir, 'shop-home-page.schema.json'), 'utf8'),
+    );
+
+    expect((state.schema as any).modules[0].data.items[0].reference_images).toEqual(['page-shot.png']);
+    expect((state.schema as any).modules[1].data.entries[0].reference_images).toEqual(['page-shot.png']);
+    expect((state.schema as any).modules[1].data.entries[1].reference_images).toEqual(['page-shot.png']);
+    expect(savedSchema.modules[0].data.items[0].reference_images).toEqual(['page-shot.png']);
+    expect(savedSchema.modules[1].data.entries[0].reference_images).toEqual(['page-shot.png']);
   });
 });
 

@@ -42,7 +42,6 @@ import {
   enqueueShopHomePageAssets,
   fetchShopHomePageAssetTasks,
 } from '../shop-home-page/api';
-import { syncShopHomePageScopedReferences } from '../shop-home-page/scoped-references';
 import { ShopHomePagePhonePreview } from '../shop-home-page/ShopHomePagePhonePreview';
 import {
   SHOP_HOME_PAGE_PREVIEW_FILE,
@@ -254,13 +253,7 @@ export function ShopHomePageProjectView({
     const silent = options?.silent === true;
     if (!silent) setRuntimeLoading(true);
     try {
-      let state = await fetchShopHomePageState(project.id);
-      const syncResult = await syncShopHomePageScopedReferences(project.id, state);
-      if (syncResult.nextSchemaText) {
-        state = await applyShopHomePageSchema(project.id, syncResult.nextSchemaText);
-      } else if (syncResult.wroteFiles) {
-        state = await fetchShopHomePageState(project.id);
-      }
+      const state = await fetchShopHomePageState(project.id);
       hydrateRuntimeState(state);
     } catch (err) {
       setRuntimeError(localizeStorefrontText(String(err instanceof Error ? err.message : err)));

@@ -1,6 +1,3 @@
-import {
-  normalizeShopHomePageReferenceRegions,
-} from '@open-design/contracts/shop-home-page-reference-regions';
 import type {
   AssetTask,
   ShopHomePageModuleSpec,
@@ -127,9 +124,6 @@ function normalizeShopHomePageState(state: ShopHomePageState): ShopHomePageState
     requirementsText: state?.requirementsText ?? '',
     styleGuide: {
       ...baseStyleGuide,
-      reference_regions: normalizeShopHomePageReferenceRegions(
-        state?.styleGuide?.reference_regions,
-      ),
     },
     styleGuideText: state?.styleGuideText ?? '',
     schemaText: state?.schemaText ?? '',

@@ -43,16 +43,16 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('it must not be interpreted as permission to copy the membership summary card, bottom navigation, host-app chrome');
   });
 
-  it('documents localized reference regions for top_slider and user_assets', () => {
+  it('limits full-page screenshots to hero scope for top_slider and icon-area scope for user_assets', () => {
     const out = composeShopHomePageSystemPrompt({
       metadata: {
         kind: 'shopHomePage',
       },
     });
 
-    expect(out).toContain('"reference_regions"');
-    expect(out).toContain('`reference_regions.top_slider` is the hero-only crop');
-    expect(out).toContain('`reference_regions.user_assets.entries[]` is optional');
-    expect(out).toContain('the final icon subject, title, and subtitle must still follow the current button requirement');
+    expect(out).toContain('only borrow the visible hero atmosphere, composition, and brand mood');
+    expect(out).toContain('only borrow the visible customer-assets icon-area style language');
+    expect(out).toContain('Do not generate or depend on module-local crop files such as `top-slider-ref-hero.png` or `user-assets-ref-strip.png`');
+    expect(out).not.toContain('"reference_regions"');
   });
 });

@@ -28,47 +28,29 @@ describe('buildStorefrontReferenceUsageNotes', () => {
     expect(notes.join('\n')).toContain('已提供更具体的商品参考图');
   });
 
-  it('treats user_assets strip references as style-only when there is no entry crop match', () => {
+  it('treats full-page screenshots as icon-area style guidance for user_assets', () => {
     const notes = buildStorefrontReferenceUsageNotes({
       moduleType: 'user_assets',
-      referenceImages: ['user-assets-ref-strip.png'],
+      referenceImages: ['page-shot.png'],
       styleGuide: {
-        reference_regions: {
-          user_assets: {
-            strip: {
-              source_image: 'page-shot.png',
-              x: 0.1,
-              y: 0.4,
-              width: 0.7,
-              height: 0.12,
-            },
-          },
-        },
+        reference_images: ['page-shot.png'],
       },
     });
 
-    expect(notes.join('\n')).toContain('客户资产图标区局部参考');
-    expect(notes.join('\n')).toContain('具体按钮图案和文字按当前需求生成');
+    expect(notes.join('\n')).toContain('客户资产入口卡片只沿用 icon 笔触');
+    expect(notes.join('\n')).toContain('具体按钮图案、标题和副标题必须按当前入口需求生成');
   });
 
-  it('treats top_slider hero crops as localized hero references instead of whole-page guidance', () => {
+  it('treats full-page screenshots as hero-only guidance for top_slider', () => {
     const notes = buildStorefrontReferenceUsageNotes({
       moduleType: 'top_slider',
-      referenceImages: ['top-slider-ref-hero.png'],
+      referenceImages: ['page-shot.png'],
       styleGuide: {
-        reference_regions: {
-          top_slider: {
-            source_image: 'page-shot.png',
-            x: 0.08,
-            y: 0.05,
-            width: 0.84,
-            height: 0.34,
-          },
-        },
+        reference_images: ['page-shot.png'],
       },
     });
 
-    expect(notes.join('\n')).toContain('头图 hero 局部参考图');
-    expect(notes.join('\n')).toContain('不要把客户资产入口条');
+    expect(notes.join('\n')).toContain('顶部主视觉只参考首屏海报的背景氛围');
+    expect(notes.join('\n')).toContain('不要把客户资产三宫格');
   });
 });
