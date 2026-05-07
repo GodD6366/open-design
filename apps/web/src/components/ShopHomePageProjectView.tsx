@@ -679,6 +679,7 @@ export function ShopHomePageProjectView({
     if (runtimeBusy !== null) return;
     if (streaming) return;
     if (generateQueue.length > 0) return;
+    if (runtimeState.requirements?.status !== 'confirmed') return;
     if (runtimeState.status !== 'schema-ready') return;
     if ((runtimeState.validationErrors ?? []).length > 0) return;
     const fingerprint = `${project.id}:${runtimeState.previewUpdatedAt ?? 0}`;

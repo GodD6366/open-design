@@ -1625,14 +1625,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   }
 
   async function maybeEnqueueOpenClawAssets(projectId) {
-    const state = await loadShopHomePageState(PROJECTS_DIR, projectId, SHOP_HOME_PAGE_SKILL_DIR);
+    const project = getProject(db, projectId);
+    const state = await loadShopHomePageState(
+      PROJECTS_DIR,
+      projectId,
+      SHOP_HOME_PAGE_SKILL_DIR,
+      project?.metadata ?? null,
+    );
     const schemaConfirmed = state.requirements?.status === 'confirmed';
     if (
       schemaConfirmed &&
       state.status === 'schema-ready' &&
       (state.validationErrors ?? []).length === 0
     ) {
-      const project = getProject(db, projectId);
       const { tasks, state: nextState } = await enqueueShopHomePageAssetTasks(
         PROJECTS_DIR,
         projectId,
@@ -1644,6 +1649,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
               ? project.metadata.imageModel
               : undefined,
           projectRoot: PROJECT_ROOT,
+          metadata: project?.metadata ?? null,
         },
       );
       return { state: nextState, tasks };
@@ -2545,6 +2551,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         PROJECTS_DIR,
         req.params.projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
+        project.metadata ?? null,
       );
       res.json({ state });
     } catch (err) {
@@ -2572,11 +2579,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         SHOP_HOME_PAGE_SKILL_DIR,
         schemaText,
         moduleSpecs,
+        project.metadata ?? null,
       );
       const state = await loadShopHomePageState(
         PROJECTS_DIR,
         projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
+        project.metadata ?? null,
       );
       res.json({ state });
     } catch (err) {
@@ -2606,6 +2615,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
               ? project.metadata.imageModel
               : undefined,
           projectRoot: PROJECT_ROOT,
+          metadata: project.metadata ?? null,
         },
       );
       res.json({ tasks, state });

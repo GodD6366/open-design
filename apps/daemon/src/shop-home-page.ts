@@ -754,7 +754,7 @@ function normalizeReferenceState(raw, requirements, styleGuide) {
   };
 }
 
-export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) {
+export async function loadShopHomePageState(projectsRoot, projectId, skillRoot, metadata = null) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const templates = await loadSkillTemplates(skillRoot);
   await ensureStorefrontSeedFiles(projectDir, templates);
@@ -775,6 +775,9 @@ export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) 
 
   const requirementsText = requirementsTextFromFile ?? templates.requirementsText;
   const requirements = coerceRequirements(tryParseJson(requirementsText));
+  const normalizeOptions = shouldUsePromptlessSeedSchema(metadata, requirements)
+    ? { skipSeedImagePrompts: true }
+    : null;
   const referenceState = await readReferenceStateForProject(projectDir, requirements);
   const { styleGuide, styleGuideText } = await loadStyleGuideForProject(
     projectDir,
@@ -784,7 +787,7 @@ export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) 
   );
   const parsedSchema = tryParseJson(schemaTextFromFile);
   const schema = isPlainObject(parsedSchema)
-    ? normalizeStorefrontSchema(parsedSchema, requirements, styleGuide)
+    ? normalizeStorefrontSchema(parsedSchema, requirements, styleGuide, normalizeOptions)
     : null;
   const validationErrors = schema
     ? validateStorefrontSchema(schema, requirements)
@@ -793,7 +796,7 @@ export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) 
       : [];
   const schemaText = schema && validationErrors.length === 0
     ? `${JSON.stringify(schema, null, 2)}\n`
-    : schemaTextFromFile ?? templates.schemaText;
+    : schemaTextFromFile ?? `${JSON.stringify(createSeedSchema(requirements, styleGuide, normalizeOptions), null, 2)}\n`;
   if (schema && validationErrors.length === 0 && schemaTextFromFile) {
     await writeTextIfChanged(
       path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE),
@@ -834,7 +837,7 @@ export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) 
   };
 }
 
-export async function applyShopHomePageSchemaText(projectsRoot, projectId, skillRoot, schemaText, moduleSpecs) {
+export async function applyShopHomePageSchemaText(projectsRoot, projectId, skillRoot, schemaText, moduleSpecs, metadata = null) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const currentRequirements = await readRequirementsForProject(projectDir);
   const nextRequirements = moduleSpecs === undefined
@@ -847,6 +850,9 @@ export async function applyShopHomePageSchemaText(projectsRoot, projectId, skill
         ? deriveModuleContentFromSpecs(normalizeHomepageModuleSpecs(moduleSpecs) ?? [])
         : currentRequirements.module_content,
     });
+  const normalizeOptions = shouldUsePromptlessSeedSchema(metadata, nextRequirements)
+    ? { skipSeedImagePrompts: true }
+    : null;
   const styleGuide = await readStyleGuideForProject(projectDir, nextRequirements);
   const raw = tryParseJson(schemaText);
   if (!isPlainObject(raw)) {
@@ -855,7 +861,7 @@ export async function applyShopHomePageSchemaText(projectsRoot, projectId, skill
     throw err;
   }
 
-  const normalized = normalizeStorefrontSchema(raw, nextRequirements, styleGuide);
+  const normalized = normalizeStorefrontSchema(raw, nextRequirements, styleGuide, normalizeOptions);
   const validationErrors = validateStorefrontSchema(normalized, nextRequirements);
   if (validationErrors.length > 0) {
     const err = new Error(validationErrors.join('\n'));
@@ -865,7 +871,7 @@ export async function applyShopHomePageSchemaText(projectsRoot, projectId, skill
 
   await persistProjectSchemaState(projectDir, projectId, normalized, nextRequirements, styleGuide);
   await writeRuntimeState(projectDir, 'schema-ready', 'info', 'shop-home-page.schema.json applied and preview recompiled.');
-  return loadShopHomePageState(projectsRoot, projectId, skillRoot);
+  return loadShopHomePageState(projectsRoot, projectId, skillRoot, metadata);
 }
 
 export async function clearShopHomePageSchemaImageSlot(projectsRoot, projectId, fileName) {
@@ -918,6 +924,18 @@ async function ensureStorefrontSeedFiles(projectDir, templates) {
     path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE),
     `${templates.schemaText.trim()}\n`,
   );
+}
+
+function shouldSkipSeedImagePrompts(options) {
+  return options?.skipSeedImagePrompts === true;
+}
+
+function hasTemplateSeed(metadata) {
+  return typeof metadata?.shopHomePageTemplateId === 'string' && metadata.shopHomePageTemplateId.trim().length > 0;
+}
+
+function shouldUsePromptlessSeedSchema(metadata, requirements) {
+  return !hasTemplateSeed(metadata) && requirements?.status !== 'confirmed';
 }
 
 async function loadSkillTemplates(skillRoot) {
@@ -1543,7 +1561,7 @@ function createUserAssetsSubtitle(title, index) {
   return `入口 ${index + 1}`;
 }
 
-function createUserAssetsEntriesFromLabels(labels, slots, designContext, styleGuide, requirements, templateType) {
+function createUserAssetsEntriesFromLabels(labels, slots, designContext, styleGuide, requirements, templateType, options = null) {
   return slots.map((slot, index) => {
     const title = stringOr(labels[index], `入口 ${index + 1}`);
     return createDefaultUserAssetsEntry(
@@ -1560,11 +1578,12 @@ function createUserAssetsEntriesFromLabels(labels, slots, designContext, styleGu
       requirements,
       templateType,
       index,
+      options,
     );
   });
 }
 
-export function createSeedSchema(requirements, styleGuide) {
+export function createSeedSchema(requirements, styleGuide, options = null) {
   const req = coerceRequirements(requirements);
   const guide = coerceStyleGuide(styleGuide, req);
   const designContextBase = resolveDesignContextBase(guide, req);
@@ -1582,7 +1601,7 @@ export function createSeedSchema(requirements, styleGuide) {
 
   const specs = moduleSpecsFor(req);
   const modules = specs.map((spec, index) =>
-    createSeedModule(spec, index, req, designContext, guide),
+    createSeedModule(spec, index, req, designContext, guide, options),
   );
 
   return {
@@ -1594,7 +1613,7 @@ export function createSeedSchema(requirements, styleGuide) {
   };
 }
 
-function createSeedModule(spec, moduleIndex, requirements, designContext, styleGuide) {
+function createSeedModule(spec, moduleIndex, requirements, designContext, styleGuide, options = null) {
   const moduleType = spec.type;
   const base = {
     id: `${moduleType}_${moduleIndex + 1}`,
@@ -1629,6 +1648,7 @@ function createSeedModule(spec, moduleIndex, requirements, designContext, styleG
       styleGuide,
       requirements,
       userAssetsDefaults.card_layout.template_type,
+      options,
     );
     return {
       ...base,
@@ -1666,13 +1686,13 @@ function createSeedModule(spec, moduleIndex, requirements, designContext, styleG
           ? 3000
           : undefined,
       items: Array.from({ length: itemCount }, (_, index) =>
-        createSeedImageItem(spec, index, requirements, designContext, styleGuide),
+        createSeedImageItem(spec, index, requirements, designContext, styleGuide, options),
       ),
     },
   };
 }
 
-function createSeedImageItem(spec, index, requirements, designContext, styleGuide) {
+function createSeedImageItem(spec, index, requirements, designContext, styleGuide, options = null) {
   const moduleType = spec.type;
   const promptSchema = createDefaultImagePromptSchema(
     spec,
@@ -1684,11 +1704,13 @@ function createSeedImageItem(spec, index, requirements, designContext, styleGuid
   const base = {
     id: `${moduleType}_${index + 1}`,
     image: '',
-    image_prompt_schema: promptSchema,
     reference_images: defaultReferenceImagesForModule(moduleType, styleGuide),
     alt: promptSchema.content.title || `${storefrontModuleLabel(moduleType)} ${index + 1}`,
     aspect_ratio: promptSchema.layout.ratio,
   };
+  if (!shouldSkipSeedImagePrompts(options)) {
+    base.image_prompt_schema = promptSchema;
+  }
   if (moduleType === 'banner') {
     return {
       ...base,
@@ -1990,6 +2012,7 @@ function createDefaultUserAssetsEntry(
   requirements,
   templateType,
   index = 0,
+  options = null,
 ) {
   const promptSchema = createDefaultUserAssetsEntryPromptSchema(
     entrySeed,
@@ -2000,17 +2023,13 @@ function createDefaultUserAssetsEntry(
     templateType,
     index,
   );
-  return {
+  const entry = {
     id: stringOr(entrySeed?.id, `user_assets_entry_${index + 1}`),
     slot_id: stringOr(entrySeed?.slot_id, slot.id),
     title: stringOr(entrySeed?.title, promptSchema.entry.title),
     subtitle: stringOr(entrySeed?.subtitle, promptSchema.entry.subtitle),
     icon: stringOr(entrySeed?.icon, promptSchema.entry.icon),
     image: stringOr(entrySeed?.image),
-    image_prompt_schema: normalizeUserAssetsEntryPromptSchema(
-      entrySeed?.image_prompt_schema,
-      promptSchema,
-    ),
     reference_images: normalizeReferenceImages(
       Array.isArray(entrySeed?.reference_images)
         ? normalizeLegacyScopedReferenceImages(entrySeed.reference_images, styleGuide)
@@ -2019,6 +2038,13 @@ function createDefaultUserAssetsEntry(
     alt: stringOr(entrySeed?.alt, promptSchema.content.title),
     no_cache: entrySeed?.no_cache === true,
   };
+  if (!shouldSkipSeedImagePrompts(options)) {
+    entry.image_prompt_schema = normalizeUserAssetsEntryPromptSchema(
+      entrySeed?.image_prompt_schema,
+      promptSchema,
+    );
+  }
+  return entry;
 }
 
 function resolveDesignContextBase(styleGuide, requirements) {
@@ -2077,7 +2103,7 @@ function resolvePresetUserAssetsDefaults(styleGuide, accent, requirements) {
   };
 }
 
-function normalizeStorefrontSchema(input, requirements, styleGuide) {
+function normalizeStorefrontSchema(input, requirements, styleGuide, options = null) {
   const root = isPlainObject(input) && isPlainObject(input.schema) ? input.schema : input;
   const source = isPlainObject(root) ? root : {};
   const req = coerceRequirements(requirements);
@@ -2090,7 +2116,7 @@ function normalizeStorefrontSchema(input, requirements, styleGuide) {
   const designContext = normalizeDesignContext(source.design_context, accent, req, guide);
   const modulesInput = Array.isArray(source.modules) ? source.modules : [];
   const modules = modulesInput
-    .map((module, index) => normalizeModule(module, index, designContext, req, guide))
+    .map((module, index) => normalizeModule(module, index, designContext, req, guide, options))
     .filter(Boolean);
 
   return {
@@ -2098,7 +2124,7 @@ function normalizeStorefrontSchema(input, requirements, styleGuide) {
     version: stringOr(source.version, '1.0.0'),
     layout_mode: source.layout_mode === 'flow' ? 'flow' : 'overlay',
     design_context: designContext,
-    modules: modules.length > 0 ? modules : createSeedSchema(req, guide).modules,
+    modules: modules.length > 0 ? modules : createSeedSchema(req, guide, options).modules,
   };
 }
 
@@ -2122,7 +2148,7 @@ function normalizeDesignContext(value, accent, requirements, styleGuide) {
   };
 }
 
-function normalizeModule(module, index, designContext, requirements, styleGuide) {
+function normalizeModule(module, index, designContext, requirements, styleGuide, options = null) {
   if (!isPlainObject(module) || !HOMEPAGE_MODULES.includes(module.type)) {
     return null;
   }
@@ -2150,13 +2176,13 @@ function normalizeModule(module, index, designContext, requirements, styleGuide)
   if (type === 'user_assets') {
     return {
       ...base,
-      data: normalizeUserAssetsData(module.data, designContext, styleGuide, requirements),
+      data: normalizeUserAssetsData(module.data, designContext, styleGuide, requirements, options),
     };
   }
 
   return {
     ...base,
-    data: normalizeImageModuleData(spec, module.data, requirements, designContext, styleGuide),
+    data: normalizeImageModuleData(spec, module.data, requirements, designContext, styleGuide, options),
   };
 }
 
@@ -2186,7 +2212,7 @@ function normalizeEditable(value) {
       };
 }
 
-function normalizeImageModuleData(spec, value, requirements, designContext, styleGuide) {
+function normalizeImageModuleData(spec, value, requirements, designContext, styleGuide, options = null) {
   const type = spec.type;
   const req = coerceRequirements(requirements);
   const mode = normalizeImageModuleMode(value?.mode, type, value?.items);
@@ -2199,12 +2225,12 @@ function normalizeImageModuleData(spec, value, requirements, designContext, styl
   const items = Array.isArray(value?.items)
     ? value.items
         .filter(isPlainObject)
-        .map((item, index) => normalizeImageItem(spec, item, index, req, designContext, styleGuide))
+        .map((item, index) => normalizeImageItem(spec, item, index, req, designContext, styleGuide, options))
     : [];
   const normalizedItems = items.length > 0
     ? items
     : Array.from({ length: Math.max(1, itemSeedCount) }, (_, index) =>
-        createSeedImageItem(spec, index, req, designContext, styleGuide),
+        createSeedImageItem(spec, index, req, designContext, styleGuide, options),
       );
 
   const result = {
@@ -2222,16 +2248,12 @@ function normalizeImageModuleData(spec, value, requirements, designContext, styl
   return result;
 }
 
-function normalizeImageItem(spec, item, index, requirements, designContext, styleGuide) {
+function normalizeImageItem(spec, item, index, requirements, designContext, styleGuide, options = null) {
   const type = spec.type;
-  const fallback = createSeedImageItem(spec, index, requirements, designContext, styleGuide);
-  const promptSchema = isPlainObject(item.image_prompt_schema)
-    ? item.image_prompt_schema
-    : fallback.image_prompt_schema;
+  const fallback = createSeedImageItem(spec, index, requirements, designContext, styleGuide, options);
   const normalized = {
     id: stringOr(item.id, fallback.id),
     image: stringOr(item.image),
-    image_prompt_schema: normalizePromptSchema(type, promptSchema, fallback.image_prompt_schema),
     reference_images: normalizeReferenceImages(
       Array.isArray(item.reference_images)
         ? normalizeLegacyScopedReferenceImages(item.reference_images, styleGuide)
@@ -2244,6 +2266,14 @@ function normalizeImageItem(spec, item, index, requirements, designContext, styl
         ? normalizeAspectRatioHint(item.aspect_ratio, fallback.aspect_ratio)
         : stringOr(item.aspect_ratio, IMAGE_RATIO_MAP[type]),
   };
+  const promptSchema = isPlainObject(item.image_prompt_schema)
+    ? item.image_prompt_schema
+    : isPlainObject(fallback.image_prompt_schema)
+      ? fallback.image_prompt_schema
+      : null;
+  if (!shouldSkipSeedImagePrompts(options) && promptSchema && isPlainObject(fallback.image_prompt_schema)) {
+    normalized.image_prompt_schema = normalizePromptSchema(type, promptSchema, fallback.image_prompt_schema);
+  }
 
   if (type === 'banner') {
     normalized.asset_type = item.asset_type === 'gif' ? 'gif' : 'png';
@@ -2342,7 +2372,7 @@ function normalizePromptSchema(type, input, fallback) {
   return normalized;
 }
 
-function normalizeUserAssetsData(value, designContext, styleGuide, requirements) {
+function normalizeUserAssetsData(value, designContext, styleGuide, requirements, options = null) {
   const userAssetsDefaults = resolvePresetUserAssetsDefaults(
     styleGuide,
     designContext.color_palette.accent,
@@ -2369,6 +2399,7 @@ function normalizeUserAssetsData(value, designContext, styleGuide, requirements)
       designContext,
       styleGuide,
       requirements,
+      options,
     ),
     body_image: stringOr(value?.body_image),
     body_image_no_cache: value?.body_image_no_cache === true,
@@ -2418,7 +2449,7 @@ function legacyUserAssetsSourceForSlot(mapping, slotId) {
   return null;
 }
 
-function normalizeUserAssetsEntries(value, cardLayout, designContext, styleGuide, requirements) {
+function normalizeUserAssetsEntries(value, cardLayout, designContext, styleGuide, requirements, options = null) {
   const slots = userAssetsCardLayoutSlots(cardLayout);
   const labels = resolveActionButtonLabels(requirements);
   const inputEntries = Array.isArray(value?.entries) ? value.entries.filter(isPlainObject) : [];
@@ -2451,6 +2482,7 @@ function normalizeUserAssetsEntries(value, cardLayout, designContext, styleGuide
       requirements,
       cardLayout.template_type,
       index,
+      options,
     );
   });
 }
@@ -3825,6 +3857,9 @@ export function collectAssetTasks(schema, styleGuide, forceRegenerate, available
           }
           return;
         }
+        if (!isPlainObject(entry?.image_prompt_schema)) {
+          return;
+        }
         const slot = userAssetsCardLayoutSlots(module.data.card_layout).find(
           (candidate) => stringOr(candidate.id) === stringOr(entry.slot_id),
         );
@@ -3866,6 +3901,9 @@ export function collectAssetTasks(schema, styleGuide, forceRegenerate, available
       const existingImageFileName = resolveReusableProjectImage(item.image, availableFiles);
       if (!forceRegenerate && existingImageFileName) {
         if (module.type === 'goods' && index === 0) firstGoodsFileName = existingImageFileName;
+        return;
+      }
+      if (!isPlainObject(item?.image_prompt_schema)) {
         return;
       }
       const fileName = `${IMAGE_FILE_PREFIX[module.type]}-${index + 1}.png`;
@@ -4363,7 +4401,10 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
     throw err;
   }
 
-  const schema = normalizeStorefrontSchema(raw, requirements, styleGuide);
+  const normalizeOptions = shouldUsePromptlessSeedSchema(options.metadata, requirements)
+    ? { skipSeedImagePrompts: true }
+    : null;
+  const schema = normalizeStorefrontSchema(raw, requirements, styleGuide, normalizeOptions);
   const validationErrors = validateStorefrontSchema(schema, requirements);
   if (validationErrors.length > 0) {
     const err = new Error(validationErrors.join('\n'));
@@ -4386,7 +4427,7 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
   );
   if (collected.length === 0) {
     await writeRuntimeState(projectDir, 'assets-ready', 'info', 'No pending storefront image slots required generation.');
-    return { tasks: [], state: await loadShopHomePageState(projectsRoot, projectId, skillRoot) };
+    return { tasks: [], state: await loadShopHomePageState(projectsRoot, projectId, skillRoot, options.metadata ?? null) };
   }
 
   // Clean up finished tasks for this project before enqueuing new ones
@@ -4424,7 +4465,7 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
   // Kick the queue
   queueTryProcess();
 
-  return { tasks: enqueued, state: await loadShopHomePageState(projectsRoot, projectId, skillRoot) };
+  return { tasks: enqueued, state: await loadShopHomePageState(projectsRoot, projectId, skillRoot, options.metadata ?? null) };
 }
 
 export async function resolveImageConfig(options = {}) {
