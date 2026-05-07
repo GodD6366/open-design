@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  composeShopHomePageSystemPrompt,
-} from '../prompts/shop-home-page';
 import { getShopHomePageTonePresets } from '../prompts/shop-home-page-tones';
 import { streamMessage } from '../providers/anthropic';
-import { streamViaDaemon } from '../providers/daemon';
+import { sendShopHomePageConversationTurn } from '../providers/daemon';
 import {
-  fetchDesignSystem,
   fetchProjectFiles,
-  fetchSkill,
   projectFileUrl,
 } from '../providers/registry';
 import {
@@ -42,17 +37,27 @@ import {
   enqueueShopHomePageAssets,
   fetchShopHomePageAssetTasks,
 } from '../shop-home-page/api';
+import {
+  buildComposerDraft,
+  composeSchemaText,
+  moveComposerItem,
+  normalizeComposerDraft,
+  removeComposerItem,
+  storefrontModuleLabel,
+} from '../shop-home-page/composer';
 import { createClientId } from '../utils/id';
 import { ShopHomePagePhonePreview } from '../shop-home-page/ShopHomePagePhonePreview';
 import {
   SHOP_HOME_PAGE_PREVIEW_FILE,
   SHOP_HOME_PAGE_REQUIREMENTS_FILE,
+  SHOP_HOME_PAGE_REFERENCE_STATE_FILE,
   SHOP_HOME_PAGE_STYLE_GUIDE_FILE,
   SHOP_HOME_PAGE_SCHEMA_FILE,
   SHOP_HOME_PAGE_SCREEN_FILE,
 } from '../shop-home-page/constants';
 import type {
   AssetTask,
+  ShopHomePageComposerDraftItem,
   ShopHomePageState,
 } from '../shop-home-page/types';
 import { AvatarMenu } from './AvatarMenu';
@@ -61,12 +66,18 @@ import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
 
 type ShopHomePagePanel = 'schema' | 'logs' | 'files' | null;
+type ShopHomePageSchemaView = 'composer' | 'json';
 
 const SHOP_HOME_PAGE_FILE_META = [
   {
     fileName: SHOP_HOME_PAGE_REQUIREMENTS_FILE,
     title: '需求结构',
     description: '承接左侧澄清后的业务需求与模块约束。',
+  },
+  {
+    fileName: SHOP_HOME_PAGE_REFERENCE_STATE_FILE,
+    title: '参考图状态',
+    description: '记录默认模板图、用户显式参考图与素材图的分流结果。',
   },
   {
     fileName: SHOP_HOME_PAGE_STYLE_GUIDE_FILE,
@@ -157,16 +168,19 @@ export function ShopHomePageProjectView({
   const [generateQueue, setGenerateQueue] = useState<AssetTask[]>([]);
   const [schemaEditor, setSchemaEditor] = useState('');
   const [schemaDirty, setSchemaDirty] = useState(false);
+  const [schemaView, setSchemaView] = useState<ShopHomePageSchemaView>('composer');
+  const [composerDraft, setComposerDraft] = useState<ShopHomePageComposerDraftItem[]>([]);
   const [openTabsState, setOpenTabsState] = useState<OpenTabsState>({
     tabs: [],
     active: null,
   });
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const bridgeInitialPromptRef = useRef<string | undefined>(project.pendingPrompt);
+  const seededExternalPromptRef = useRef(false);
   const tabsLoadedRef = useRef(false);
   const handledTerminalTaskIdsRef = useRef<Set<string>>(new Set());
-  const skillCache = useRef<Map<string, ReturnType<typeof fetchSkill> extends Promise<infer T> ? T : never>>(new Map());
-  const designCache = useRef<Map<string, ReturnType<typeof fetchDesignSystem> extends Promise<infer T> ? T : never>>(new Map());
+  const autoAssetRunRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,7 +261,10 @@ export function ShopHomePageProjectView({
     setProjectFiles(Array.isArray(next.files) ? next.files : []);
     setSchemaEditor(next.schemaText);
     setSchemaDirty(false);
+    setSchemaView('composer');
     setRuntimeError(null);
+    const draft = buildComposerDraft(next);
+    setComposerDraft(draft.items);
   }, []);
 
   const refreshRuntimeState = useCallback(async (options?: { silent?: boolean }) => {
@@ -267,30 +284,6 @@ export function ShopHomePageProjectView({
     void refreshProjectFiles();
     void refreshRuntimeState();
   }, [refreshProjectFiles, refreshRuntimeState]);
-
-  const composedSystemPrompt = useCallback(async (): Promise<string> => {
-    const skill =
-      project.skillId
-        ? (skillCache.current.get(project.skillId) ?? await fetchSkill(project.skillId))
-        : null;
-    if (project.skillId && skill && !skillCache.current.has(project.skillId)) {
-      skillCache.current.set(project.skillId, skill);
-    }
-
-    const designSystem =
-      project.designSystemId
-        ? (designCache.current.get(project.designSystemId) ?? await fetchDesignSystem(project.designSystemId))
-        : null;
-    if (project.designSystemId && designSystem && !designCache.current.has(project.designSystemId)) {
-      designCache.current.set(project.designSystemId, designSystem);
-    }
-
-    return composeShopHomePageSystemPrompt({
-      skill,
-      designSystem,
-      metadata: project.metadata,
-    });
-  }, [project.designSystemId, project.metadata, project.skillId]);
 
   const persistMessage = useCallback(
     (message: ChatMessage) => {
@@ -318,12 +311,12 @@ export function ShopHomePageProjectView({
         content: '',
         events: [],
         startedAt,
+        runStatus: config.mode === 'daemon' ? 'running' : undefined,
       };
       const nextHistory = [...messages, userMsg];
       setMessages([...nextHistory, assistantMsg]);
       setStreaming(true);
       onTouchProject();
-      persistMessage(userMsg);
 
       if (messages.length === 0) {
         const title = prompt.slice(0, 60).trim();
@@ -357,7 +350,6 @@ export function ShopHomePageProjectView({
 
       const controller = new AbortController();
       abortRef.current = controller;
-      const systemPrompt = await composedSystemPrompt();
 
       const finalizeTurn = async () => {
         const nextFiles = await refreshProjectFiles();
@@ -402,20 +394,30 @@ export function ShopHomePageProjectView({
           return;
         }
         const choice = config.agentModels?.[config.agentId];
-        void streamViaDaemon({
-          agentId: config.agentId,
-          history: nextHistory,
-          systemPrompt,
-          signal: controller.signal,
-          handlers,
-          projectId: project.id,
-          attachments: attachments.map((attachment) => attachment.path),
-          model: choice?.model ?? null,
-          reasoning: choice?.reasoning ?? null,
-        });
+        try {
+          await sendShopHomePageConversationTurn({
+            agentId: config.agentId,
+            projectId: project.id,
+            conversationId: activeConversationId,
+            message: prompt,
+            attachments: attachments.map((attachment) => attachment.path),
+            model: choice?.model ?? null,
+            reasoning: choice?.reasoning ?? null,
+          });
+          const refreshed = await listMessages(project.id, activeConversationId);
+          setMessages(refreshed);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setStreaming(false);
+          abortRef.current = null;
+          void finalizeTurn();
+        }
         return;
       }
 
+      const systemPrompt = '店铺首页项目对话';
+      persistMessage(userMsg);
       pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
       void streamMessage(config, systemPrompt, nextHistory, controller.signal, {
         onDelta: (delta) => {
@@ -428,7 +430,6 @@ export function ShopHomePageProjectView({
     },
     [
       activeConversationId,
-      composedSystemPrompt,
       config,
       messages,
       onProjectsRefresh,
@@ -521,7 +522,20 @@ export function ShopHomePageProjectView({
     setRuntimeBusy('apply-schema');
     setRuntimeError(null);
     try {
-      await applyShopHomePageSchema(project.id, schemaEditor);
+      if (schemaView === 'composer') {
+        if (!runtimeState?.schema) {
+          throw new Error('当前还没有可编排的页面结构，请先生成并应用结构。');
+        }
+        const nextSchemaModules = composerDraft.map((item) => item.schemaModule);
+        const nextSchemaText = composeSchemaText(runtimeState.schema, nextSchemaModules);
+        await applyShopHomePageSchema(
+          project.id,
+          nextSchemaText,
+          composerDraft.map((item) => item.spec),
+        );
+      } else {
+        await applyShopHomePageSchema(project.id, schemaEditor);
+      }
       await Promise.all([
         refreshProjectFiles(),
         refreshRuntimeState({ silent: true }),
@@ -532,7 +546,16 @@ export function ShopHomePageProjectView({
     } finally {
       setRuntimeBusy(null);
     }
-  }, [onTouchProject, project.id, refreshProjectFiles, refreshRuntimeState, schemaEditor]);
+  }, [
+    composerDraft,
+    onTouchProject,
+    project.id,
+    refreshProjectFiles,
+    refreshRuntimeState,
+    runtimeState?.schema,
+    schemaEditor,
+    schemaView,
+  ]);
 
   const handleGenerateAssets = useCallback(async () => {
     setRuntimeBusy('generate-assets');
@@ -631,6 +654,46 @@ export function ShopHomePageProjectView({
     if (project.pendingPrompt) onClearPendingPrompt();
   }, [onClearPendingPrompt, project.pendingPrompt]);
 
+  useEffect(() => {
+    const isBridgeProject =
+      project.metadata?.externalControlMode === 'shop-home-page-bridge';
+    if (!isBridgeProject) return;
+    if (seededExternalPromptRef.current) return;
+    if (!activeConversationId) return;
+    const bridgedPrompt = bridgeInitialPromptRef.current?.trim();
+    if (!bridgedPrompt) return;
+    if (messages.length > 0) return;
+    if (streaming) return;
+    seededExternalPromptRef.current = true;
+    void handleSend(bridgedPrompt, []);
+  }, [
+    activeConversationId,
+    handleSend,
+    messages.length,
+    project.metadata?.externalControlMode,
+    streaming,
+  ]);
+
+  useEffect(() => {
+    if (!runtimeState) return;
+    if (runtimeBusy !== null) return;
+    if (streaming) return;
+    if (generateQueue.length > 0) return;
+    if (runtimeState.status !== 'schema-ready') return;
+    if ((runtimeState.validationErrors ?? []).length > 0) return;
+    const fingerprint = `${project.id}:${runtimeState.previewUpdatedAt ?? 0}`;
+    if (autoAssetRunRef.current === fingerprint) return;
+    autoAssetRunRef.current = fingerprint;
+    void handleGenerateAssets();
+  }, [
+    generateQueue.length,
+    handleGenerateAssets,
+    project.id,
+    runtimeBusy,
+    runtimeState,
+    streaming,
+  ]);
+
   const projectFileNames = useMemo(
     () => new Set(projectFiles.map((file) => file.name)),
     [projectFiles],
@@ -660,6 +723,8 @@ export function ShopHomePageProjectView({
   const validationErrors = (runtimeState?.validationErrors ?? []).map(localizeStorefrontText);
   const runtimeLogs = runtimeState?.logs ?? [];
   const hasSchemaText = schemaEditor.trim().length > 0;
+  const composerState = useMemo(() => buildComposerDraft(runtimeState), [runtimeState]);
+  const composerEnabled = validationErrors.length === 0 && composerState.disabledReason === null;
   const runtimeStatusLabel = storefrontStatusLabel(runtimeState?.status ?? 'idle');
   const fileEntries = SHOP_HOME_PAGE_FILE_META.map(({ fileName, title, description }) => ({
     fileName,
@@ -893,11 +958,32 @@ export function ShopHomePageProjectView({
                 <span className="kicker">结构与校验</span>
                 <h2>编辑当前结构</h2>
                 <p className="subtitle">
-                  当前正在编辑页面结构文件。修改后可直接在弹窗内应用，并同步更新右侧预览。
+                  组件编排会同步控制页面模块顺序与删除，并影响后续校验与素材生成。JSON 视图保留为高级模式。
                 </p>
               </div>
               <button type="button" className="ghost storefront-panel-close" onClick={() => setActivePanel(null)}>
                 <Icon name="close" size={14} />
+              </button>
+            </div>
+
+            <div className="storefront-panel-tabs" role="tablist" aria-label="结构编辑模式">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={schemaView === 'composer'}
+                className={`ghost storefront-panel-tab${schemaView === 'composer' ? ' active' : ''}`}
+                onClick={() => setSchemaView('composer')}
+              >
+                组件编排
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={schemaView === 'json'}
+                className={`ghost storefront-panel-tab${schemaView === 'json' ? ' active' : ''}`}
+                onClick={() => setSchemaView('json')}
+              >
+                JSON（高级模式）
               </button>
             </div>
 
@@ -914,19 +1000,84 @@ export function ShopHomePageProjectView({
             )}
 
             <div className="storefront-panel-scroll">
-              <textarea
-                className="storefront-runtime-textarea storefront-panel-textarea"
-                value={schemaEditor}
-                onChange={(event) => {
-                  setSchemaEditor(event.target.value);
-                  setSchemaDirty(true);
-                }}
-                spellCheck={false}
-              />
+              {schemaView === 'composer' ? (
+                <div className="storefront-composer">
+                  <div className="storefront-composer-note">
+                    这里控制页面模块顺序与删除，并会同步后续校验与素材生成。
+                  </div>
+                  {composerEnabled ? (
+                    <div className="storefront-runtime-card storefront-composer-summary">
+                      <strong>当前草稿顺序</strong>
+                      <span>{composerDraft.map((item) => item.label).join(' → ')}</span>
+                    </div>
+                  ) : null}
+                  {!composerEnabled ? (
+                    <div className="storefront-runtime-empty storefront-runtime-empty-small">
+                      {validationErrors.length > 0
+                        ? '当前结构存在校验问题，请先切到 JSON（高级模式）修复后再使用组件编排。'
+                        : composerState.disabledReason}
+                    </div>
+                  ) : (
+                    <div className="storefront-composer-list">
+                      {composerDraft.map((item, index) => (
+                        <div key={item.key} className="storefront-composer-row">
+                          <div className="storefront-composer-row-main">
+                            <strong>
+                              {item.label}
+                              {item.moduleType === 'image_ad' ? ` #${item.occurrence}` : ''}
+                            </strong>
+                            <span>{item.spec.content || '未填写模块说明'}</span>
+                          </div>
+                          <div className="storefront-composer-row-actions">
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => setComposerDraft((current) => normalizeComposerDraft(moveComposerItem(current, index, -1)))}
+                              disabled={index === 0 || runtimeBusy !== null}
+                            >
+                              上移
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => setComposerDraft((current) => normalizeComposerDraft(moveComposerItem(current, index, 1)))}
+                              disabled={index === composerDraft.length - 1 || runtimeBusy !== null}
+                            >
+                              下移
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost storefront-composer-delete"
+                              onClick={() => setComposerDraft((current) => normalizeComposerDraft(removeComposerItem(current, index)))}
+                              disabled={composerDraft.length <= 1 || runtimeBusy !== null}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  className="storefront-runtime-textarea storefront-panel-textarea"
+                  value={schemaEditor}
+                  onChange={(event) => {
+                    setSchemaEditor(event.target.value);
+                    setSchemaDirty(true);
+                  }}
+                  spellCheck={false}
+                />
+              )}
             </div>
 
             <div className="modal-foot">
-              {schemaDirty ? (
+              {schemaView === 'composer' ? (
+                <span className="storefront-panel-footnote">
+                  {composerEnabled ? '组件编排会同步更新需求结构与页面结构。' : '请先修复高级模式中的结构问题。'}
+                </span>
+              ) : schemaDirty ? (
                 <span className="storefront-panel-footnote">有未应用的本地修改</span>
               ) : (
                 <span className="storefront-panel-footnote">当前内容已与工作台同步</span>
@@ -938,7 +1089,11 @@ export function ShopHomePageProjectView({
                 type="button"
                 className="primary"
                 onClick={() => void handleApplySchema()}
-                disabled={runtimeBusy !== null || runtimeLoading || !hasSchemaText}
+                disabled={
+                  runtimeBusy !== null
+                  || runtimeLoading
+                  || (schemaView === 'json' ? !hasSchemaText : !composerEnabled)
+                }
               >
                 应用结构
               </button>
@@ -1071,23 +1226,6 @@ function storefrontStatusLabel(status: string): string {
       return '空闲';
     default:
       return '处理中';
-  }
-}
-
-function storefrontModuleLabel(moduleType: string): string {
-  switch (moduleType) {
-    case 'top_slider':
-      return '头图轮播';
-    case 'user_assets':
-      return '会员资产区';
-    case 'banner':
-      return '活动横幅';
-    case 'goods':
-      return '商品模块';
-    case 'shop_info':
-      return '门店信息';
-    default:
-      return '未命名模块';
   }
 }
 

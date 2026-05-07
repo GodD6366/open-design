@@ -1,16 +1,16 @@
 # Checklist
 
-- `storefront.requirements.json` is valid JSON and `status` is `confirmed`.
-- `storefront.requirements.json.module_specs` is the primary ordered source of
+- `shop-home-page.requirements.json` is valid JSON and `status` is `confirmed`.
+- `shop-home-page.requirements.json.module_specs` is the primary ordered source of
   truth, and compatibility fields `modules` / `module_content` are aligned
   with it.
-- `storefront.style-guide.json` is valid JSON when the project depends on a template or reusable style sample.
-- `storefront.schema.json` is valid JSON.
+- `shop-home-page.style-guide.json` is valid JSON when the project depends on a template or reusable style sample.
+- `shop-home-page.schema.json` is valid JSON.
 - Top-level schema fields are exactly `page_id`, `version`, `layout_mode`, `design_context`, `modules`.
 - `version` is `1.0.0`.
 - `layout_mode` is `overlay`.
 - `design_context.page_width` is `375`.
-- Module order matches `storefront.requirements.json`.
+- Module order matches `shop-home-page.requirements.json`.
 - `top_slider` and `goods` item counts match `counts.sliderCount` / `counts.goodsCount`.
 - `banner` has exactly 1 item and `asset_type = png`.
 - `banner` and `goods` image prompt schemas do not carry displayable `brand`, logo placement, shop logo, brand mark, watermark, or shop slogan instructions.

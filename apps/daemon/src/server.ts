@@ -42,6 +42,7 @@ import {
   applyShopHomePageSchemaText,
   enqueueShopHomePageAssetTasks,
   getShopHomePageAssetTaskStatus,
+  initializeShopHomePageTemplateProject,
   loadShopHomePageState,
   migrateLegacyStorefrontProjectFiles,
   SHOP_HOME_PAGE_PREVIEW_FILE,
@@ -110,6 +111,17 @@ import {
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
+import {
+  extractFirstQuestionForm,
+} from '@open-design/contracts/question-form';
+import {
+  getShopHomePageTonePresets,
+} from '@open-design/contracts/shop-home-page-tones';
+import {
+  openClawNormalizeFormReply,
+  openClawProjectPageUrl,
+  openClawShopHomePageReplyFromAssistant,
+} from './openclaw-shop-home-page.js';
 import {
   buildDeployFileSet,
   checkDeploymentUrl,
@@ -923,6 +935,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       if (
         metadata &&
         typeof metadata === 'object' &&
+        metadata.kind === 'shopHomePage' &&
+        typeof metadata.shopHomePageTemplateId === 'string'
+      ) {
+        await initializeShopHomePageTemplateProject(
+          PROJECTS_DIR,
+          id,
+          PROJECT_ROOT,
+          metadata,
+        );
+      }
+      if (
+        metadata &&
+        typeof metadata === 'object' &&
         metadata.kind === 'template' &&
         typeof metadata.templateId === 'string'
       ) {
@@ -1156,6 +1181,642 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
     res.json({ message: saved });
+  });
+
+  const openClawSessions = new Map();
+
+  function publicBaseUrl() {
+    const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+    return `http://${reportHost}:${resolvedPort}`;
+  }
+
+  function projectPageUrl(projectId) {
+    const webPort = Number(process.env.OD_WEB_PORT);
+    return openClawProjectPageUrl({ host, resolvedPort, projectId, webPort });
+  }
+
+  function maybeProjectPageUrl(projectId) {
+    return process.env.OD_WEB_PORT ? projectPageUrl(projectId) : null;
+  }
+
+  function safeProjectId(prefix = 'shop-home-page') {
+    return `${prefix}-${randomId().replace(/-/g, '').slice(0, 12)}`;
+  }
+
+  function defaultOpenClawTitle(brief) {
+    const compact = compactString(brief, 40);
+    return compact ? `店铺首页 · ${compact}` : '店铺首页';
+  }
+
+  function getOpenClawSession(id) {
+    const direct = openClawSessions.get(id);
+    const session =
+      direct ??
+      [...openClawSessions.values()].find((candidate) => candidate.projectId === id);
+    if (!session) return null;
+    const project = getProject(db, session.projectId);
+    const conversation = getConversation(db, session.conversationId);
+    if (!project || !conversation) return null;
+    return session;
+  }
+
+  async function resolveShopHomePageSkillIdForOpenClaw() {
+    const skills = await listSkills(SKILLS_DIR);
+    const explicit = findSkillById(skills, 'shop-home-page');
+    if (explicit) return explicit.id;
+    const fallback = skills.find(
+      (skill) =>
+        skill.mode === SHOP_HOME_PAGE_KIND ||
+        skill.defaultFor?.includes(SHOP_HOME_PAGE_KIND) ||
+        skill.defaultFor?.includes(LEGACY_STOREFRONT_KIND),
+    );
+    return fallback?.id ?? 'shop-home-page';
+  }
+
+  function isImageFileName(name) {
+    return /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(name);
+  }
+
+  function attachmentKindFromName(name) {
+    return isImageFileName(name) ? 'image' : 'file';
+  }
+
+  async function importOpenClawUrlAttachment(projectId, url, requestedName) {
+    let parsed;
+    try {
+      parsed = new URL(String(url));
+    } catch {
+      throw new Error('invalid attachment url');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('attachment url must use http or https');
+    }
+    if (isLocalNetworkHostname(parsed.hostname)) {
+      throw new Error('internal attachment urls are blocked');
+    }
+    const response = await fetch(parsed);
+    if (!response.ok) {
+      throw new Error(`failed to fetch attachment url: HTTP ${response.status}`);
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const rawName =
+      cleanString(requestedName) ||
+      path.basename(parsed.pathname) ||
+      `reference-${Date.now()}.png`;
+    const meta = await writeProjectFile(PROJECTS_DIR, projectId, sanitizeName(rawName), bytes);
+    return {
+      path: meta.name,
+      name: meta.name,
+      kind: attachmentKindFromName(meta.name),
+    };
+  }
+
+  async function normalizeOpenClawAttachments(projectId, rawAttachments) {
+    const out = [];
+    const items = Array.isArray(rawAttachments) ? rawAttachments : [];
+    for (const raw of items) {
+      if (!raw || typeof raw !== 'object') continue;
+      if (typeof raw.path === 'string' && raw.path.trim()) {
+        const rel = raw.path.trim();
+        const abs = path.resolve(projectDir(PROJECTS_DIR, projectId), rel);
+        const root = path.resolve(projectDir(PROJECTS_DIR, projectId));
+        if ((abs === root || abs.startsWith(root + path.sep)) && fs.existsSync(abs)) {
+          out.push({
+            path: rel,
+            name: cleanString(raw.name) || path.basename(rel),
+            kind: attachmentKindFromName(rel),
+          });
+        }
+        continue;
+      }
+      if (typeof raw.contentBase64 === 'string' && raw.contentBase64.trim()) {
+        const name = sanitizeName(cleanString(raw.name) || `attachment-${Date.now()}.png`);
+        const meta = await writeProjectFile(
+          PROJECTS_DIR,
+          projectId,
+          name,
+          Buffer.from(raw.contentBase64, 'base64'),
+        );
+        out.push({
+          path: meta.name,
+          name: meta.name,
+          kind: attachmentKindFromName(meta.name),
+        });
+        continue;
+      }
+      if (typeof raw.url === 'string' && raw.url.trim()) {
+        out.push(await importOpenClawUrlAttachment(projectId, raw.url.trim(), raw.name));
+      }
+    }
+    return out;
+  }
+
+  function agentEventFromDaemonPayload(data) {
+    if (!data || typeof data !== 'object') return null;
+    if (data.type === 'status' && typeof data.label === 'string') {
+      return {
+        kind: 'status',
+        label: data.label,
+        detail:
+          typeof data.model === 'string'
+            ? data.model
+            : typeof data.ttftMs === 'number'
+              ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
+              : undefined,
+      };
+    }
+    if (data.type === 'text_delta' && typeof data.delta === 'string') {
+      return { kind: 'text', text: data.delta };
+    }
+    if (data.type === 'thinking_delta' && typeof data.delta === 'string') {
+      return { kind: 'thinking', text: data.delta };
+    }
+    if (data.type === 'thinking_start') {
+      return { kind: 'status', label: 'thinking' };
+    }
+    if (data.type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
+      return { kind: 'tool_use', id: data.id, name: data.name, input: data.input ?? null };
+    }
+    if (data.type === 'tool_result' && typeof data.toolUseId === 'string') {
+      return {
+        kind: 'tool_result',
+        toolUseId: data.toolUseId,
+        content: String(data.content ?? ''),
+        isError: Boolean(data.isError),
+      };
+    }
+    if (data.type === 'usage' && data.usage && typeof data.usage === 'object') {
+      return {
+        kind: 'usage',
+        inputTokens: typeof data.usage.input_tokens === 'number' ? data.usage.input_tokens : undefined,
+        outputTokens: typeof data.usage.output_tokens === 'number' ? data.usage.output_tokens : undefined,
+        costUsd: typeof data.costUsd === 'number' ? data.costUsd : undefined,
+        durationMs: typeof data.durationMs === 'number' ? data.durationMs : undefined,
+      };
+    }
+    if (data.type === 'raw' && typeof data.line === 'string') {
+      return { kind: 'raw', line: data.line };
+    }
+    return null;
+  }
+
+  function collectRunTextAndEvents(run) {
+    let text = '';
+    let stderr = '';
+    const events = [];
+    for (const record of run.events) {
+      const { event, data } = record;
+      if (event === 'stdout') {
+        const chunk = String(data?.chunk ?? '');
+        text += chunk;
+        events.push({ kind: 'text', text: chunk });
+        continue;
+      }
+      if (event === 'stderr') {
+        stderr += String(data?.chunk ?? '');
+        continue;
+      }
+      if (event === 'agent') {
+        const translated = agentEventFromDaemonPayload(data);
+        if (translated) {
+          events.push(translated);
+          if (translated.kind === 'text') text += translated.text;
+        }
+        continue;
+      }
+      if (event === 'start') {
+        events.push({
+          kind: 'status',
+          label: 'starting',
+          detail: typeof data?.bin === 'string' ? data.bin : undefined,
+        });
+      }
+      if (event === 'error') {
+        events.push({
+          kind: 'raw',
+          line: String(data?.error?.message ?? data?.message ?? 'daemon error'),
+        });
+      }
+    }
+    if (!text && stderr.trim()) {
+      events.push({ kind: 'raw', line: stderr.trim().slice(-800) });
+    }
+    return { text, events };
+  }
+
+  function findLatestQuestionFormMessage(conversationId) {
+    const messages = listMessages(db, conversationId);
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message?.role !== 'assistant') continue;
+      const form = extractFirstQuestionForm(message.content ?? '');
+      if (!form) continue;
+      const hasReply = messages.slice(i + 1).some((candidate) => candidate.role === 'user');
+      if (!hasReply) return { message, form };
+    }
+    return null;
+  }
+
+  function parseOpenClawFormReply(form, raw) {
+    return openClawNormalizeFormReply(form, raw);
+  }
+
+  function selectOpenClawTonePreset(requirementsText) {
+    const presets = getShopHomePageTonePresets();
+    if (presets.length === 0) return '';
+    const hay = String(requirementsText ?? '').toLowerCase();
+    if (/(bakery|pastry|dessert|bread|烘焙|甜品|面包|蛋糕)/.test(hay)) {
+      return 'bakery-handdrawn-cream';
+    }
+    let best = presets[0];
+    let bestScore = -1;
+    for (const preset of presets) {
+      const words = [
+        preset.id,
+        preset.label,
+        preset.summary,
+        ...(preset.references ?? []),
+        ...(preset.toneKeywords ?? []),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .split(/[^a-z0-9\u4e00-\u9fff]+/)
+        .filter(Boolean);
+      const score = words.reduce((sum, word) => (hay.includes(word) ? sum + 1 : sum), 0);
+      if (score > bestScore) {
+        best = preset;
+        bestScore = score;
+      }
+    }
+    return best?.id ?? presets[0].id;
+  }
+
+  function inferOpenClawReferenceImages(projectFiles, attachments) {
+    const attached = new Set((attachments ?? []).map((attachment) => attachment.path));
+    const images = projectFiles.filter((file) => isImageFileName(file.name));
+    const prioritized = images.filter((file) => attached.has(file.name)).map((file) => file.name);
+    return prioritized.length > 0 ? prioritized : images.map((file) => file.name);
+  }
+
+  function extractOpenClawAccent(raw) {
+    return String(raw ?? '').match(/#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})/)?.[0] ?? '';
+  }
+
+  function summarizeOpenClawBrandNotes(requirementsText) {
+    return compactString(
+      String(requirementsText ?? '')
+        .replace(/^\[form answers —.*?\]\s*/s, '')
+        .replace(/\n+/g, '，')
+        .replace(/^[-*]\s*/gm, ''),
+      220,
+    ) || '店铺首页视觉约束';
+  }
+
+  async function buildOpenClawVisualAnswers(projectId, requirementsText, attachments) {
+    const projectFiles = await listFiles(PROJECTS_DIR, projectId);
+    const referenceImages = inferOpenClawReferenceImages(projectFiles, attachments);
+    const brandNotes = summarizeOpenClawBrandNotes(requirementsText);
+    const accentOverride = extractOpenClawAccent(requirementsText);
+    if (referenceImages.length > 0) {
+      return [
+        '[form answers — shop-home-page-visual]',
+        '- 视觉来源: 已有品牌规范 / 参考图，请按品牌走',
+        `- 品牌调性 / 视觉要求: ${brandNotes}`,
+        `- 参考图（可选）: ${referenceImages.join(', ')}`,
+        '- 模板风格提炼（可选）: 沿用参考图的构图、留白比例、信息密度、标题尺度和图标区笔触。',
+        `- 色调搭配: ${selectOpenClawTonePreset(requirementsText) || '(skipped)'}`,
+        `- 主色微调（可选）: ${accentOverride || '(skipped)'}`,
+      ].join('\n');
+    }
+    return [
+      '[form answers — shop-home-page-visual]',
+      '- 视觉来源: 没有品牌规范，请给我一个方向',
+      `- 品牌调性 / 视觉要求: ${brandNotes}`,
+      '- 参考图（可选）: (skipped)',
+      '- 模板风格提炼（可选）: (skipped)',
+      `- 色调搭配: ${selectOpenClawTonePreset(requirementsText) || 'tone-warm-cream'}`,
+      `- 主色微调（可选）: ${accentOverride || '(skipped)'}`,
+    ].join('\n');
+  }
+
+  function openClawAutomationInstruction() {
+    return [
+      'OpenClaw 聊天代理调用。',
+      '你正在服务另一个聊天客户端，但必须写入当前真实 Open Design B 端项目。',
+      '如果这是首轮 brief，返回真实 `<question-form id="storefront-requirements" title="需求澄清">` 后立即停止。',
+      '如果用户已经回答需求澄清，并且 host 已补齐 `[form answers — shop-home-page-visual]`，不要再输出任何 question-form。',
+      '此时把两段表单答案视为权威输入，直接写 shop-home-page.requirements.json、shop-home-page.reference-state.json、shop-home-page.style-guide.json、shop-home-page.schema.json。',
+      '写完 JSON 后用一句中文结束，不要继续探索，也不要要求用户打开网页操作。',
+    ].join('\n');
+  }
+
+  function shouldAutoVisualComplete(message) {
+    return (
+      String(message).includes('[form answers — storefront-requirements]') &&
+      !String(message).includes('[form answers — shop-home-page-visual]')
+    );
+  }
+
+  async function runOpenClawTurn({
+    session,
+    message,
+    attachments,
+    agentId,
+    model,
+    reasoning,
+  }) {
+    const projectId = session.projectId;
+    const conversationId = session.conversationId;
+    const startedAt = Date.now();
+    const project = getProject(db, projectId);
+    if (!project) throw new Error('project not found');
+    const normalizedAttachments = await normalizeOpenClawAttachments(projectId, attachments);
+    let userContent = String(message ?? '').trim();
+    const pending = findLatestQuestionFormMessage(conversationId);
+    if (pending?.form && !/^\[form answers/i.test(userContent)) {
+      userContent = parseOpenClawFormReply(pending.form, userContent);
+    }
+    const autoVisualCompleted = shouldAutoVisualComplete(userContent);
+    if (autoVisualCompleted) {
+      userContent = `${userContent}\n\n${await buildOpenClawVisualAnswers(
+        projectId,
+        userContent,
+        normalizedAttachments,
+      )}`;
+    }
+    const isFullyAnsweredAutomation = autoVisualCompleted;
+    const fullHistoryMessage = listMessages(db, conversationId)
+      .map((item) => `## ${item.role}\n${String(item.content ?? '').trim()}`)
+      .concat(`## user\n${userContent}`)
+      .join('\n\n');
+
+    const userMessageId = randomId();
+    const assistantMessageId = randomId();
+    upsertMessage(db, conversationId, {
+      id: userMessageId,
+      role: 'user',
+      content: userContent,
+      attachments: normalizedAttachments.length > 0 ? normalizedAttachments : undefined,
+      createdAt: startedAt,
+    });
+    const effectiveAgentId = cleanString(agentId) || 'codex';
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      agentId: effectiveAgentId,
+      agentName: effectiveAgentId,
+      runStatus: 'running',
+      startedAt,
+      createdAt: startedAt,
+    });
+    if (!session.initialBrief && !userContent.includes('[form answers')) {
+      session.initialBrief = userContent;
+    }
+    const run = design.runs.create({
+      projectId,
+      conversationId,
+      assistantMessageId,
+      clientRequestId: randomId(),
+      agentId: effectiveAgentId,
+    });
+    design.runs.start(run, () =>
+      startChatRun(
+        {
+          agentId: effectiveAgentId,
+          automationMode: isFullyAnsweredAutomation,
+          projectId,
+          conversationId,
+          assistantMessageId,
+          clientRequestId: run.clientRequestId,
+          message: fullHistoryMessage,
+          attachments: normalizedAttachments.map((attachment) => attachment.path),
+          skillId: project.skillId || 'shop-home-page',
+          systemPrompt: openClawAutomationInstruction(),
+          openClawMessage: userContent,
+          model: cleanString(model) || null,
+          reasoning: cleanString(reasoning) || null,
+        },
+        run,
+      ),
+    );
+    await design.runs.wait(run);
+    const { text, events } = collectRunTextAndEvents(run);
+    const runStatus = run.status;
+    upsertMessage(db, conversationId, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: text,
+      agentId: effectiveAgentId,
+      agentName: effectiveAgentId,
+      runId: run.id,
+      runStatus,
+      events,
+      startedAt,
+      endedAt: Date.now(),
+    });
+    updateProject(db, projectId, {});
+    return formatOpenClawReply({
+      session,
+      runId: run.id,
+      runStatus,
+      assistantText: text,
+    });
+  }
+
+  async function maybeEnqueueOpenClawAssets(projectId) {
+    const state = await loadShopHomePageState(PROJECTS_DIR, projectId, SHOP_HOME_PAGE_SKILL_DIR);
+    const schemaConfirmed = state.requirements?.status === 'confirmed';
+    if (
+      schemaConfirmed &&
+      state.status === 'schema-ready' &&
+      (state.validationErrors ?? []).length === 0
+    ) {
+      const project = getProject(db, projectId);
+      const { tasks, state: nextState } = await enqueueShopHomePageAssetTasks(
+        PROJECTS_DIR,
+        projectId,
+        SHOP_HOME_PAGE_SKILL_DIR,
+        {
+          forceRegenerate: false,
+          imageModel:
+            typeof project?.metadata?.imageModel === 'string'
+              ? project.metadata.imageModel
+              : undefined,
+          projectRoot: PROJECT_ROOT,
+        },
+      );
+      return { state: nextState, tasks };
+    }
+    return { state, tasks: getShopHomePageAssetTaskStatus(projectId) };
+  }
+
+  async function formatOpenClawReply({ session, runId = null, assistantText = null }) {
+    const projectId = session.projectId;
+    const conversationId = session.conversationId;
+    const { state, tasks } = await maybeEnqueueOpenClawAssets(projectId);
+    const exposePreviewUrl =
+      state.requirements?.status === 'confirmed' && state.previewUrl
+        ? new URL(state.previewUrl, `${publicBaseUrl()}/`).toString()
+        : null;
+    const response = openClawShopHomePageReplyFromAssistant({
+      session,
+      assistantText,
+      state,
+      tasks,
+      previewUrl: exposePreviewUrl,
+      projectUrl: maybeProjectPageUrl(projectId),
+      runId,
+    });
+    session.lastResponse = response;
+    session.state = response.state;
+    return response;
+  }
+
+  async function createOpenClawSession(body) {
+    const brief = cleanString(body?.brief);
+    if (!brief) {
+      const err = new Error('brief required');
+      err.statusCode = 400;
+      throw err;
+    }
+    const id = safeProjectId('shop-home-page');
+    const now = Date.now();
+    const skillId = await resolveShopHomePageSkillIdForOpenClaw();
+    const project = insertProject(db, {
+      id,
+      name: defaultOpenClawTitle(brief),
+      skillId,
+      designSystemId: null,
+      pendingPrompt: null,
+        metadata: {
+          kind: SHOP_HOME_PAGE_KIND,
+          externalControlMode: 'shop-home-page-bridge',
+          ...(cleanString(body?.openclawThreadId)
+            ? { openclawThreadId: cleanString(body.openclawThreadId) }
+            : {}),
+        },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const conversation = insertConversation(db, {
+      id: randomId(),
+      projectId: project.id,
+      title: defaultOpenClawTitle(brief),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ensureProject(PROJECTS_DIR, project.id);
+    const session = {
+      id: randomId(),
+      projectId: project.id,
+      conversationId: conversation.id,
+      openclawThreadId: cleanString(body?.openclawThreadId) || null,
+      initialBrief: brief,
+      state: 'created',
+      createdAt: now,
+      updatedAt: now,
+      lastResponse: null,
+    };
+    openClawSessions.set(session.id, session);
+    return runOpenClawTurn({
+      session,
+      message: brief,
+      attachments: body?.attachments,
+      agentId: body?.agentId,
+      model: body?.model,
+      reasoning: body?.reasoning,
+    });
+  }
+
+  app.post('/api/openclaw/shop-home-page/sessions', async (req, res) => {
+    try {
+      const response = await createOpenClawSession(req.body || {});
+      res.json(response);
+    } catch (err) {
+      sendApiError(
+        res,
+        err?.statusCode || 400,
+        'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post('/api/openclaw/shop-home-page/sessions/:sessionId/messages', async (req, res) => {
+    try {
+      let session = getOpenClawSession(req.params.sessionId);
+      if (!session) {
+        const project = getProject(db, req.params.sessionId);
+        const requestedConversationId = cleanString(req.body?.conversationId);
+        const conversation = requestedConversationId ? getConversation(db, requestedConversationId) : null;
+        if (
+          project &&
+          isBranchShopHomePageProject(project) &&
+          conversation &&
+          conversation.projectId === project.id
+        ) {
+          session = {
+            id: project.id,
+            projectId: project.id,
+            conversationId: conversation.id,
+            openclawThreadId: null,
+            initialBrief: null,
+            state: 'b-end-chat',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            lastResponse: null,
+          };
+          openClawSessions.set(session.id, session);
+        } else {
+          return sendApiError(res, 404, 'NOT_FOUND', 'session not found');
+        }
+      }
+      const message = cleanString(req.body?.message);
+      if (!message) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'message required');
+      }
+      session.updatedAt = Date.now();
+      const response = await runOpenClawTurn({
+        session,
+        message,
+        attachments: req.body?.attachments,
+        agentId: req.body?.agentId,
+        model: req.body?.model,
+        reasoning: req.body?.reasoning,
+      });
+      res.json(response);
+    } catch (err) {
+      sendApiError(
+        res,
+        err?.statusCode || 400,
+        'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.get('/api/openclaw/shop-home-page/sessions/:sessionId', async (req, res) => {
+    try {
+      const session = getOpenClawSession(req.params.sessionId);
+      if (!session) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'session not found');
+      }
+      const response = await formatOpenClawReply({
+        session,
+        runId: null,
+        runStatus: null,
+        assistantText: null,
+      });
+      res.json(response);
+    } catch (err) {
+      sendApiError(
+        res,
+        err?.statusCode || 400,
+        'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
   });
 
   // ---- Preview comments ----------------------------------------------------
@@ -1893,7 +2554,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/shop-home-page/apply-schema', express.json({ limit: '2mb' }), async (req, res) => {
     try {
-      const { projectId, schemaText } = req.body || {};
+      const { projectId, schemaText, moduleSpecs } = req.body || {};
       const project = typeof projectId === 'string' ? getProject(db, projectId) : null;
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -1910,6 +2571,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
         schemaText,
+        moduleSpecs,
       );
       const state = await loadShopHomePageState(
         PROJECTS_DIR,
@@ -2468,6 +3130,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     projectId,
     skillId,
     designSystemId,
+    automationMode,
+    message,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -2528,6 +3192,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         : undefined;
 
     if (isBranchShopHomePageProject(project)) {
+      const rawMessage = typeof message === 'string' ? message : '';
       const shopHomePagePrompt = composeShopHomePageSystemPrompt({
         skill: skillBody
           ? {
@@ -2535,7 +3200,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
               name: skillName ?? 'shop-home-page',
               description: '',
               triggers: [],
-              mode: skillMode ?? SHOP_HOMEPAGE_KIND,
+              mode: skillMode ?? SHOP_HOME_PAGE_KIND,
               previewType: 'html',
               designSystemRequired: false,
               defaultFor: [],
@@ -2555,6 +3220,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
             }
           : null,
         metadata,
+        automationMode: automationMode === true,
+        automationHasRequirementsAnswers:
+          rawMessage.includes('[form answers — storefront-requirements]'),
+        automationHasVisualAnswers:
+          rawMessage.includes('[form answers — shop-home-page-visual]'),
       });
       return {
         prompt: shopHomePagePrompt,
@@ -2594,10 +3264,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       clientRequestId,
       skillId,
       designSystemId,
+      automationMode,
       attachments = [],
       commentAttachments = [],
       model,
       reasoning,
+      openClawMessage,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
@@ -2696,6 +3368,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         projectId,
         skillId,
         designSystemId,
+        automationMode: automationMode === true,
+        message: typeof openClawMessage === 'string' ? openClawMessage : message,
       });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))

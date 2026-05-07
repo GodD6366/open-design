@@ -17,6 +17,14 @@
       "types": "./src/prompts/shop-home-page-tones.ts",
       "default": "./src/prompts/shop-home-page-tones.ts"
     },
+    "./question-form": {
+      "types": "./src/question-form.ts",
+      "default": "./src/question-form.ts"
+    },
+    "./shop-home-page-templates": {
+      "types": "./src/shop-home-page-templates.ts",
+      "default": "./src/shop-home-page-templates.ts"
+    },
     "./shop-home-page-phone-chrome": {
       "types": "./src/shop-home-page-phone-chrome.ts",
       "default": "./src/shop-home-page-phone-chrome.ts"

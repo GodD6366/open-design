@@ -40,8 +40,12 @@ describe('buildStorefrontReferenceUsageNotes', () => {
     });
 
     expect(notes.join('\n')).toContain('可见入口图标区的 icon 笔触');
+    expect(notes.join('\n')).toContain('卡片布局方式');
+    expect(notes.join('\n')).toContain('卡片底色');
+    expect(notes.join('\n')).toContain('文字颜色');
     expect(notes.join('\n')).toContain('文字尺度和信息密度');
     expect(notes.join('\n')).toContain('具体按钮图案、标题和副标题必须按当前入口需求生成');
+    expect(notes.join('\n')).not.toContain('强行改回白底');
   });
 
   it('treats full-page screenshots as hero-only guidance for top_slider', () => {

@@ -5,9 +5,13 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyShopHomePageSchemaText,
   collectAssetTasks,
   createSeedSchema,
+  initializeShopHomePageTemplateProject,
   loadShopHomePageState,
+  SHOP_HOME_PAGE_REFERENCE_STATE_FILE,
+  SHOP_HOME_PAGE_SCHEMA_FILE,
   shopHomePageSkillDir,
 } from '../src/shop-home-page.js';
 
@@ -60,6 +64,19 @@ describe('createSeedSchema', () => {
     expect(firstEntryPrompt.layout.padding).toBe(0);
     expect(firstEntryPrompt.constraints.no_padding).toBe(true);
     expect(firstEntryPrompt.constraints.no_rounded_corners).toBe(true);
+  });
+
+  it('uses the bakery template preset card layout defaults', () => {
+    const schema = createSeedSchema(buildRequirements(), {
+      preset_id: 'bakery-handdrawn-cream',
+      reference_images: ['page-shot.png'],
+      analysis: {
+        layout_style: '左一右二客户资产入口',
+      },
+    }) as any;
+
+    const cardLayout = schema.modules.find((module: any) => module.type === 'user_assets')?.data?.card_layout;
+    expect(cardLayout?.template_type).toBe(2);
   });
 
   it('keeps shared full-page screenshots as the default reference source', () => {
@@ -162,6 +179,244 @@ describe('createSeedSchema', () => {
   });
 });
 
+describe('reference-state sync', () => {
+  it('initializes template_default reference state and style guide for template storefront projects', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-template';
+    await initializeShopHomePageTemplateProject(
+      projectsRoot,
+      projectId,
+      process.cwd(),
+      {
+        shopHomePageTemplateId: 'bakery-doodle-toast',
+      },
+    );
+
+    const projectDir = path.join(projectsRoot, projectId);
+    const referenceState = JSON.parse(
+      await readFile(path.join(projectDir, SHOP_HOME_PAGE_REFERENCE_STATE_FILE), 'utf8'),
+    );
+    const styleGuide = JSON.parse(
+      await readFile(path.join(projectDir, 'shop-home-page.style-guide.json'), 'utf8'),
+    );
+
+    expect(referenceState.mode).toBe('template_default');
+    expect(referenceState.template_reference_images).toEqual(['bakery-doodle-toast-reference.png']);
+    expect(styleGuide.reference_images).toEqual(['bakery-doodle-toast-reference.png']);
+    expect(styleGuide.preset_id).toBe('bakery-handdrawn-cream');
+  });
+
+  it('lets user_explicit reference images override template defaults at load time', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-user-explicit';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'shop-home-page.requirements.json'),
+      `${JSON.stringify(buildRequirements(), null, 2)}\n`,
+    );
+    await writeFile(
+      path.join(projectDir, 'shop-home-page.style-guide.json'),
+      `${JSON.stringify({
+        version: '1.0',
+        preset_id: 'bakery-handdrawn-cream',
+        reference_images: ['bakery-doodle-toast-reference.png'],
+        analysis: {
+          layout_style: '左一右二客户资产入口',
+        },
+        generation_rules: {
+          must: [],
+          avoid: [],
+        },
+      }, null, 2)}\n`,
+    );
+    await writeFile(
+      path.join(projectDir, SHOP_HOME_PAGE_REFERENCE_STATE_FILE),
+      `${JSON.stringify({
+        mode: 'user_explicit',
+        template_reference_images: ['bakery-doodle-toast-reference.png'],
+        user_reference_images: ['user-ref-1.png', 'user-ref-2.png'],
+        asset_images: ['goods-source.png'],
+        notes: 'Use the user refs.',
+      }, null, 2)}\n`,
+    );
+
+    const state = await loadShopHomePageState(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+    );
+    const savedStyleGuide = JSON.parse(
+      await readFile(path.join(projectDir, 'shop-home-page.style-guide.json'), 'utf8'),
+    );
+
+    expect(state.styleGuide.reference_images).toEqual(['user-ref-1.png', 'user-ref-2.png']);
+    expect(savedStyleGuide.reference_images).toEqual(['user-ref-1.png', 'user-ref-2.png']);
+  });
+});
+
+describe('applyShopHomePageSchemaText with module specs sync', () => {
+  it('reorders requirements.module_specs and schema.modules together', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-reorder';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+
+    const requirements = buildRequirements();
+    const schema = createSeedSchema(requirements as any, null);
+    await writeFile(path.join(projectDir, 'shop-home-page.requirements.json'), `${JSON.stringify(requirements, null, 2)}\n`);
+    await writeFile(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE), `${JSON.stringify(schema, null, 2)}\n`);
+
+    const reorderedSpecs = [
+      requirements.module_specs[0],
+      requirements.module_specs[2],
+      requirements.module_specs[1],
+      requirements.module_specs[3],
+      requirements.module_specs[4],
+      requirements.module_specs[5],
+    ];
+    const reorderedSchema = {
+      ...schema,
+      modules: [
+        schema.modules[0],
+        schema.modules[2],
+        schema.modules[1],
+        schema.modules[3],
+        schema.modules[4],
+        schema.modules[5],
+      ],
+    };
+
+    const state = await applyShopHomePageSchemaText(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      `${JSON.stringify(reorderedSchema, null, 2)}\n`,
+      reorderedSpecs,
+    );
+
+    expect(state.requirements.module_specs.map((spec: any) => spec.type)).toEqual([
+      'top_slider',
+      'banner',
+      'user_assets',
+      'goods',
+      'shop_info',
+      'image_ad',
+    ]);
+    expect((state.schema as any).modules.map((module: any) => module.type)).toEqual([
+      'top_slider',
+      'banner',
+      'user_assets',
+      'goods',
+      'shop_info',
+      'image_ad',
+    ]);
+  });
+
+  it('deletes a middle module from both requirements and schema without restoring optional modules', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-delete';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+
+    const requirements = buildRequirements();
+    const schema = createSeedSchema(requirements as any, null);
+    await writeFile(path.join(projectDir, 'shop-home-page.requirements.json'), `${JSON.stringify(requirements, null, 2)}\n`);
+    await writeFile(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE), `${JSON.stringify(schema, null, 2)}\n`);
+
+    const nextSpecs = requirements.module_specs.filter((spec: any) => spec.type !== 'banner' && spec.type !== 'goods');
+    const nextSchema = {
+      ...schema,
+      modules: schema.modules.filter((module: any) => module.type !== 'banner' && module.type !== 'goods'),
+    };
+
+    const state = await applyShopHomePageSchemaText(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      `${JSON.stringify(nextSchema, null, 2)}\n`,
+      nextSpecs,
+    );
+
+    expect(state.requirements.module_specs.map((spec: any) => spec.type)).toEqual([
+      'top_slider',
+      'user_assets',
+      'shop_info',
+      'image_ad',
+    ]);
+    expect(state.requirements.modules).toEqual([
+      'top_slider',
+      'user_assets',
+      'shop_info',
+      'image_ad',
+    ]);
+    expect((state.schema as any).modules.map((module: any) => module.type)).toEqual([
+      'top_slider',
+      'user_assets',
+      'shop_info',
+      'image_ad',
+    ]);
+  });
+
+  it('treats repeated image_ad instances independently during reordering and deletion', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-image-ad';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+
+    const requirements = {
+      ...buildRequirements(),
+      module_specs: [
+        { type: 'top_slider', content: '头图' },
+        { type: 'image_ad', content: '广告一', aspectRatio: '3:4' },
+        { type: 'image_ad', content: '广告二', aspectRatio: '1:1' },
+        { type: 'shop_info', content: '门店信息' },
+      ],
+    };
+    const schema = createSeedSchema(requirements as any, null);
+    await writeFile(path.join(projectDir, 'shop-home-page.requirements.json'), `${JSON.stringify(requirements, null, 2)}\n`);
+    await writeFile(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE), `${JSON.stringify(schema, null, 2)}\n`);
+
+    const nextSpecs = [
+      requirements.module_specs[0],
+      requirements.module_specs[2],
+      requirements.module_specs[3],
+    ];
+    const nextSchema = {
+      ...schema,
+      modules: [
+        schema.modules[0],
+        schema.modules[2],
+        schema.modules[3],
+      ],
+    };
+
+    const state = await applyShopHomePageSchemaText(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      `${JSON.stringify(nextSchema, null, 2)}\n`,
+      nextSpecs,
+    );
+
+    expect(state.requirements.module_specs).toEqual([
+      expect.objectContaining({ type: 'top_slider', content: '头图' }),
+      expect.objectContaining({ type: 'image_ad', content: '广告二', aspectRatio: '1:1' }),
+      expect.objectContaining({ type: 'shop_info', content: '门店信息' }),
+    ]);
+    expect((state.schema as any).modules.map((module: any) => module.id)).toEqual([
+      'top_slider_1',
+      'image_ad_3',
+      'shop_info_4',
+    ]);
+  });
+});
+
 describe('collectAssetTasks', () => {
   it('re-enqueues the first user_assets entry when schema metadata points at a missing file', () => {
     const schema = {
@@ -223,7 +478,7 @@ describe('collectAssetTasks', () => {
       reference_images: ['page-shot.png'],
       analysis: {
         background_style: 'Warm cream paper tone with large white rounded cards and airy whitespace.',
-        layout_style: 'Airy storefront reference with sparse composition, low information density, small title scale, and large empty areas.',
+        layout_style: 'Airy storefront reference with sparse composition, low information density, small title scale, large empty areas, and a visible customer-assets entry area below the hero.',
       },
       generation_rules: {
         must: ['Use rounded cards when appropriate.'],
@@ -261,6 +516,25 @@ describe('collectAssetTasks', () => {
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('完整填满 schema 给出的卡位尺寸');
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('布局风格参考');
     expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('超大标题');
+    expect(userAssetsPrompt.style.background_color).toBeUndefined();
+    expect(userAssetsPrompt.style.text_color).toBeUndefined();
+    expect(userAssetsPrompt.style.primary_color).toBeUndefined();
+    expect(userAssetsPrompt.style.accent_color).toBeUndefined();
+    expect(userAssetsPrompt.constraints.pure_white_background).toBeUndefined();
+    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('底色和文字颜色优先跟随可见参考入口区');
+    expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('背景保持纯白');
+  });
+
+  it('keeps white-card fallback for user_assets without reference images', () => {
+    const schema = createSeedSchema(buildRequirements(), null);
+    const tasks = collectAssetTasks(schema, null, true, new Set());
+    const userAssetsTask = tasks.find((task) => task.fileName === 'user-assets-entry-1.png');
+    const userAssetsPrompt = JSON.parse(userAssetsTask?.prompt ?? '{}');
+
+    expect(userAssetsPrompt.style.background_color).toBe('#FFFFFF');
+    expect(userAssetsPrompt.style.text_color).toBe('#171717');
+    expect(userAssetsPrompt.constraints.pure_white_background).toBe(true);
+    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('无参考图时默认使用纯白直角底卡和页面文字色');
   });
 
   it('adds component-analysis guidance to every referenced image prompt', () => {

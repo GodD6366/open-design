@@ -1945,6 +1945,35 @@ code {
   color: var(--text-muted);
   font-size: 11px;
 }
+.shop-home-template-thumb {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.shop-home-template-card {
+  min-height: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  text-align: left;
+}
+.shop-home-template-title {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.shop-home-template-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .aspect-copy {
   display: flex;
   flex-direction: column;
@@ -7561,6 +7590,82 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   margin-right: auto;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.storefront-panel-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.storefront-panel-tab {
+  border-radius: 999px;
+}
+
+.storefront-panel-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.storefront-composer {
+  padding: 16px;
+}
+
+.storefront-composer-note {
+  margin-bottom: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.storefront-composer-summary {
+  margin-bottom: 12px;
+}
+
+.storefront-composer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.storefront-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+}
+
+.storefront-composer-row-main {
+  min-width: 0;
+}
+
+.storefront-composer-row-main strong {
+  display: block;
+  font-size: 14px;
+}
+
+.storefront-composer-row-main span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.storefront-composer-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.storefront-composer-delete {
+  color: #b42318;
 }
 
 .storefront-panel-file-list {

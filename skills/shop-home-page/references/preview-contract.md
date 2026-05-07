@@ -26,4 +26,4 @@ The host renders a mobile storefront preview from schema only.
 
 Do not try to approximate preview by authoring HTML. The host compiles
 `storefront.preview.html` and `storefront.screen.html` from
-`storefront.schema.json`.
+`shop-home-page.schema.json`.

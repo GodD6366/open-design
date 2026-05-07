@@ -2,6 +2,11 @@
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import {
+  buildDefaultShopHomePageReferenceState,
+  getShopHomePageTemplateById,
+  type ShopHomePageReferenceState,
+} from '@open-design/contracts/shop-home-page-templates';
 import { DEFAULT_IMAGE_MODEL } from './media-models.js';
 import { resolveProviderConfig } from './media-config.js';
 import { ensureProject, listFiles, writeProjectFile } from './projects.js';
@@ -34,6 +39,7 @@ export const SHOP_HOME_PAGE_STYLE_GUIDE_FILE = 'shop-home-page.style-guide.json'
 export const SHOP_HOME_PAGE_SCHEMA_FILE = 'shop-home-page.schema.json';
 export const SHOP_HOME_PAGE_SCREEN_FILE = 'shop-home-page.screen.html';
 export const SHOP_HOME_PAGE_PREVIEW_FILE = 'shop-home-page.preview.html';
+export const SHOP_HOME_PAGE_REFERENCE_STATE_FILE = 'shop-home-page.reference-state.json';
 
 const INTERNAL_STATE_FILE = '.shop-home-page.state.json';
 const REQUIREMENTS_TEMPLATE_FILE = path.join('assets', 'requirements.template.json');
@@ -219,6 +225,158 @@ const GENERIC_STYLE_GUIDE = {
   },
 };
 
+const BOTANICAL_STYLE_GUIDE_PRESET = {
+  version: '1.0',
+  preset_id: 'bakery-botanical-sage',
+  reference_images: [],
+  analysis: {
+    source_summary:
+      'Botanical paper storefront template with a large floral hero, warm off-white background, and a wide white membership card carrying three equal customer-asset entry cards.',
+    icon_style:
+      'Fine-line botanical and gift-themed illustration icons, soft hand-drawn details, balanced rather than loud.',
+    background_style:
+      'Warm paper background with sage green controls, pale cream entry cards, and sparse celebratory confetti accents.',
+    layout_style:
+      'Single-subject hero first, then one wide white card with a one-row-three customer-assets layout; low text density, even spacing, and soft visual rhythm.',
+    tone_keywords: ['bakery', 'botanical', 'sage', 'paper', 'floral', 'airy'],
+  },
+  generation_rules: {
+    must: [
+      'Keep the large botanical hero separate from the three equal customer-assets entry cards below.',
+      'Use one-row-three entry cards with soft paper tones, light sage action colors, and restrained information density.',
+      'Borrow the visible entry-card layout mode, icon style, card background color, text color contrast, whitespace, and title scale from the reference.',
+    ],
+    avoid: [
+      'no bright mall-promo stickers or dense ecommerce coupon styling',
+      'no copying the birthday reward card, member code bar, or bottom navigation into customer-assets cards',
+    ],
+  },
+  schema_defaults: {
+    design_context: {
+      theme: 'bakery_botanical_sage',
+      color_palette: {
+        bg: '#F5F1EA',
+        card_bg: '#FFFFFF',
+        card_subtle: '#F0E8CF',
+        text_primary: '#1F1E1B',
+        text_secondary: '#8F8C80',
+        accent: '#B9C3A1',
+      },
+      radius: '24px',
+      shadow: '0 22px 54px rgba(122, 117, 92, 0.12)',
+      spacing: 16,
+      page_width: 375,
+    },
+    user_assets: {
+      greeting: '欢迎回来',
+      upgrade_tip: '用一行三个入口承接到店选购、花礼配送与积分兑换。',
+      card_layout: {
+        template_type: 3,
+      },
+      visual_style: {
+        design_principle: 'minimal_ui',
+        brand_tone: 'gentle',
+        color_system: {
+          usage: {
+            icon: true,
+            accent: true,
+            background: true,
+          },
+        },
+        icon: {
+          style: 'line_illustration',
+          shape: 'organic',
+          stroke: 'fine',
+        },
+        block: {
+          radius: 24,
+          shadow: 'soft',
+        },
+        typography: {
+          title_case: 'mixed',
+          subtitle_case: 'mixed',
+        },
+      },
+    },
+  },
+};
+
+const AUTUMN_STYLE_GUIDE_PRESET = {
+  version: '1.0',
+  preset_id: 'bakery-sunlit-autumn',
+  reference_images: [],
+  analysis: {
+    source_summary:
+      'Sunlit autumn bakery storefront template with a large illustrated dessert hero, warm yellow background field, and a white membership card carrying three equal customer-asset entry cards.',
+    icon_style:
+      'Playful bakery illustrations using product props and thick dark text; entry cards feel warm, direct, and story-driven.',
+    background_style:
+      'Large autumn yellow background with sunroom scenery, warm cream highlights, and illustrated tabletop objects.',
+    layout_style:
+      'Scene-led hero takes the upper half first, then a wide white card with a one-row-three customer-assets layout; broad whitespace, large titles, and low entry-card density.',
+    tone_keywords: ['bakery', 'autumn', 'sunlit', 'dessert', 'warm', 'story'],
+  },
+  generation_rules: {
+    must: [
+      'Keep the large illustrated hero separate from the one-row-three customer-assets cards below.',
+      'Use one-row-three entry cards with warm yellow card faces, direct headings, and simple bakery iconography.',
+      'Borrow the visible entry-card layout mode, icon style, card background color, text color contrast, whitespace, and title scale from the reference.',
+    ],
+    avoid: [
+      'no copying the recharge balance card, event list, or bottom navigation into customer-assets cards',
+      'no turning each entry card into a full hero scene with unrelated desk props',
+    ],
+  },
+  schema_defaults: {
+    design_context: {
+      theme: 'bakery_sunlit_autumn',
+      color_palette: {
+        bg: '#F9C645',
+        card_bg: '#FFFFFF',
+        card_subtle: '#FFD46A',
+        text_primary: '#1B160E',
+        text_secondary: '#8E7A52',
+        accent: '#F8C137',
+      },
+      radius: '24px',
+      shadow: '0 24px 56px rgba(161, 121, 28, 0.16)',
+      spacing: 16,
+      page_width: 375,
+    },
+    user_assets: {
+      greeting: '欢迎回来',
+      upgrade_tip: '用一行三个入口承接自提、外送和蛋糕预定等平级动作。',
+      card_layout: {
+        template_type: 3,
+      },
+      visual_style: {
+        design_principle: 'minimal_ui',
+        brand_tone: 'warm',
+        color_system: {
+          usage: {
+            icon: true,
+            accent: true,
+            background: true,
+          },
+        },
+        icon: {
+          style: 'illustrated_object',
+          shape: 'organic',
+          stroke: 'bold',
+        },
+        block: {
+          radius: 24,
+          shadow: 'soft',
+        },
+        typography: {
+          title_case: 'mixed',
+          subtitle_case: 'mixed',
+        },
+      },
+    },
+  },
+};
+
 const BAKERY_STYLE_GUIDE_PRESET = {
   version: '1.0',
   preset_id: 'bakery-handdrawn-cream',
@@ -267,6 +425,9 @@ const BAKERY_STYLE_GUIDE_PRESET = {
     user_assets: {
       greeting: '欢迎回来',
       upgrade_tip: '用手绘感入口承接会员、自取、配送与扫码下单。',
+      card_layout: {
+        template_type: 2,
+      },
       visual_style: {
         design_principle: 'minimal_ui',
         brand_tone: 'friendly',
@@ -342,6 +503,8 @@ const SHOP_HOME_PAGE_TONE_STYLE_GUIDE_PRESETS = Object.fromEntries(
 
 const STYLE_PRESETS = {
   'bakery-handdrawn-cream': BAKERY_STYLE_GUIDE_PRESET,
+  'bakery-botanical-sage': BOTANICAL_STYLE_GUIDE_PRESET,
+  'bakery-sunlit-autumn': AUTUMN_STYLE_GUIDE_PRESET,
   ...SHOP_HOME_PAGE_TONE_STYLE_GUIDE_PRESETS,
 };
 
@@ -444,6 +607,48 @@ export function shopHomePageSkillDir(projectRoot) {
   return path.join(projectRoot, 'skills', 'shop-home-page');
 }
 
+function resolveShopHomePageSkillDir(projectRoot) {
+  const direct = shopHomePageSkillDir(projectRoot);
+  if (readFileSyncSafe(path.join(direct, SKILL_FILE))) return direct;
+  const parent = shopHomePageSkillDir(path.resolve(projectRoot, '..', '..'));
+  if (readFileSyncSafe(path.join(parent, SKILL_FILE))) return parent;
+  return direct;
+}
+
+export async function initializeShopHomePageTemplateProject(projectsRoot, projectId, projectRoot, metadata) {
+  const template = getShopHomePageTemplateById(metadata?.shopHomePageTemplateId);
+  if (!template) return;
+
+  const projectDir = await ensureProject(projectsRoot, projectId);
+  const skillDir = resolveShopHomePageSkillDir(projectRoot);
+  const sourcePath = path.join(
+    skillDir,
+    'assets',
+    template.previewAsset,
+  );
+  const buffer = await fs.readFile(sourcePath);
+  await writeProjectFile(
+    projectsRoot,
+    projectId,
+    template.projectReferenceFileName,
+    buffer,
+    { overwrite: false },
+  );
+  const referenceState = {
+    ...buildDefaultShopHomePageReferenceState([template.projectReferenceFileName]),
+    notes: `Default template reference seeded from ${template.label}.`,
+  };
+  const styleGuide = buildTemplateStyleGuideTemplate(template);
+  await writeTextIfChanged(
+    path.join(projectDir, SHOP_HOME_PAGE_REFERENCE_STATE_FILE),
+    `${JSON.stringify(referenceState, null, 2)}\n`,
+  );
+  await writeTextIfChanged(
+    path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE),
+    `${JSON.stringify(styleGuide, null, 2)}\n`,
+  );
+}
+
 export async function migrateLegacyStorefrontProjectFiles(projectsRoot, db, projectId) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const renamePairs = [
@@ -493,6 +698,62 @@ export async function migrateLegacyStorefrontProjectFiles(projectsRoot, db, proj
   }
 }
 
+async function readReferenceStateForProject(projectDir, requirements) {
+  const text = await readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_REFERENCE_STATE_FILE));
+  const styleGuideText = await readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE));
+  const styleGuide = isPlainObject(tryParseJson(styleGuideText))
+    ? tryParseJson(styleGuideText)
+    : null;
+  const normalized = normalizeReferenceState(
+    tryParseJson(text),
+    requirements,
+    styleGuide,
+  );
+  const nextText = `${JSON.stringify(normalized, null, 2)}\n`;
+  await writeTextIfChanged(
+    path.join(projectDir, SHOP_HOME_PAGE_REFERENCE_STATE_FILE),
+    nextText,
+  );
+  return normalized;
+}
+
+function readFileSyncSafe(filePath) {
+  try {
+    readFileSync(filePath, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeReferenceState(raw, requirements, styleGuide) {
+  const input = isPlainObject(raw) ? raw : {};
+  const templateImages = normalizeReferenceImages(
+    Array.isArray(input.template_reference_images)
+      ? input.template_reference_images
+      : Array.isArray(styleGuide?.reference_images)
+        ? styleGuide.reference_images
+        : [],
+  );
+  const userImages = normalizeReferenceImages(
+    Array.isArray(input.user_reference_images) ? input.user_reference_images : [],
+  );
+  const assetImages = normalizeReferenceImages(
+    Array.isArray(input.asset_images) ? input.asset_images : [],
+  );
+  const mode =
+    input.mode === 'user_explicit' && userImages.length > 0
+      ? 'user_explicit'
+      : 'template_default';
+  return {
+    mode,
+    template_reference_images: templateImages,
+    user_reference_images: userImages,
+    asset_images: assetImages,
+    notes: stringOr(input.notes),
+  };
+}
+
 export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) {
   const projectDir = await ensureProject(projectsRoot, projectId);
   const templates = await loadSkillTemplates(skillRoot);
@@ -514,11 +775,12 @@ export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) 
 
   const requirementsText = requirementsTextFromFile ?? templates.requirementsText;
   const requirements = coerceRequirements(tryParseJson(requirementsText));
+  const referenceState = await readReferenceStateForProject(projectDir, requirements);
   const { styleGuide, styleGuideText } = await loadStyleGuideForProject(
     projectDir,
     requirements,
     styleGuideTextFromFile ?? templates.styleGuideText,
-    { syncFile: true },
+    { syncFile: true, referenceState },
   );
   const parsedSchema = tryParseJson(schemaTextFromFile);
   const schema = isPlainObject(parsedSchema)
@@ -572,10 +834,20 @@ export async function loadShopHomePageState(projectsRoot, projectId, skillRoot) 
   };
 }
 
-export async function applyShopHomePageSchemaText(projectsRoot, projectId, skillRoot, schemaText) {
+export async function applyShopHomePageSchemaText(projectsRoot, projectId, skillRoot, schemaText, moduleSpecs) {
   const projectDir = await ensureProject(projectsRoot, projectId);
-  const requirements = await readRequirementsForProject(projectDir);
-  const styleGuide = await readStyleGuideForProject(projectDir, requirements);
+  const currentRequirements = await readRequirementsForProject(projectDir);
+  const nextRequirements = moduleSpecs === undefined
+    ? currentRequirements
+    : coerceRequirements({
+      ...currentRequirements,
+      module_specs: normalizeHomepageModuleSpecs(moduleSpecs),
+      modules: Array.isArray(moduleSpecs) ? moduleSpecs.map((spec) => spec?.type) : currentRequirements.modules,
+      module_content: Array.isArray(moduleSpecs)
+        ? deriveModuleContentFromSpecs(normalizeHomepageModuleSpecs(moduleSpecs) ?? [])
+        : currentRequirements.module_content,
+    });
+  const styleGuide = await readStyleGuideForProject(projectDir, nextRequirements);
   const raw = tryParseJson(schemaText);
   if (!isPlainObject(raw)) {
     const err = new Error('shop-home-page.schema.json must be valid JSON.');
@@ -583,15 +855,15 @@ export async function applyShopHomePageSchemaText(projectsRoot, projectId, skill
     throw err;
   }
 
-  const normalized = normalizeStorefrontSchema(raw, requirements, styleGuide);
-  const validationErrors = validateStorefrontSchema(normalized, requirements);
+  const normalized = normalizeStorefrontSchema(raw, nextRequirements, styleGuide);
+  const validationErrors = validateStorefrontSchema(normalized, nextRequirements);
   if (validationErrors.length > 0) {
     const err = new Error(validationErrors.join('\n'));
     err.statusCode = 422;
     throw err;
   }
 
-  await persistSchema(projectDir, projectId, normalized, requirements, styleGuide);
+  await persistProjectSchemaState(projectDir, projectId, normalized, nextRequirements, styleGuide);
   await writeRuntimeState(projectDir, 'schema-ready', 'info', 'shop-home-page.schema.json applied and preview recompiled.');
   return loadShopHomePageState(projectsRoot, projectId, skillRoot);
 }
@@ -690,6 +962,41 @@ function buildDefaultStyleGuideTemplate() {
   return deepClone(GENERIC_STYLE_GUIDE);
 }
 
+function buildTemplateStyleGuideTemplate(template) {
+  const preset = deepClone(STYLE_PRESETS[template?.presetId] ?? GENERIC_STYLE_GUIDE);
+  return {
+    ...preset,
+    version: '1.0',
+    preset_id: template?.presetId ?? stringOr(preset?.preset_id, 'auto'),
+    reference_images: template?.projectReferenceFileName
+      ? [template.projectReferenceFileName]
+      : [],
+    analysis: {
+      source_summary: stringOr(template?.styleGuideAnalysis?.source_summary, preset?.analysis?.source_summary),
+      icon_style: stringOr(template?.styleGuideAnalysis?.icon_style, preset?.analysis?.icon_style),
+      background_style: stringOr(template?.styleGuideAnalysis?.background_style, preset?.analysis?.background_style),
+      layout_style: stringOr(template?.styleGuideAnalysis?.layout_style, preset?.analysis?.layout_style),
+      tone_keywords: uniqueStrings(
+        Array.isArray(template?.styleGuideAnalysis?.tone_keywords)
+          ? template.styleGuideAnalysis.tone_keywords
+          : preset?.analysis?.tone_keywords ?? [],
+      ),
+    },
+    generation_rules: {
+      must: uniqueStrings(
+        Array.isArray(template?.styleGuideAnalysis?.must)
+          ? template.styleGuideAnalysis.must
+          : preset?.generation_rules?.must ?? [],
+      ),
+      avoid: uniqueStrings(
+        Array.isArray(template?.styleGuideAnalysis?.avoid)
+          ? template.styleGuideAnalysis.avoid
+          : preset?.generation_rules?.avoid ?? [],
+      ),
+    },
+  };
+}
+
 async function readRequirementsForProject(projectDir) {
   const text = await readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_REQUIREMENTS_FILE));
   return coerceRequirements(tryParseJson(text));
@@ -697,12 +1004,20 @@ async function readRequirementsForProject(projectDir) {
 
 async function readStyleGuideForProject(projectDir, requirements) {
   const text = await readTextMaybe(path.join(projectDir, SHOP_HOME_PAGE_STYLE_GUIDE_FILE));
-  const { styleGuide } = await loadStyleGuideForProject(projectDir, requirements, text, { syncFile: true });
+  const referenceState = await readReferenceStateForProject(projectDir, requirements);
+  const { styleGuide } = await loadStyleGuideForProject(projectDir, requirements, text, {
+    syncFile: true,
+    referenceState,
+  });
   return styleGuide;
 }
 
 async function loadStyleGuideForProject(projectDir, requirements, styleGuideText, options = {}) {
-  const styleGuide = coerceStyleGuide(tryParseJson(styleGuideText), requirements);
+  const styleGuide = coerceStyleGuide(
+    tryParseJson(styleGuideText),
+    requirements,
+    options.referenceState,
+  );
   const nextText = `${JSON.stringify(toPublicStyleGuide(styleGuide), null, 2)}\n`;
   if (options.syncFile) {
     await writeTextIfChanged(
@@ -716,7 +1031,7 @@ async function loadStyleGuideForProject(projectDir, requirements, styleGuideText
   };
 }
 
-function coerceStyleGuide(raw, requirements) {
+function coerceStyleGuide(raw, requirements, referenceState) {
   const fallback = buildDefaultStyleGuideTemplate();
   const input = isPlainObject(raw) ? raw : {};
   const presetId = resolveStylePresetId(
@@ -729,14 +1044,12 @@ function coerceStyleGuide(raw, requirements) {
     : null;
   const base = preset ?? fallback;
 
+  const effectiveReferenceImages = resolveEffectiveReferenceImages(referenceState, input, base);
+
   return {
     version: stringOr(input.version, base.version),
     preset_id: presetId || 'auto',
-    reference_images: normalizeReferenceImages(
-      Array.isArray(input.reference_images)
-        ? input.reference_images
-        : base.reference_images,
-    ),
+    reference_images: effectiveReferenceImages,
     analysis: {
       source_summary: stringOr(input.analysis?.source_summary, base.analysis.source_summary),
       icon_style: stringOr(input.analysis?.icon_style, base.analysis.icon_style),
@@ -762,6 +1075,25 @@ function coerceStyleGuide(raw, requirements) {
     },
     schema_defaults: base.schema_defaults ? deepClone(base.schema_defaults) : undefined,
   };
+}
+
+function resolveEffectiveReferenceImages(referenceState, input, base) {
+  const defaultImages = normalizeReferenceImages(
+    Array.isArray(base?.reference_images) ? base.reference_images : [],
+  );
+  const inputImages = normalizeReferenceImages(
+    Array.isArray(input?.reference_images) ? input.reference_images : [],
+  );
+  if (referenceState && referenceState.mode === 'user_explicit') {
+    const userImages = normalizeReferenceImages(referenceState.user_reference_images);
+    if (userImages.length > 0) return userImages;
+  }
+  if (referenceState) {
+    const templateImages = normalizeReferenceImages(referenceState.template_reference_images);
+    if (templateImages.length > 0) return templateImages;
+  }
+  if (inputImages.length > 0) return inputImages;
+  return defaultImages;
 }
 
 function resolveStylePresetId(rawPresetId, rawStyleGuide, requirements) {
@@ -934,8 +1266,8 @@ function coerceRequirements(raw) {
       action_buttons: normalizeActionButtons(raw.action_buttons),
       other_requirements: stringOr(raw.other_requirements),
       counts: {
-        sliderCount: getRequestedItemCount(specs, 'top_slider', toPositiveInteger(raw.counts?.sliderCount, 2)),
-        goodsCount: getRequestedItemCount(specs, 'goods', toPositiveInteger(raw.counts?.goodsCount, 3)),
+        sliderCount: getRequestedItemCount(specs, 'top_slider', toPositiveInteger(raw.counts?.sliderCount, 1)),
+        goodsCount: getRequestedItemCount(specs, 'goods', toPositiveInteger(raw.counts?.goodsCount, 2)),
       },
       confirmation_questions: Array.isArray(raw.confirmation_questions)
         ? raw.confirmation_questions.filter((item) => typeof item === 'string')
@@ -2213,6 +2545,17 @@ async function persistSchema(projectDir, projectId, schema, requirements, styleG
       'utf8',
     ),
     ensurePreviewArtifacts(projectDir, projectId, schema, requirements, [], styleGuide),
+  ]);
+}
+
+async function persistProjectSchemaState(projectDir, projectId, schema, requirements, styleGuide) {
+  await Promise.all([
+    fs.writeFile(
+      path.join(projectDir, SHOP_HOME_PAGE_REQUIREMENTS_FILE),
+      `${JSON.stringify(requirements, null, 2)}\n`,
+      'utf8',
+    ),
+    persistSchema(projectDir, projectId, schema, requirements, styleGuide),
   ]);
 }
 
@@ -3642,7 +3985,9 @@ function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
     ...ZERO_PADDING_GENERATION_NOTES,
     `当前入口卡片布局为 ${userAssetsTemplateTypeLabel(cardLayout?.template_type)}，当前卡片槽位是 ${stringOr(slot?.id, 'slot')}。`,
     '客户资产入口卡片只表达当前这个功能入口，不要在一张图里额外生成别的按钮卡片、额外小入口或整组宫格。',
-    '入口卡片中的 icon、标题、副标题必须保留在卡片内部，跟随页面整体风格，但背景保持纯白，不要渐变、纹理、插画场景或摄影背景。',
+    hasReferenceImages
+      ? '入口卡片中的 icon、标题、副标题必须保留在卡片内部；有参考图时，卡片布局方式、底色和文字颜色优先跟随可见参考入口区，不要强行改回白底。'
+      : '入口卡片中的 icon、标题、副标题必须保留在卡片内部；无参考图时默认使用纯白直角底卡和页面文字色，不要渐变、纹理、插画场景或摄影背景。',
     '不要展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
     '当前入口图必须完整填满 schema 给出的卡位尺寸，不要再额外套圆角白底卡片、内边距衬板或留白外框。',
   ];
@@ -3717,6 +4062,12 @@ function sanitizeReferenceLedPromptSchema(promptSchema, { moduleType, hasReferen
 
   if (style) {
     delete style.background_type;
+    if (moduleType === 'user_assets') {
+      delete style.background_color;
+      delete style.text_color;
+      delete style.primary_color;
+      delete style.accent_color;
+    }
     delete style.visual_feel;
     promptSchema.style = style;
   }
@@ -3736,6 +4087,7 @@ function sanitizeReferenceLedPromptSchema(promptSchema, { moduleType, hasReferen
       forbid_lower_page_ui: true,
     };
   } else if (moduleType === 'user_assets') {
+    delete constraints.pure_white_background;
     promptSchema.constraints = {
       ...constraints,
       reference_region: 'customer_asset_icon_card_only',
@@ -3785,7 +4137,7 @@ export function buildStorefrontReferenceUsageNotes({
       notes.push('顶部主视觉要参考首屏 hero 的空间分布、主体数量、留白比例、文字数量和标题尺度；不要为了“海报感”新增醒目的大号中文标题、额外 slogan、CTA、标签或密集涂鸦。');
       notes.push('顶部主视觉的参考区域仅限整页截图最上方 hero 组件；客户资产三宫格、入口按钮、会员/欢迎卡、下方 Banner、商品区和品牌故事区都属于其他组件，不得移植到轮播头图。');
     } else if (moduleType === 'user_assets') {
-      notes.push('客户资产入口卡片只沿用可见入口图标区的 icon 笔触、配色语气、留白关系、标题层级、文字尺度和信息密度，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
+      notes.push('客户资产入口卡片只沿用可见入口图标区的 icon 笔触、卡片布局方式、卡片底色、文字颜色对比、配色语气、留白关系、标题层级、文字尺度和信息密度，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
     } else if (moduleType === 'banner') {
       notes.push('Banner 参考整页风格里的色块、纹理、插画语气、留白和文字密度；保持轻量，不要直接搬用会员条、商品卡、导航条或其他运营模块。');
     } else if (moduleType === 'goods') {
@@ -3800,7 +4152,7 @@ export function buildStorefrontReferenceUsageNotes({
   }
 
   if (moduleType === 'user_assets') {
-    notes.push('客户资产入口只模仿整页参考图里可见图标区的笔触、留白、标题层级、文字尺度、信息密度和配色节奏；具体按钮图案、标题和副标题必须按当前入口需求生成，不要借用 hero 商品主体、会员汇总卡、其他按钮主体或原文案。');
+    notes.push('客户资产入口只模仿整页参考图里可见入口卡的布局方式、卡片底色、文字颜色、图标区笔触、留白、标题层级、文字尺度、信息密度和配色节奏；具体按钮图案、标题和副标题必须按当前入口需求生成，不要借用 hero 商品主体、会员汇总卡、其他按钮主体或原文案。');
   }
 
   if (moduleType === 'top_slider') {
@@ -3820,6 +4172,9 @@ function buildUserAssetsGenerationNotes(styleGuide) {
   if (guide.analysis?.icon_style) {
     notes.push(`入口 icon 风格参考页面视觉：${guide.analysis.icon_style}`);
   }
+  if (guide.analysis?.background_style) {
+    notes.push(`入口卡底色与文字对比参考页面视觉：${sanitizeStorefrontPromptCue(guide.analysis.background_style)}`);
+  }
   const layoutStyle = moduleScopedStorefrontCue(guide.analysis?.layout_style, 'user_assets');
   if (layoutStyle) {
     notes.push(`布局风格参考：${layoutStyle}`);
@@ -3833,7 +4188,7 @@ function buildUserAssetsGenerationNotes(styleGuide) {
     }
   }
   if (guide.preset_id === 'bakery-handdrawn-cream') {
-    notes.push('入口 icon 可以保留手绘涂鸦感和暖橙点缀，但背景仍必须是纯白，不要奶油纸感底纹或海报背景。');
+    notes.push('入口 icon 可以保留手绘涂鸦感和暖橙点缀；无参考图时默认白底，有参考图时优先跟随可见入口卡的底色与文字对比，不要引入奶油纸感整页背景或海报场景。');
   }
   return uniqueStrings(notes.filter(Boolean));
 }

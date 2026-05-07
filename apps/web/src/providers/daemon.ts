@@ -73,6 +73,16 @@ export interface DaemonReattachOptions {
   onRunEventId?: (eventId: string) => void;
 }
 
+export interface ShopHomePageConversationTurnOptions {
+  projectId: string;
+  conversationId: string;
+  message: string;
+  attachments?: string[];
+  agentId: string;
+  model?: string | null;
+  reasoning?: string | null;
+}
+
 export async function streamViaDaemon({
   agentId,
   history,
@@ -147,6 +157,33 @@ export async function streamViaDaemon({
     if ((err as Error).name === 'AbortError') return;
     onRunStatus?.('failed');
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
+export async function sendShopHomePageConversationTurn({
+  projectId,
+  conversationId,
+  message,
+  attachments,
+  agentId,
+  model,
+  reasoning,
+}: ShopHomePageConversationTurnOptions): Promise<void> {
+  const resp = await fetch(`/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      attachments: (attachments ?? []).map((path) => ({ path })),
+      agentId,
+      model: model ?? null,
+      reasoning: reasoning ?? null,
+      conversationId,
+    }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`daemon ${resp.status}: ${text || 'no body'}`);
   }
 }
 

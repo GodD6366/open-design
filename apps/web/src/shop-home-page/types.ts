@@ -96,6 +96,16 @@ export interface ShopHomePageSchema {
   modules: ShopHomePageSchemaModule[];
 }
 
+export interface ShopHomePageComposerDraftItem {
+  key: string;
+  index: number;
+  moduleType: ShopHomePageModuleType;
+  label: string;
+  occurrence: number;
+  spec: ShopHomePageModuleSpec;
+  schemaModule: ShopHomePageSchemaModule;
+}
+
 export interface ShopHomePageLogEntry {
   at: number;
   level: 'info' | 'error';

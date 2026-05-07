@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getShopHomePageTemplateById,
+  listShopHomePageTemplates,
+  SHOP_HOME_PAGE_TEMPLATE_NONE,
+} from '@open-design/contracts';
 import { getCreateEntryPolicy } from '../branch/shop-home-config';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -18,6 +23,7 @@ import type {
   MediaProviderCredentials,
   PromptTemplateSummary,
   SkillSummary,
+  ShopHomePageTemplateDefinition,
 } from '../types';
 import {
   AUDIO_DURATIONS_SEC,
@@ -139,6 +145,12 @@ export function NewProjectPanel({
     useState<PromptTemplatePick | null>(null);
   const [videoPromptTemplate, setVideoPromptTemplate] =
     useState<PromptTemplatePick | null>(null);
+  const [shopHomePageTemplateId, setShopHomePageTemplateId] =
+    useState<string>(SHOP_HOME_PAGE_TEMPLATE_NONE);
+  const shopHomePageTemplates = useMemo(
+    () => listShopHomePageTemplates(),
+    [],
+  );
 
   // Design system is meaningful only for the structured/visual surfaces
   // (prototype, deck, template, and the freeform "other" canvas). The
@@ -274,6 +286,7 @@ export function NewProjectPanel({
       animations,
       templateId,
       templates,
+      shopHomePageTemplateId,
       imageModel,
       imageAspect,
       imageStyle,
@@ -386,6 +399,14 @@ export function NewProjectPanel({
 
         {tab === 'prototype' ? (
           <FidelityPicker value={fidelity} onChange={setFidelity} />
+        ) : null}
+
+        {tab === SHOP_HOMEPAGE_KIND ? (
+          <ShopHomePageTemplatePicker
+            templates={shopHomePageTemplates}
+            value={shopHomePageTemplateId}
+            onChange={setShopHomePageTemplateId}
+          />
         ) : null}
 
         {tab === 'deck' ? (
@@ -1656,6 +1677,7 @@ function buildMetadata(input: {
   animations: boolean;
   templateId: string | null;
   templates: ProjectTemplate[];
+  shopHomePageTemplateId: string;
   imageModel: string;
   imageAspect: MediaAspect;
   imageStyle: string;
@@ -1674,9 +1696,16 @@ function buildMetadata(input: {
     ? { inspirationDesignSystemIds: input.inspirationIds }
     : {};
   if (input.tab === SHOP_HOMEPAGE_KIND) {
+    const template =
+      input.shopHomePageTemplateId !== SHOP_HOME_PAGE_TEMPLATE_NONE
+        ? getShopHomePageTemplateById(input.shopHomePageTemplateId)
+        : null;
     return {
       kind: SHOP_HOMEPAGE_KIND,
       imageModel: input.imageModel,
+      shopHomePageTemplateId: template?.id,
+      shopHomePageTemplateLabel: template?.label,
+      shopHomePageReferenceMode: template ? template.defaultMode : undefined,
     };
   }
   if (input.tab === 'prototype') {
@@ -1787,4 +1816,50 @@ function titleForTab(tab: CreateTab, t: TranslateFn): string {
 function autoName(tab: CreateTab, t: TranslateFn): string {
   const stamp = new Date().toLocaleDateString();
   return `${t(TAB_LABEL_KEYS[tab])} · ${stamp}`;
+}
+
+function ShopHomePageTemplatePicker({
+  templates,
+  value,
+  onChange,
+}: {
+  templates: ShopHomePageTemplateDefinition[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const t = useT();
+
+  return (
+    <div className="newproj-section">
+      <label className="newproj-label">{t('newproj.templateLabel')}</label>
+      <div className="newproj-option-grid">
+        <button
+          type="button"
+          className={`newproj-card shop-home-template-card${value === SHOP_HOME_PAGE_TEMPLATE_NONE ? ' active' : ''}`}
+          onClick={() => onChange(SHOP_HOME_PAGE_TEMPLATE_NONE)}
+          aria-pressed={value === SHOP_HOME_PAGE_TEMPLATE_NONE}
+        >
+          <span className="shop-home-template-title">不使用模板</span>
+          <small className="shop-home-template-desc">从空白店铺首页开始，后续再自己补充参考图。</small>
+        </button>
+        {templates.map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            className={`newproj-card shop-home-template-card${value === template.id ? ' active' : ''}`}
+            onClick={() => onChange(template.id)}
+            aria-pressed={value === template.id}
+          >
+            <img
+              className="shop-home-template-thumb"
+              src={`/api/skills/shop-home-page/assets/${template.previewAsset}`}
+              alt={template.label}
+            />
+            <span className="shop-home-template-title">{template.label}</span>
+            <small className="shop-home-template-desc">{template.description}</small>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
