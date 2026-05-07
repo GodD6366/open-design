@@ -143,6 +143,9 @@ export function composeShopHomePageSystemPrompt({
     '```',
     '',
     'Treat that as authoritative structured input.',
+    metadata?.shopHomePageIndustryLabel
+      ? `Project metadata already includes a shop-home-page industry default: ${metadata.shopHomePageIndustryLabel}. Treat it as a known default for \`所属行业\`, do not re-ask that field as unknown, and still allow the user to override it later.`
+      : 'If project metadata already includes a shop-home-page industry, treat it as a known default for `所属行业`, do not re-ask that field as unknown, and still allow the user to override it later.',
     '',
     '## Turn-1 form contract',
     '',

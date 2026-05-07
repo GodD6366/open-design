@@ -179,6 +179,9 @@ export const esES: Dict = {
   'newproj.toggleAnimationsHint':
     'Añade movimiento (entrada, hover, transiciones) sobre la plantilla.',
   'newproj.templateLabel': 'Plantilla',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Aún no hay plantillas',
   'newproj.noTemplatesBody':
     'Abre cualquier proyecto y usa el menú Compartir dentro del visor de archivos para convertirlo en plantilla. Las plantillas aparecerán aquí.',

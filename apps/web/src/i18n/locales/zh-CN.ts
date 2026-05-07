@@ -177,6 +177,9 @@ export const zhCN: Dict = {
   'newproj.toggleAnimations': '加入动效',
   'newproj.toggleAnimationsHint': '在模板基础上叠加动效（入场、悬停、过渡）。',
   'newproj.templateLabel': '模板',
+  'newproj.shopHomePageIndustryLabel': '所属行业',
+  'newproj.shopHomePageIndustryBakery': '烘焙',
+  'newproj.shopHomePageIndustryCoffeeTea': '咖啡茶饮',
   'newproj.noTemplatesTitle': '还没有模板',
   'newproj.noTemplatesBody':
     '打开任意项目，在文件查看器内的「分享」菜单将其保存为模板，模板将出现在这里。',

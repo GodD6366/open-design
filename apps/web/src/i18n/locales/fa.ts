@@ -179,6 +179,9 @@ export const fa: Dict = {
   'newproj.toggleAnimationsHint':
     'افزودن حرکت (ورود، هاور، انتقال) بر روی قالب.',
   'newproj.templateLabel': 'قالب',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'هنوز هیچ قالبی وجود ندارد',
   'newproj.noTemplatesBody':
     'هر پروژه‌ای را باز کنید، سپس از منوی اشتراک‌گذاری در داخل نمایشگر فایل آن را به قالب تبدیل کنید. قالب‌ها اینجا نمایش داده می‌شوند.',

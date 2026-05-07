@@ -177,6 +177,9 @@ export const ru: Dict = {
   'newproj.toggleAnimationsHint':
     'Добавить анимации (появление, наведение, переходы) поверх шаблона.',
   'newproj.templateLabel': 'Шаблон',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Шаблонов пока нет',
   'newproj.noTemplatesBody':
     'Откройте любой проект, затем используйте меню «Поделиться» в просмотре файлов, чтобы преобразовать его в шаблон. Шаблоны появятся здесь.',

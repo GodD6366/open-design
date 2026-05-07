@@ -178,6 +178,9 @@ export const ja: Dict = {
   'newproj.toggleAnimationsHint':
     'テンプレートにモーション（入場・ホバー・トランジション）を追加します。',
   'newproj.templateLabel': 'テンプレート',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'テンプレートがまだありません',
   'newproj.noTemplatesBody':
     'プロジェクトを開き、ファイルビューア内の共有メニューからテンプレートに変換してください。テンプレートはここに表示されます。',

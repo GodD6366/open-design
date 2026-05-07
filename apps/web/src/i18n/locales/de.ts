@@ -178,6 +178,9 @@ export const de: Dict = {
   'newproj.toggleAnimationsHint':
     'Bewegung (Einstiege, Hover, Übergänge) zusätzlich zum Template hinzufügen.',
   'newproj.templateLabel': 'Template',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Noch keine Templates',
   'newproj.noTemplatesBody':
     'Öffnen Sie ein Projekt und nutzen Sie dann das Teilen-Menü im File Viewer, um es in ein Template umzuwandeln. Templates erscheinen hier.',

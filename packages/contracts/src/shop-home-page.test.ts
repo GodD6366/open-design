@@ -136,4 +136,18 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('do not open `.od-skills/`');
     expect(out).toContain('do not continue exploring unrelated files');
   });
+
+  it('treats metadata industry as a known default for requirement clarification', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+        shopHomePageIndustryId: 'coffeeTea',
+        shopHomePageIndustryLabel: '咖啡茶饮',
+      },
+    });
+
+    expect(out).toContain('Treat it as a known default for `所属行业`');
+    expect(out).toContain('do not re-ask that field as unknown');
+    expect(out).toContain('allow the user to override it later');
+  });
 });

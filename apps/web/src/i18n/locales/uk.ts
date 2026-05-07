@@ -179,6 +179,9 @@ export const uk: Dict = {
   'newproj.toggleAnimationsHint':
     'Додати рух (вхід, наведення, переходи) поверх шаблону.',
   'newproj.templateLabel': 'Шаблон',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Шаблони ще не створені',
   'newproj.noTemplatesBody':
     'Відкрийте будь-який проект, а потім за допомогою меню Поділитися всередині переглядача файлів перетворіть його на шаблон. Шаблони з\'являтимуться тут.',

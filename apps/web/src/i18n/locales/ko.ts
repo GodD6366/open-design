@@ -178,6 +178,9 @@ export const ko: Dict = {
   'newproj.toggleAnimationsHint':
     '템플릿에 모션 (등장, 호버, 전환 효과)을 추가합니다.',
   'newproj.templateLabel': '템플릿',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': '아직 템플릿이 없습니다',
   'newproj.noTemplatesBody':
     '프로젝트를 열고 파일 뷰어 안의 공유(Share) 메뉴를 사용하여 템플릿으로 변환하세요. 생성된 템플릿이 여기에 표시됩니다.',

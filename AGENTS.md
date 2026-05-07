@@ -8,8 +8,10 @@
 ## ShopHomePage Direction
 
 - Treat `店铺首页` as a dedicated storefront workflow, not just another generic homepage/prototype mode.
+- In the storefront homepage flow, project creation must expose a fixed `所属行业` selector with `烘焙` and `咖啡茶饮`; this is only a default business classification and must not restrict cross-scene reuse of bakery templates.
 - Storefront-facing wording and requirement guidance should stay aligned with the shop scene; prefer storefront-native expressions instead of generic design-language phrasing.
 - In the storefront homepage flow, `banner` and `商品` are optional by default. Keep that behavior consistent through the full path, and do not silently add them back as mandatory requirements.
+- In the storefront homepage flow, creating a new project with the basic empty template must not seed default `image_prompt_schema` fields or auto-enqueue image generation before requirements are confirmed.
 - In the storefront homepage flow, `banner` should not add default padding; only add padding when the user explicitly asks for it.
 - In the storefront homepage flow, `user_assets` must use the B-end actual card layout modes and preserve slot-driven aspect ratios.
 - In the storefront homepage flow, the default 3-entry layout is `一行三个`; only use `左一右二` when the confirmed request text explicitly implies `左一右二 / 一大两小 / 主次入口`, while existing legacy `left/right_top/right_bottom` projects remain compatible.

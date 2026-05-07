@@ -178,6 +178,9 @@ export const ar: Dict = {
   'newproj.toggleAnimationsHint':
     'أضف الحركة (دخول، تحويم، انتقالات) فوق القالب.',
   'newproj.templateLabel': 'القالب',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'لا توجد قوالب بعد',
   'newproj.noTemplatesBody':
     'افتح أي مشروع، ثم استخدم قائمة المشاركة داخل عارض الملفات لتحويله إلى قالب. ستظهر القوالب هنا.',

@@ -15,6 +15,7 @@ export const SHOP_HOMEPAGE_KIND = 'shopHomePage';
 export const LEGACY_STOREFRONT_KIND = 'storefront';
 
 export type ShopHomePageReferenceMode = 'template_default' | 'user_explicit';
+export type ShopHomePageIndustryId = 'bakery' | 'coffeeTea';
 
 export function isShopHomePageKind(
   kind: string | null | undefined,
@@ -88,6 +89,8 @@ export interface ProjectMetadata {
   audioModel?: string;
   audioDuration?: number;
   voice?: string;
+  shopHomePageIndustryId?: ShopHomePageIndustryId;
+  shopHomePageIndustryLabel?: string;
   shopHomePageTemplateId?: string;
   shopHomePageTemplateLabel?: string;
   shopHomePageReferenceMode?: ShopHomePageReferenceMode;

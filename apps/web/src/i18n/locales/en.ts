@@ -180,6 +180,9 @@ export const en: Dict = {
   'newproj.toggleAnimationsHint':
     'Add motion (entrance, hover, transitions) on top of the template.',
   'newproj.templateLabel': 'Template',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'No templates yet',
   'newproj.noTemplatesBody':
     'Open any project, then use the Share menu inside the file viewer to convert it into a template. Templates show up here.',

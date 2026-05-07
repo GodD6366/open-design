@@ -210,6 +210,9 @@ export interface Dict {
   'newproj.toggleAnimations': string;
   'newproj.toggleAnimationsHint': string;
   'newproj.templateLabel': string;
+  'newproj.shopHomePageIndustryLabel': string;
+  'newproj.shopHomePageIndustryBakery': string;
+  'newproj.shopHomePageIndustryCoffeeTea': string;
   'newproj.noTemplatesTitle': string;
   'newproj.noTemplatesBody': string;
   'newproj.savedTemplate': string;

@@ -178,6 +178,9 @@ export const hu: Dict = {
   'newproj.toggleAnimationsHint':
     'Mozgás (belépés, hover, átmenetek) hozzáadása a sablonra.',
   'newproj.templateLabel': 'Sablon',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Még nincs sablon',
   'newproj.noTemplatesBody':
     'Nyiss meg egy projektet, majd a fájlnézőben a Megosztás menüvel alakítsd sablonná. A sablonok itt jelennek meg.',

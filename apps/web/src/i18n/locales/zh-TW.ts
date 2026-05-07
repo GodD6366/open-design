@@ -175,6 +175,9 @@ export const zhTW: Dict = {
   'newproj.toggleAnimations': '加入動畫效果',
   'newproj.toggleAnimationsHint': '在範本基礎上疊加動畫效果（入場、懸停、過渡）。',
   'newproj.templateLabel': '範本',
+  'newproj.shopHomePageIndustryLabel': '所屬行業',
+  'newproj.shopHomePageIndustryBakery': '烘焙',
+  'newproj.shopHomePageIndustryCoffeeTea': '咖啡茶飲',
   'newproj.noTemplatesTitle': '還沒有範本',
   'newproj.noTemplatesBody':
     '開啟任意專案，在檔案檢視器內的「分享」選單將其儲存為範本，範本將出現在這裡。',

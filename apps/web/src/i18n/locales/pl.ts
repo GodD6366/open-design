@@ -178,6 +178,9 @@ export const pl: Dict = {
   'newproj.toggleAnimationsHint':
       'Dodaj ruch (wejście, najechanie, przejścia) do szablonu.',
   'newproj.templateLabel': 'Szablon',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Brak szablonów',
   'newproj.noTemplatesBody':
       'Otwórz dowolny projekt, a następnie użyj menu Udostępnij w przeglądarce plików, aby przekonwertować go na szablon. Szablony pojawią się tutaj.',

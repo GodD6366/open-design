@@ -179,6 +179,9 @@ export const ptBR: Dict = {
   'newproj.toggleAnimationsHint':
     'Adicionar movimento (entrada, hover, transições) sobre o template.',
   'newproj.templateLabel': 'Template',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Ainda não há templates',
   'newproj.noTemplatesBody':
     'Abra qualquer projeto e use o menu Compartilhar no visualizador de arquivos para convertê-lo em template. Os templates aparecem aqui.',

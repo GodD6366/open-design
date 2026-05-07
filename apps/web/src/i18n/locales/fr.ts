@@ -178,6 +178,9 @@ export const fr: Dict = {
   'newproj.toggleAnimationsHint':
     'Ajouter du mouvement (entrée, survol, transitions) en plus du modèle.',
   'newproj.templateLabel': 'Modèle',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Aucun modèle pour l\'instant',
   'newproj.noTemplatesBody':
     'Ouvrez un projet, puis utilisez le menu Partager dans la visionneuse de fichiers pour le convertir en modèle. Les modèles apparaissent ici.',

@@ -178,6 +178,9 @@ export const tr: Dict = {
   'newproj.toggleAnimationsHint':
     'Şablonunuzun üstüne hareket (giriş, yüzme, geçişler) ekleyin.',
   'newproj.templateLabel': 'Şablon',
+  'newproj.shopHomePageIndustryLabel': 'Industry',
+  'newproj.shopHomePageIndustryBakery': 'Bakery',
+  'newproj.shopHomePageIndustryCoffeeTea': 'Coffee & tea',
   'newproj.noTemplatesTitle': 'Henüz şablon yok',
   'newproj.noTemplatesBody':
     'Herhangi bir projeyi açın, ardından dosya görüntüleyicideki Paylaş menüsü ile bir şablona dönüştürün. Şablonlar burada görünür.',

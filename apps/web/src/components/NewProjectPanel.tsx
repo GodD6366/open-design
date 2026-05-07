@@ -51,6 +51,16 @@ type PromptTemplatePick = {
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
+type ShopHomePageIndustryOption = {
+  id: 'bakery' | 'coffeeTea';
+  labelKey: keyof Dict;
+};
+
+const SHOP_HOME_PAGE_INDUSTRY_OPTIONS: ShopHomePageIndustryOption[] = [
+  { id: 'bakery', labelKey: 'newproj.shopHomePageIndustryBakery' },
+  { id: 'coffeeTea', labelKey: 'newproj.shopHomePageIndustryCoffeeTea' },
+];
+
 export type CreateTab =
   | 'prototype'
   | 'deck'
@@ -147,6 +157,8 @@ export function NewProjectPanel({
     useState<PromptTemplatePick | null>(null);
   const [shopHomePageTemplateId, setShopHomePageTemplateId] =
     useState<string>(SHOP_HOME_PAGE_TEMPLATE_NONE);
+  const [shopHomePageIndustryId, setShopHomePageIndustryId] =
+    useState<'bakery' | 'coffeeTea'>('bakery');
   const shopHomePageTemplates = useMemo(
     () => listShopHomePageTemplates(),
     [],
@@ -287,6 +299,7 @@ export function NewProjectPanel({
       templateId,
       templates,
       shopHomePageTemplateId,
+      shopHomePageIndustryId,
       imageModel,
       imageAspect,
       imageStyle,
@@ -402,11 +415,17 @@ export function NewProjectPanel({
         ) : null}
 
         {tab === SHOP_HOMEPAGE_KIND ? (
-          <ShopHomePageTemplatePicker
-            templates={shopHomePageTemplates}
-            value={shopHomePageTemplateId}
-            onChange={setShopHomePageTemplateId}
-          />
+          <>
+            <ShopHomePageIndustryPicker
+              value={shopHomePageIndustryId}
+              onChange={setShopHomePageIndustryId}
+            />
+            <ShopHomePageTemplatePicker
+              templates={shopHomePageTemplates}
+              value={shopHomePageTemplateId}
+              onChange={setShopHomePageTemplateId}
+            />
+          </>
         ) : null}
 
         {tab === 'deck' ? (
@@ -1670,7 +1689,7 @@ function OptionCards<T extends string | number>({
   );
 }
 
-function buildMetadata(input: {
+export function buildMetadata(input: {
   tab: CreateTab;
   fidelity: 'wireframe' | 'high-fidelity';
   speakerNotes: boolean;
@@ -1678,6 +1697,7 @@ function buildMetadata(input: {
   templateId: string | null;
   templates: ProjectTemplate[];
   shopHomePageTemplateId: string;
+  shopHomePageIndustryId: 'bakery' | 'coffeeTea';
   imageModel: string;
   imageAspect: MediaAspect;
   imageStyle: string;
@@ -1700,9 +1720,12 @@ function buildMetadata(input: {
       input.shopHomePageTemplateId !== SHOP_HOME_PAGE_TEMPLATE_NONE
         ? getShopHomePageTemplateById(input.shopHomePageTemplateId)
         : null;
+    const industryLabel = input.shopHomePageIndustryId === 'coffeeTea' ? '咖啡茶饮' : '烘焙';
     return {
       kind: SHOP_HOMEPAGE_KIND,
       imageModel: input.imageModel,
+      shopHomePageIndustryId: input.shopHomePageIndustryId,
+      shopHomePageIndustryLabel: industryLabel,
       shopHomePageTemplateId: template?.id,
       shopHomePageTemplateLabel: template?.label,
       shopHomePageReferenceMode: template ? template.defaultMode : undefined,
@@ -1828,35 +1851,144 @@ function ShopHomePageTemplatePicker({
   onChange: (value: string) => void;
 }) {
   const t = useT();
+  const activePreviewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [hoveredTemplateId, setHoveredTemplateId] = useState<string | null>(null);
+  const [previewPosition, setPreviewPosition] = useState<{ left: number } | null>(null);
+  const activePreviewId = hoveredTemplateId ?? value;
+  const activeTemplate =
+    activePreviewId && activePreviewId !== SHOP_HOME_PAGE_TEMPLATE_NONE
+      ? templates.find((template) => template.id === activePreviewId) ?? null
+      : null;
+  const showPreview = hoveredTemplateId !== null;
+
+  function placePreview(trigger: HTMLButtonElement | null) {
+    if (!trigger || typeof window === 'undefined') {
+      setPreviewPosition(null);
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const previewWidth = Math.min(280, Math.round(window.innerWidth * 0.44));
+    const gap = 12;
+    const left = Math.min(
+      rect.right + gap,
+      Math.max(gap, window.innerWidth - previewWidth - gap),
+    );
+    setPreviewPosition({ left });
+  }
+
+  function showTemplatePreview(id: string, trigger: HTMLButtonElement) {
+    activePreviewTriggerRef.current = trigger;
+    setHoveredTemplateId(id);
+    placePreview(trigger);
+  }
+
+  useEffect(() => {
+    if (!showPreview) return undefined;
+    function syncPreviewPosition() {
+      placePreview(activePreviewTriggerRef.current);
+    }
+    window.addEventListener('resize', syncPreviewPosition);
+    window.addEventListener('scroll', syncPreviewPosition, true);
+    return () => {
+      window.removeEventListener('resize', syncPreviewPosition);
+      window.removeEventListener('scroll', syncPreviewPosition, true);
+    };
+  }, [showPreview]);
 
   return (
     <div className="newproj-section">
       <label className="newproj-label">{t('newproj.templateLabel')}</label>
-      <div className="newproj-option-grid">
+      <div
+        className="shop-home-template-browser"
+        onMouseLeave={() => {
+          activePreviewTriggerRef.current = null;
+          setHoveredTemplateId(null);
+          setPreviewPosition(null);
+        }}
+      >
+        <div className="shop-home-template-list" role="list">
         <button
           type="button"
-          className={`newproj-card shop-home-template-card${value === SHOP_HOME_PAGE_TEMPLATE_NONE ? ' active' : ''}`}
+          className={`newproj-card shop-home-template-card shop-home-template-card-list${value === SHOP_HOME_PAGE_TEMPLATE_NONE ? ' active' : ''}`}
           onClick={() => onChange(SHOP_HOME_PAGE_TEMPLATE_NONE)}
+          onMouseEnter={(event) => showTemplatePreview(SHOP_HOME_PAGE_TEMPLATE_NONE, event.currentTarget)}
+          onFocus={(event) => showTemplatePreview(SHOP_HOME_PAGE_TEMPLATE_NONE, event.currentTarget)}
           aria-pressed={value === SHOP_HOME_PAGE_TEMPLATE_NONE}
+          role="listitem"
         >
-          <span className="shop-home-template-title">不使用模板</span>
-          <small className="shop-home-template-desc">从空白店铺首页开始，后续再自己补充参考图。</small>
+          <span className="shop-home-template-thumb shop-home-template-thumb-empty" aria-hidden>
+            空白
+          </span>
+          <span className="shop-home-template-copy">
+            <span className="shop-home-template-title">不使用模板</span>
+            <small className="shop-home-template-desc">从空白店铺首页开始，后续再自己补充参考图。</small>
+          </span>
         </button>
         {templates.map((template) => (
           <button
             key={template.id}
             type="button"
-            className={`newproj-card shop-home-template-card${value === template.id ? ' active' : ''}`}
+            className={`newproj-card shop-home-template-card shop-home-template-card-list${value === template.id ? ' active' : ''}`}
             onClick={() => onChange(template.id)}
+            onMouseEnter={(event) => showTemplatePreview(template.id, event.currentTarget)}
+            onFocus={(event) => showTemplatePreview(template.id, event.currentTarget)}
             aria-pressed={value === template.id}
+            role="listitem"
           >
             <img
               className="shop-home-template-thumb"
               src={`/api/skills/shop-home-page/assets/${template.previewAsset}`}
               alt={template.label}
             />
-            <span className="shop-home-template-title">{template.label}</span>
-            <small className="shop-home-template-desc">{template.description}</small>
+            <span className="shop-home-template-copy">
+              <span className="shop-home-template-title">{template.label}</span>
+              <small className="shop-home-template-desc">{template.description}</small>
+            </span>
+          </button>
+        ))}
+        </div>
+        <div
+          className={`shop-home-template-preview${showPreview ? ' visible' : ''}`}
+          aria-live="polite"
+          style={previewPosition ? { bottom: '50px', left: `${previewPosition.left}px` } : undefined}
+        >
+          {activeTemplate ? (
+            <img
+              className="shop-home-template-preview-image"
+              src={`/api/skills/shop-home-page/assets/${activeTemplate.previewAsset}`}
+              alt={activeTemplate.label}
+            />
+          ) : (
+            <div className="shop-home-template-preview-empty" aria-hidden />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShopHomePageIndustryPicker({
+  value,
+  onChange,
+}: {
+  value: 'bakery' | 'coffeeTea';
+  onChange: (value: 'bakery' | 'coffeeTea') => void;
+}) {
+  const t = useT();
+
+  return (
+    <div className="newproj-section">
+      <label className="newproj-label">{t('newproj.shopHomePageIndustryLabel')}</label>
+      <div className="newproj-option-grid">
+        {SHOP_HOME_PAGE_INDUSTRY_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`newproj-card newproj-option-card${value === option.id ? ' active' : ''}`}
+            onClick={() => onChange(option.id)}
+            aria-pressed={value === option.id}
+          >
+            <span>{t(option.labelKey)}</span>
           </button>
         ))}
       </div>

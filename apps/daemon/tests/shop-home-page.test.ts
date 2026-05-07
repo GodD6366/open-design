@@ -66,6 +66,27 @@ describe('createSeedSchema', () => {
     expect(firstEntryPrompt.constraints.no_rounded_corners).toBe(true);
   });
 
+  it('omits seed image prompts for unconfirmed empty-template storefront projects', () => {
+    const schema = createSeedSchema(
+      {
+        ...buildRequirements(),
+        status: 'needs_confirmation',
+      },
+      null,
+      { skipSeedImagePrompts: true } as any,
+    ) as any;
+
+    const imageModules = schema.modules.filter((module: any) => module.type !== 'user_assets');
+    for (const module of imageModules) {
+      expect(module.data.items?.[0]?.image_prompt_schema).toBeUndefined();
+    }
+
+    const firstUserAssetsEntry = schema.modules
+      .find((module: any) => module.type === 'user_assets')
+      ?.data?.entries?.[0];
+    expect(firstUserAssetsEntry?.image_prompt_schema).toBeUndefined();
+  });
+
   it('uses the bakery template preset card layout defaults', () => {
     const schema = createSeedSchema(buildRequirements(), {
       preset_id: 'bakery-handdrawn-cream',
@@ -190,6 +211,8 @@ describe('reference-state sync', () => {
       process.cwd(),
       {
         shopHomePageTemplateId: 'bakery-doodle-toast',
+        shopHomePageIndustryId: 'coffeeTea',
+        shopHomePageIndustryLabel: '咖啡茶饮',
       },
     );
 
@@ -205,6 +228,46 @@ describe('reference-state sync', () => {
     expect(referenceState.template_reference_images).toEqual(['bakery-doodle-toast-reference.png']);
     expect(styleGuide.reference_images).toEqual(['bakery-doodle-toast-reference.png']);
     expect(styleGuide.preset_id).toBe('bakery-handdrawn-cream');
+    const requirements = JSON.parse(
+      await readFile(path.join(projectDir, 'shop-home-page.requirements.json'), 'utf8'),
+    );
+    expect(requirements.style.industry).toBe('咖啡茶饮');
+  });
+
+  it('prefills blank-project requirements from metadata industry on first load', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-industry-default';
+
+    const state = await loadShopHomePageState(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      {
+        kind: 'shopHomePage',
+        shopHomePageIndustryId: 'coffeeTea',
+        shopHomePageIndustryLabel: '咖啡茶饮',
+      } as any,
+    );
+
+    expect(state.requirements.style.industry).toBe('咖啡茶饮');
+  });
+
+  it('keeps legacy compatibility when metadata industry is missing', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-legacy-compatible';
+
+    const state = await loadShopHomePageState(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      {
+        kind: 'shopHomePage',
+      } as any,
+    );
+
+    expect(state.requirements.style.industry).toBe('');
   });
 
   it('lets user_explicit reference images override template defaults at load time', async () => {
@@ -535,6 +598,20 @@ describe('collectAssetTasks', () => {
     expect(userAssetsPrompt.style.text_color).toBe('#171717');
     expect(userAssetsPrompt.constraints.pure_white_background).toBe(true);
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('无参考图时默认使用纯白直角底卡和页面文字色');
+  });
+
+  it('does not enqueue image tasks for promptless empty-template seed schema', () => {
+    const schema = createSeedSchema(
+      {
+        ...buildRequirements(),
+        status: 'needs_confirmation',
+      },
+      null,
+      { skipSeedImagePrompts: true } as any,
+    );
+
+    const tasks = collectAssetTasks(schema as any, null, false, new Set());
+    expect(tasks).toEqual([]);
   });
 
   it('adds component-analysis guidance to every referenced image prompt', () => {
