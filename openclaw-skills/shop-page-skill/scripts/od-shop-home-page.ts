@@ -61,7 +61,14 @@ function optionList(options: Map<string, string[]>, key: string): string[] {
 }
 
 function toDaemonBaseUrl(raw?: string): string {
-  const value = raw ?? process.env.OD_DAEMON_URL ?? 'http://127.0.0.1:17456';
+  const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim() || 'http://127.0.0.1:7457';
+  // const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim();
+  if (!value) {
+    fail('missing daemon URL', {
+      hint: 'pass --daemon-url or set OD_DAEMON_URL to the running daemon origin',
+      avoid: 'do not use a web port such as http://127.0.0.1:7457',
+    });
+  }
   try {
     const url = new URL(value);
     if (!['http:', 'https:'].includes(url.protocol)) {
@@ -224,6 +231,7 @@ async function getStatus(baseUrl: string, options: Map<string, string[]>): Promi
 function help(): void {
   printJson({
     ok: true,
+    daemonUrl: 'required via --daemon-url or OD_DAEMON_URL; no localhost fallback',
     usage: [
       'start --brief <text> [--file <local-image> ...] [--url <image-url> ...] [--thread-id <id>] [--daemon-url <url>]',
       'send --session-id <id> (--message <text> | --answers-file <path>) [--file <local-image> ...] [--daemon-url <url>]',

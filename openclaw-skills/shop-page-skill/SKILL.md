@@ -1,5 +1,5 @@
 ---
-name: open-design-shop-home-page-control
+name: shop-page-skill
 description: |
   Drive Open Design `店铺首页` creation from an external chat client such as
   OpenClaw. Use this when a caller wants to create or continue a real
@@ -45,6 +45,17 @@ Use the daemon OpenClaw proxy API as the source of truth:
 These endpoints create and update a real `shopHomePage` project, real
 conversation, real messages, project-local files, schema runtime, asset queue,
 and preview artifacts.
+
+Always execute the main flow through
+`openclaw-skills/shop-page-skill/scripts/od-shop-home-page.ts`.
+
+- Let the helper script construct the daemon API paths.
+- Treat `OD_DAEMON_URL` as the only default daemon origin. If the caller cannot
+  inject that env var, pass the same value explicitly with `--daemon-url`.
+- Do not derive the API origin from a web page URL, preview URL, `localhost:3000`,
+  `OD_PORT`, `OD_WEB_PORT`, or any other web listener.
+- If no daemon origin is available, fail fast instead of guessing a localhost
+  fallback port.
 
 Do not implement a private clarification, schema generation, asset generation,
 or preview state machine inside the skill.
