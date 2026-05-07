@@ -58,13 +58,41 @@ type ShopHomePagePromptInput = {
   skill?: SkillDetail | null;
   designSystem?: DesignSystemDetail | null;
   metadata?: ProjectMetadata | undefined;
+  automationMode?: boolean | undefined;
+  automationHasRequirementsAnswers?: boolean | undefined;
+  automationHasVisualAnswers?: boolean | undefined;
 };
 
 export function composeShopHomePageSystemPrompt({
   skill,
   designSystem,
   metadata,
+  automationMode,
+  automationHasRequirementsAnswers,
+  automationHasVisualAnswers,
 }: ShopHomePagePromptInput): string {
+  const externalBridgeMode =
+    metadata?.externalControlMode === 'shop-home-page-bridge';
+  const automationSection = automationMode
+    ? [
+        '## Automation mode',
+        '',
+        '- This run is triggered by an external automation client rather than the interactive OD chat UI.',
+        '- Do not emit any `<question-form>` blocks in this mode.',
+        automationHasRequirementsAnswers
+          ? '- The incoming user message already contains `[form answers — storefront-requirements]`. Treat it as authoritative structured requirements input.'
+          : '- If there is no `[form answers — storefront-requirements]` block yet, do not generate final JSON files. Return only the requirement questions in plain text and stop.',
+        automationHasVisualAnswers
+          ? '- The incoming user message already contains `[form answers — shop-home-page-visual]`. Treat it as authoritative visual input and do not ask any more questions.'
+          : '- If visual answers are missing but requirements answers exist, infer visual defaults conservatively from requirements, project files, and any attached local references instead of asking another question.',
+        '- When both requirements answers and visual answers are available, write the JSON files directly and stop immediately after a one-line Chinese confirmation.',
+        '- When both answer blocks are present, do not open `.od-skills/`, reference contracts, templates, checklists, or any other support files unless a target project JSON file is missing or invalid JSON.',
+        '- In that fully-answered automation path, your first substantive action should be editing the project JSON files, not more exploration.',
+        '- Set `shop-home-page.requirements.json.status` to `confirmed` once the files are written.',
+        '- After file writes complete, do not continue exploring unrelated files, references, or examples.',
+        '',
+      ]
+    : [];
   const parts: string[] = [
     '# Storefront Runtime',
     '',
@@ -81,17 +109,28 @@ export function composeShopHomePageSystemPrompt({
     '- When the project has an explicit visual template or reference screenshot, also keep `shop-home-page.style-guide.json` in sync.',
     '- When file writes are done, answer with at most one short Chinese sentence.',
     '',
+    ...automationSection,
     '## Conversation workflow',
     '',
-    '1. On a fresh storefront brief, your first assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-requirements" title="需求澄清">` block + stop.',
+    externalBridgeMode
+      ? '1. On a fresh storefront brief for this external-control bridge project, your first assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-requirements" title="需求澄清">` block + stop.'
+      : '1. On a fresh storefront brief, your first assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-requirements" title="需求澄清">` block + stop.',
     '   - If the opening turn already includes local reference images that are available in the current daemon run, analyze them before emitting the form.',
     '   - Reflect that analysis directly in the form defaults: infer the default `本次需要的模块` selection and prefill `参考图模块分析` with ordered module suggestions from top to bottom.',
     '   - Only treat modules that are visibly present in the uploaded frame as confirmed evidence. Do not infer off-screen / next-screen modules from a partial screenshot.',
     '   - Ignore phone chrome, system status UI, bottom tabs, floating widgets, and other host-app UI when mapping storefront modules.',
-    '2. After the user answers that requirements form, your next assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-visual" title="视觉澄清">` block + stop.',
-    '3. After the user answers the visual form, read any referenced project files if needed, then write `shop-home-page.requirements.json`, `shop-home-page.reference-state.json`, and `shop-home-page.schema.json` in place.',
-    '4. If the user provides a reusable template, template screenshot, or attached visual reference, update `shop-home-page.reference-state.json` first, then keep `shop-home-page.style-guide.json` in sync so later schema edits and asset generation keep the same style source.',
-    '5. If the user later asks for edits, update those same project-local JSON files. Do not switch to an HTML-first workflow.',
+    externalBridgeMode
+      ? '2. After the user answers that requirements form, do not emit a second human-facing visual clarification form. Infer the visual answers from project-local references when available, otherwise choose a deterministic storefront tone preset, then write `shop-home-page.requirements.json`, `shop-home-page.reference-state.json`, `shop-home-page.style-guide.json`, and `shop-home-page.schema.json` in place.'
+      : '2. After the user answers that requirements form, your next assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-visual" title="视觉澄清">` block + stop.',
+    externalBridgeMode
+      ? '3. Once schema generation succeeds in this bridge project, the host UI will auto-trigger storefront asset generation. Keep `shop-home-page.reference-state.json`, the style guide, and the schema compatible with that automatic follow-up step.'
+      : '3. After the user answers the visual form, read any referenced project files if needed, then write `shop-home-page.requirements.json`, `shop-home-page.reference-state.json`, and `shop-home-page.schema.json` in place.',
+    externalBridgeMode
+      ? '4. If the user later asks for edits, update those same project-local files and keep using the schema-first storefront workflow.'
+      : '4. If the user provides a reusable template, template screenshot, or attached visual reference, update `shop-home-page.reference-state.json` first, then keep `shop-home-page.style-guide.json` in sync so later schema edits and asset generation keep the same style source.',
+    externalBridgeMode
+      ? '5. Never switch this bridge project to a private skill-only flow. The user must always be able to continue the same project in the existing B-end UI.'
+      : '5. If the user later asks for edits, update those same project-local JSON files. Do not switch to an HTML-first workflow.',
     '',
     'The chat UI serializes answered forms as normal user text in this shape:',
     '',

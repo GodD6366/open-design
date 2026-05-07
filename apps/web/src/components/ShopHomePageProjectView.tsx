@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  composeShopHomePageSystemPrompt,
-} from '../prompts/shop-home-page';
 import { getShopHomePageTonePresets } from '../prompts/shop-home-page-tones';
 import { streamMessage } from '../providers/anthropic';
-import { streamViaDaemon } from '../providers/daemon';
+import { sendShopHomePageConversationTurn } from '../providers/daemon';
 import {
-  fetchDesignSystem,
   fetchProjectFiles,
-  fetchSkill,
   projectFileUrl,
 } from '../providers/registry';
 import {
@@ -181,10 +176,11 @@ export function ShopHomePageProjectView({
   });
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const bridgeInitialPromptRef = useRef<string | undefined>(project.pendingPrompt);
+  const seededExternalPromptRef = useRef(false);
   const tabsLoadedRef = useRef(false);
   const handledTerminalTaskIdsRef = useRef<Set<string>>(new Set());
-  const skillCache = useRef<Map<string, ReturnType<typeof fetchSkill> extends Promise<infer T> ? T : never>>(new Map());
-  const designCache = useRef<Map<string, ReturnType<typeof fetchDesignSystem> extends Promise<infer T> ? T : never>>(new Map());
+  const autoAssetRunRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,30 +285,6 @@ export function ShopHomePageProjectView({
     void refreshRuntimeState();
   }, [refreshProjectFiles, refreshRuntimeState]);
 
-  const composedSystemPrompt = useCallback(async (): Promise<string> => {
-    const skill =
-      project.skillId
-        ? (skillCache.current.get(project.skillId) ?? await fetchSkill(project.skillId))
-        : null;
-    if (project.skillId && skill && !skillCache.current.has(project.skillId)) {
-      skillCache.current.set(project.skillId, skill);
-    }
-
-    const designSystem =
-      project.designSystemId
-        ? (designCache.current.get(project.designSystemId) ?? await fetchDesignSystem(project.designSystemId))
-        : null;
-    if (project.designSystemId && designSystem && !designCache.current.has(project.designSystemId)) {
-      designCache.current.set(project.designSystemId, designSystem);
-    }
-
-    return composeShopHomePageSystemPrompt({
-      skill,
-      designSystem,
-      metadata: project.metadata,
-    });
-  }, [project.designSystemId, project.metadata, project.skillId]);
-
   const persistMessage = useCallback(
     (message: ChatMessage) => {
       if (!activeConversationId) return;
@@ -339,12 +311,12 @@ export function ShopHomePageProjectView({
         content: '',
         events: [],
         startedAt,
+        runStatus: config.mode === 'daemon' ? 'running' : undefined,
       };
       const nextHistory = [...messages, userMsg];
       setMessages([...nextHistory, assistantMsg]);
       setStreaming(true);
       onTouchProject();
-      persistMessage(userMsg);
 
       if (messages.length === 0) {
         const title = prompt.slice(0, 60).trim();
@@ -378,7 +350,6 @@ export function ShopHomePageProjectView({
 
       const controller = new AbortController();
       abortRef.current = controller;
-      const systemPrompt = await composedSystemPrompt();
 
       const finalizeTurn = async () => {
         const nextFiles = await refreshProjectFiles();
@@ -423,20 +394,30 @@ export function ShopHomePageProjectView({
           return;
         }
         const choice = config.agentModels?.[config.agentId];
-        void streamViaDaemon({
-          agentId: config.agentId,
-          history: nextHistory,
-          systemPrompt,
-          signal: controller.signal,
-          handlers,
-          projectId: project.id,
-          attachments: attachments.map((attachment) => attachment.path),
-          model: choice?.model ?? null,
-          reasoning: choice?.reasoning ?? null,
-        });
+        try {
+          await sendShopHomePageConversationTurn({
+            agentId: config.agentId,
+            projectId: project.id,
+            conversationId: activeConversationId,
+            message: prompt,
+            attachments: attachments.map((attachment) => attachment.path),
+            model: choice?.model ?? null,
+            reasoning: choice?.reasoning ?? null,
+          });
+          const refreshed = await listMessages(project.id, activeConversationId);
+          setMessages(refreshed);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setStreaming(false);
+          abortRef.current = null;
+          void finalizeTurn();
+        }
         return;
       }
 
+      const systemPrompt = '店铺首页项目对话';
+      persistMessage(userMsg);
       pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
       void streamMessage(config, systemPrompt, nextHistory, controller.signal, {
         onDelta: (delta) => {
@@ -449,7 +430,6 @@ export function ShopHomePageProjectView({
     },
     [
       activeConversationId,
-      composedSystemPrompt,
       config,
       messages,
       onProjectsRefresh,
@@ -673,6 +653,46 @@ export function ShopHomePageProjectView({
   useEffect(() => {
     if (project.pendingPrompt) onClearPendingPrompt();
   }, [onClearPendingPrompt, project.pendingPrompt]);
+
+  useEffect(() => {
+    const isBridgeProject =
+      project.metadata?.externalControlMode === 'shop-home-page-bridge';
+    if (!isBridgeProject) return;
+    if (seededExternalPromptRef.current) return;
+    if (!activeConversationId) return;
+    const bridgedPrompt = bridgeInitialPromptRef.current?.trim();
+    if (!bridgedPrompt) return;
+    if (messages.length > 0) return;
+    if (streaming) return;
+    seededExternalPromptRef.current = true;
+    void handleSend(bridgedPrompt, []);
+  }, [
+    activeConversationId,
+    handleSend,
+    messages.length,
+    project.metadata?.externalControlMode,
+    streaming,
+  ]);
+
+  useEffect(() => {
+    if (!runtimeState) return;
+    if (runtimeBusy !== null) return;
+    if (streaming) return;
+    if (generateQueue.length > 0) return;
+    if (runtimeState.status !== 'schema-ready') return;
+    if ((runtimeState.validationErrors ?? []).length > 0) return;
+    const fingerprint = `${project.id}:${runtimeState.previewUpdatedAt ?? 0}`;
+    if (autoAssetRunRef.current === fingerprint) return;
+    autoAssetRunRef.current = fingerprint;
+    void handleGenerateAssets();
+  }, [
+    generateQueue.length,
+    handleGenerateAssets,
+    project.id,
+    runtimeBusy,
+    runtimeState,
+    streaming,
+  ]);
 
   const projectFileNames = useMemo(
     () => new Set(projectFiles.map((file) => file.name)),

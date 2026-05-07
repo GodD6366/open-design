@@ -106,4 +106,34 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('product.visual_type = "photo"');
     expect(out).toContain('prefer omitting or softening fields like `style.background_type`, `style.visual_feel`, `product.visual_type`, and `product.scene`');
   });
+
+  it('supports non-interactive automation mode for external controllers', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+      automationMode: true,
+    });
+
+    expect(out).toContain('## Automation mode');
+    expect(out).toContain('Do not emit any `<question-form>` blocks in this mode.');
+    expect(out).toContain('Set `shop-home-page.requirements.json.status` to `confirmed`');
+  });
+
+  it('tightens automation mode when requirements and visual answers are already present', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+      automationMode: true,
+      automationHasRequirementsAnswers: true,
+      automationHasVisualAnswers: true,
+    });
+
+    expect(out).toContain('already contains `[form answers — storefront-requirements]`');
+    expect(out).toContain('already contains `[form answers — shop-home-page-visual]`');
+    expect(out).toContain('do not ask any more questions');
+    expect(out).toContain('do not open `.od-skills/`');
+    expect(out).toContain('do not continue exploring unrelated files');
+  });
 });

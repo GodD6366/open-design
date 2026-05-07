@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { DirectionCard, QuestionForm } from '../artifacts/question-form';
-import { formatFormAnswers } from '../artifacts/question-form';
+import {
+  buildInitialFormState,
+  formatFormAnswers,
+  parseSubmittedAnswers,
+} from '../artifacts/question-form';
 import {
   importProjectImageUrl,
   projectRawUrl,
@@ -37,7 +41,7 @@ export function QuestionFormView({
   onEnsureProject,
 }: Props) {
   const t = useT();
-  const initial = useMemo(() => buildInitialState(form, submittedAnswers), [form, submittedAnswers]);
+  const initial = useMemo(() => buildInitialFormState(form, submittedAnswers), [form, submittedAnswers]);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
   const [pendingFields, setPendingFields] = useState<Record<string, boolean>>({});
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
@@ -555,69 +559,7 @@ function DirectionCardView({
   );
 }
 
-function buildInitialState(
-  form: QuestionForm,
-  submitted: Record<string, string | string[]> | undefined,
-): Record<string, string | string[]> {
-  const out: Record<string, string | string[]> = {};
-  for (const q of form.questions) {
-    if (submitted && submitted[q.id] !== undefined) {
-      out[q.id] = submitted[q.id]!;
-      continue;
-    }
-    if (q.defaultValue !== undefined) {
-      out[q.id] = q.defaultValue;
-      continue;
-    }
-    if (q.type === 'checkbox' || q.type === 'reference-images') {
-      out[q.id] = [];
-    } else {
-      out[q.id] = '';
-    }
-  }
-  return out;
-}
-
-/**
- * Reverse of formatFormAnswers — when we render an old assistant message
- * that contained a form, look at the next user message in the conversation
- * to see if the form was already answered. If so, return the answers map
- * so the form renders in the locked "answered" state with the user's
- * picks visible.
- */
-export function parseSubmittedAnswers(
-  form: QuestionForm,
-  userMessageContent: string,
-): Record<string, string | string[]> | null {
-  const lines = userMessageContent.split('\n').map((l) => l.trim());
-  if (lines.length === 0) return null;
-  const header = lines[0] ?? '';
-  // We accept any "form answers" header so the agent can paraphrase.
-  if (!/^\[form answers/i.test(header)) return null;
-  const answers: Record<string, string | string[]> = {};
-  const labelToId = new Map<string, string>();
-  for (const q of form.questions) labelToId.set(q.label.toLowerCase(), q.id);
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    const m = /^[-*]\s*([^:]+):\s*(.*)$/.exec(line);
-    if (!m) continue;
-    const labelKey = m[1]!.trim().toLowerCase();
-    const value = m[2]!.trim();
-    const id = labelToId.get(labelKey);
-    if (!id) continue;
-    const q = form.questions.find((x) => x.id === id);
-    if (!q) continue;
-    if (q.type === 'checkbox' || q.type === 'reference-images') {
-      answers[id] = value
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && s.toLowerCase() !== '(skipped)');
-    } else {
-      answers[id] = value.toLowerCase() === '(skipped)' ? '' : value;
-    }
-  }
-  return Object.keys(answers).length > 0 ? answers : null;
-}
+export { parseSubmittedAnswers };
 
 function mergeProjectFiles(existing: ProjectFile[], incoming: ProjectFile[]): ProjectFile[] {
   const merged = new Map<string, ProjectFile>();

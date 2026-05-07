@@ -27,6 +27,7 @@
 - In the storefront homepage flow, image asset generation defaults to `gpt-image-2`; existing projects without stored `imageModel` metadata fall back there at runtime.
 - In the storefront homepage flow, model-generated image assets default to straight edges and zero inner padding; do not ask the model for rounded card shells or extra white margins unless the user explicitly asks for them.
 - In the storefront homepage flow, generated pages support editor-side module reorder and delete from the structure panel; applying those edits must update `requirements.module_specs` and `schema.modules` together so later validation and asset generation follow the edited module set.
+- In the storefront homepage flow, external storefront-control entrypoints must act as chat clients over the same B-end project, conversation, schema, asset-generation, and preview state machine. They must return readable clarification text in chat and must not require users to open the B-end page to continue.
 - In the storefront homepage preview, pending image placeholders should fully fill their module bounds and keep the waiting mark visually centered instead of leaving trailing blank space.
 - In the storefront homepage preview contract, `storefront.screen.html` is inner content only; system status UI and phone chrome belong to the outer preview/debug hosts.
 - When `shopHomePage` behavior changes on this branch, update this file in the same change with the new high-level direction. Keep the notes behavioral and concise; do not turn `AGENTS.md` into an implementation log.

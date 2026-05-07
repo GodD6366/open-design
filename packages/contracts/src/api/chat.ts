@@ -7,6 +7,8 @@ export interface ChatRequest {
   agentId: string;
   message: string;
   systemPrompt?: string;
+  automationMode?: boolean | null;
+  persistMessages?: boolean | null;
   projectId?: string | null;
   conversationId?: string | null;
   assistantMessageId?: string | null;
@@ -98,4 +100,52 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+}
+
+export type OpenClawShopHomePageReplyType =
+  | 'requirements_form'
+  | 'progress'
+  | 'preview_ready'
+  | 'error';
+
+export interface OpenClawShopHomePageAttachmentInput {
+  path?: string;
+  name?: string;
+  url?: string;
+  contentBase64?: string;
+}
+
+export interface OpenClawShopHomePageSessionRequest {
+  brief: string;
+  attachments?: OpenClawShopHomePageAttachmentInput[];
+  openclawThreadId?: string | null;
+  agentId?: string | null;
+  model?: string | null;
+  reasoning?: string | null;
+}
+
+export interface OpenClawShopHomePageMessageRequest {
+  message: string;
+  attachments?: OpenClawShopHomePageAttachmentInput[];
+  agentId?: string | null;
+  model?: string | null;
+  reasoning?: string | null;
+}
+
+export interface OpenClawShopHomePageSessionResponse {
+  sessionId: string;
+  projectId: string;
+  conversationId: string;
+  state: string;
+  replyMarkdown: string;
+  replyType: OpenClawShopHomePageReplyType;
+  previewUrl?: string | null;
+  projectUrl?: string | null;
+  runId?: string | null;
+  assetTasks?: Array<{ id: string; fileName?: string; status: string; error?: string | null }>;
+  debug?: {
+    projectUrl?: string | null;
+    assistantText?: string | null;
+    validationErrors?: string[];
+  };
 }

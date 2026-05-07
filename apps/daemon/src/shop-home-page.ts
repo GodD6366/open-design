@@ -6,7 +6,7 @@ import {
   buildDefaultShopHomePageReferenceState,
   getShopHomePageTemplateById,
   type ShopHomePageReferenceState,
-} from '@open-design/contracts';
+} from '@open-design/contracts/shop-home-page-templates';
 import { DEFAULT_IMAGE_MODEL } from './media-models.js';
 import { resolveProviderConfig } from './media-config.js';
 import { ensureProject, listFiles, writeProjectFile } from './projects.js';

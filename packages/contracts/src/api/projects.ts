@@ -68,6 +68,7 @@ export interface PromptTemplateMetadata {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  externalControlMode?: 'shop-home-page-bridge';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   animations?: boolean;
