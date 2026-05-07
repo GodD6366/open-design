@@ -14,6 +14,8 @@ export type ProjectKind =
 export const SHOP_HOMEPAGE_KIND = 'shopHomePage';
 export const LEGACY_STOREFRONT_KIND = 'storefront';
 
+export type ShopHomePageReferenceMode = 'template_default' | 'user_explicit';
+
 export function isShopHomePageKind(
   kind: string | null | undefined,
 ): kind is typeof SHOP_HOMEPAGE_KIND | typeof LEGACY_STOREFRONT_KIND {
@@ -85,6 +87,9 @@ export interface ProjectMetadata {
   audioModel?: string;
   audioDuration?: number;
   voice?: string;
+  shopHomePageTemplateId?: string;
+  shopHomePageTemplateLabel?: string;
+  shopHomePageReferenceMode?: ShopHomePageReferenceMode;
   // Curated prompt template the user picked in the image/video tab of the
   // New Project panel. Treated by the system-prompt composer as a stylistic
   // and structural reference for the generation request.

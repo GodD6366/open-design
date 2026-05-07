@@ -26,6 +26,10 @@ import type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
+  ShopHomePageReferenceMode,
+  ShopHomePageReferenceState,
+  ShopHomePageTemplateDefinition,
+  ShopHomePageTemplateId,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
@@ -211,6 +215,12 @@ export interface AppConfig {
 export type AgentEvent = PersistedAgentEvent;
 
 export type { ChatAttachment, ChatCommentAttachment, ChatMessage };
+export type {
+  ShopHomePageReferenceMode,
+  ShopHomePageReferenceState,
+  ShopHomePageTemplateDefinition,
+  ShopHomePageTemplateId,
+};
 
 export interface Artifact {
   identifier: string;

@@ -35,8 +35,8 @@
   },
   "other_requirements": "",
   "counts": {
-    "sliderCount": 2,
-    "goodsCount": 3
+    "sliderCount": 1,
+    "goodsCount": 2
   },
   "confirmation_questions": [
     "确认 module_specs 的顺序、模块类型、内容目标和 image_ad 比例提示。",

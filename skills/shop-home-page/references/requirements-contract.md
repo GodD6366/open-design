@@ -1,6 +1,6 @@
 # Requirements Contract
 
-`storefront.requirements.json` is the structured source of truth produced after
+`shop-home-page.requirements.json` is the structured source of truth produced after
 chat clarification.
 
 ## Shape
@@ -10,7 +10,7 @@ chat clarification.
   "status": "needs_confirmation | confirmed",
   "source_prompt": "string",
   "module_specs": [
-    { "type": "top_slider", "content": "string", "itemCount": 2 },
+    { "type": "top_slider", "content": "string", "itemCount": 1 },
     { "type": "user_assets", "content": "string" },
     { "type": "image_ad", "content": "string", "aspectRatio": "3:4" }
   ],
@@ -34,8 +34,8 @@ chat clarification.
   },
   "other_requirements": "string",
   "counts": {
-    "sliderCount": 2,
-    "goodsCount": 3
+    "sliderCount": 1,
+    "goodsCount": 2
   }
 }
 ```
@@ -56,7 +56,7 @@ chat clarification.
   unless the confirmed request or reference analysis requires them.
 - `action_buttons.selected` keeps the checked button labels in order; `action_buttons.custom` keeps the raw free-text supplement.
 - `sliderCount` only applies to `top_slider`; `goodsCount` only applies to `goods`.
-- The requirements clarification form no longer asks for counts directly; use the default `sliderCount = 2` and `goodsCount = 3` unless later edits explicitly change them.
+- The requirements clarification form no longer asks for counts directly; use the default `sliderCount = 1` and `goodsCount = 2` unless later edits explicitly change them.
 - If the form includes `参考图模块分析`, treat that field as editable
   daemon-side structured analysis and parse it back into ordered
   `module_specs`, preserving repeated `image_ad`.

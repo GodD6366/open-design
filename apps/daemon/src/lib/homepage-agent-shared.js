@@ -345,8 +345,8 @@ function buildModuleContentFromSpecs(specs) {
 
 function buildInitialHomepageRequirements(prompt, overrides = {}) {
   const counts = {
-    sliderCount: parsePositiveInteger(overrides.sliderCount, 2),
-    goodsCount: parsePositiveInteger(overrides.goodsCount, 3),
+    sliderCount: parsePositiveInteger(overrides.sliderCount, 1),
+    goodsCount: parsePositiveInteger(overrides.goodsCount, 2),
   };
   const style = {
     industry:

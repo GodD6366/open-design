@@ -10,6 +10,7 @@ export * from './api/projects';
 export * from './api/proxy';
 export * from './api/registry';
 export * from './api/version';
+export * from './shop-home-page-templates';
 export * from './sse/common';
 export * from './sse/chat';
 export * from './sse/proxy';

@@ -42,6 +42,7 @@ import {
   applyShopHomePageSchemaText,
   enqueueShopHomePageAssetTasks,
   getShopHomePageAssetTaskStatus,
+  initializeShopHomePageTemplateProject,
   loadShopHomePageState,
   migrateLegacyStorefrontProjectFiles,
   SHOP_HOME_PAGE_PREVIEW_FILE,
@@ -920,6 +921,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       // HTML into the new project folder so the agent can Read/edit files
       // on disk (the system prompt also embeds them, but a real on-disk
       // copy lets the agent treat them as the project's working state).
+      if (
+        metadata &&
+        typeof metadata === 'object' &&
+        metadata.kind === 'shopHomePage' &&
+        typeof metadata.shopHomePageTemplateId === 'string'
+      ) {
+        await initializeShopHomePageTemplateProject(
+          PROJECTS_DIR,
+          id,
+          PROJECT_ROOT,
+          metadata,
+        );
+      }
       if (
         metadata &&
         typeof metadata === 'object' &&
@@ -1893,7 +1907,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/shop-home-page/apply-schema', express.json({ limit: '2mb' }), async (req, res) => {
     try {
-      const { projectId, schemaText } = req.body || {};
+      const { projectId, schemaText, moduleSpecs } = req.body || {};
       const project = typeof projectId === 'string' ? getProject(db, projectId) : null;
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -1910,6 +1924,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
         schemaText,
+        moduleSpecs,
       );
       const state = await loadShopHomePageState(
         PROJECTS_DIR,

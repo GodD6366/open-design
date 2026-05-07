@@ -35,9 +35,9 @@ function normalizeModuleSpecs(
     content: typeof moduleContent[type] === 'string' ? moduleContent[type] : '',
     itemCount:
       type === 'top_slider'
-        ? input?.counts?.sliderCount ?? 2
+        ? input?.counts?.sliderCount ?? 1
         : type === 'goods'
-          ? input?.counts?.goodsCount ?? 3
+          ? input?.counts?.goodsCount ?? 2
           : undefined,
     aspectRatio: type === 'image_ad' ? '1:1' : undefined,
   }));
@@ -92,8 +92,8 @@ function normalizeShopHomePageRequirements(
     action_buttons: normalizeActionButtons(input?.action_buttons),
     other_requirements: input?.other_requirements ?? '',
     counts: {
-      sliderCount: input?.counts?.sliderCount ?? 2,
-      goodsCount: input?.counts?.goodsCount ?? 3,
+      sliderCount: input?.counts?.sliderCount ?? 1,
+      goodsCount: input?.counts?.goodsCount ?? 2,
     },
     confirmation_questions: Array.isArray(input?.confirmation_questions)
       ? input.confirmation_questions
@@ -165,11 +165,12 @@ export async function fetchShopHomePageState(projectId: string): Promise<ShopHom
 export async function applyShopHomePageSchema(
   projectId: string,
   schemaText: string,
+  moduleSpecs?: ShopHomePageModuleSpec[],
 ): Promise<ShopHomePageState> {
   const resp = await fetch('/api/shop-home-page/apply-schema', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId, schemaText }),
+    body: JSON.stringify({ projectId, schemaText, moduleSpecs }),
   });
   const json = await jsonOrThrow<{ state: ShopHomePageState }>(resp);
   return normalizeShopHomePageState(json.state);

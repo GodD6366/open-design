@@ -37,6 +37,21 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).not.toContain('poster-like oversized hero');
   });
 
+  it('documents the reference-state sidecar and explicit user reference promotion', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+    });
+
+    expect(out).toContain('shop-home-page.reference-state.json');
+    expect(out).toContain('the only project-local source of truth');
+    expect(out).toContain('用 xxx 图当参考图');
+    expect(out).toContain('user_reference_images');
+    expect(out).toContain('asset_images');
+    expect(out).toContain('Template default images belong in `template_reference_images` only.');
+  });
+
   it('requires visible user_assets references to flow into entry reference_images', () => {
     const out = composeShopHomePageSystemPrompt({
       metadata: {

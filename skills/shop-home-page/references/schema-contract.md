@@ -1,6 +1,6 @@
 # Schema Contract
 
-`storefront.schema.json` must stay compatible with the workspace homepage `PageSchema`.
+`shop-home-page.schema.json` must stay compatible with the workspace homepage `PageSchema`.
 
 ## Top-level fields
 
@@ -26,7 +26,7 @@
 - `image_ad`
 
 The modules array must contain exactly the confirmed modules from
-`storefront.requirements.json.module_specs`, in that exact order. Only
+`shop-home-page.requirements.json.module_specs`, in that exact order. Only
 `image_ad` may repeat.
 
 ## Image-module rules
