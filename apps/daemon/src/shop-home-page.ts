@@ -3642,7 +3642,9 @@ function buildUserAssetsEntryPrompt(entry, slot, cardLayout, styleGuide) {
     ...ZERO_PADDING_GENERATION_NOTES,
     `当前入口卡片布局为 ${userAssetsTemplateTypeLabel(cardLayout?.template_type)}，当前卡片槽位是 ${stringOr(slot?.id, 'slot')}。`,
     '客户资产入口卡片只表达当前这个功能入口，不要在一张图里额外生成别的按钮卡片、额外小入口或整组宫格。',
-    '入口卡片中的 icon、标题、副标题必须保留在卡片内部，跟随页面整体风格，但背景保持纯白，不要渐变、纹理、插画场景或摄影背景。',
+    hasReferenceImages
+      ? '入口卡片中的 icon、标题、副标题必须保留在卡片内部；有参考图时，卡片布局方式、底色和文字颜色优先跟随可见参考入口区，不要强行改回白底。'
+      : '入口卡片中的 icon、标题、副标题必须保留在卡片内部；无参考图时默认使用纯白直角底卡和页面文字色，不要渐变、纹理、插画场景或摄影背景。',
     '不要展示店铺 Logo、品牌角标、店铺名称水印或店铺 slogan。',
     '当前入口图必须完整填满 schema 给出的卡位尺寸，不要再额外套圆角白底卡片、内边距衬板或留白外框。',
   ];
@@ -3717,6 +3719,12 @@ function sanitizeReferenceLedPromptSchema(promptSchema, { moduleType, hasReferen
 
   if (style) {
     delete style.background_type;
+    if (moduleType === 'user_assets') {
+      delete style.background_color;
+      delete style.text_color;
+      delete style.primary_color;
+      delete style.accent_color;
+    }
     delete style.visual_feel;
     promptSchema.style = style;
   }
@@ -3736,6 +3744,7 @@ function sanitizeReferenceLedPromptSchema(promptSchema, { moduleType, hasReferen
       forbid_lower_page_ui: true,
     };
   } else if (moduleType === 'user_assets') {
+    delete constraints.pure_white_background;
     promptSchema.constraints = {
       ...constraints,
       reference_region: 'customer_asset_icon_card_only',
@@ -3785,7 +3794,7 @@ export function buildStorefrontReferenceUsageNotes({
       notes.push('顶部主视觉要参考首屏 hero 的空间分布、主体数量、留白比例、文字数量和标题尺度；不要为了“海报感”新增醒目的大号中文标题、额外 slogan、CTA、标签或密集涂鸦。');
       notes.push('顶部主视觉的参考区域仅限整页截图最上方 hero 组件；客户资产三宫格、入口按钮、会员/欢迎卡、下方 Banner、商品区和品牌故事区都属于其他组件，不得移植到轮播头图。');
     } else if (moduleType === 'user_assets') {
-      notes.push('客户资产入口卡片只沿用可见入口图标区的 icon 笔触、配色语气、留白关系、标题层级、文字尺度和信息密度，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
+      notes.push('客户资产入口卡片只沿用可见入口图标区的 icon 笔触、卡片布局方式、卡片底色、文字颜色对比、配色语气、留白关系、标题层级、文字尺度和信息密度，不要把整页参考图中的会员总卡、底部导航或多模块组合直接画进单张入口卡。');
     } else if (moduleType === 'banner') {
       notes.push('Banner 参考整页风格里的色块、纹理、插画语气、留白和文字密度；保持轻量，不要直接搬用会员条、商品卡、导航条或其他运营模块。');
     } else if (moduleType === 'goods') {
@@ -3800,7 +3809,7 @@ export function buildStorefrontReferenceUsageNotes({
   }
 
   if (moduleType === 'user_assets') {
-    notes.push('客户资产入口只模仿整页参考图里可见图标区的笔触、留白、标题层级、文字尺度、信息密度和配色节奏；具体按钮图案、标题和副标题必须按当前入口需求生成，不要借用 hero 商品主体、会员汇总卡、其他按钮主体或原文案。');
+    notes.push('客户资产入口只模仿整页参考图里可见入口卡的布局方式、卡片底色、文字颜色、图标区笔触、留白、标题层级、文字尺度、信息密度和配色节奏；具体按钮图案、标题和副标题必须按当前入口需求生成，不要借用 hero 商品主体、会员汇总卡、其他按钮主体或原文案。');
   }
 
   if (moduleType === 'top_slider') {
@@ -3820,6 +3829,9 @@ function buildUserAssetsGenerationNotes(styleGuide) {
   if (guide.analysis?.icon_style) {
     notes.push(`入口 icon 风格参考页面视觉：${guide.analysis.icon_style}`);
   }
+  if (guide.analysis?.background_style) {
+    notes.push(`入口卡底色与文字对比参考页面视觉：${sanitizeStorefrontPromptCue(guide.analysis.background_style)}`);
+  }
   const layoutStyle = moduleScopedStorefrontCue(guide.analysis?.layout_style, 'user_assets');
   if (layoutStyle) {
     notes.push(`布局风格参考：${layoutStyle}`);
@@ -3833,7 +3845,7 @@ function buildUserAssetsGenerationNotes(styleGuide) {
     }
   }
   if (guide.preset_id === 'bakery-handdrawn-cream') {
-    notes.push('入口 icon 可以保留手绘涂鸦感和暖橙点缀，但背景仍必须是纯白，不要奶油纸感底纹或海报背景。');
+    notes.push('入口 icon 可以保留手绘涂鸦感和暖橙点缀；无参考图时默认白底，有参考图时优先跟随可见入口卡的底色与文字对比，不要引入奶油纸感整页背景或海报场景。');
   }
   return uniqueStrings(notes.filter(Boolean));
 }

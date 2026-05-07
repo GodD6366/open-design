@@ -46,6 +46,7 @@ describe('composeShopHomePageSystemPrompt', () => {
 
     expect(out).toContain('copy that screenshot filename into each `user_assets.data.entries[*].reference_images` by default');
     expect(out).toContain('Do not leave new `user_assets` entries at `reference_images: []`');
+    expect(out).toContain('entry-card layout mode, icon stroke, subject composition, card background color, text color contrast');
     expect(out).toContain('it must not be interpreted as permission to copy the membership summary card, bottom navigation, host-app chrome');
     expect(out).toContain('do not attach it to absent modules such as `shop_info`, `goods`, or `banner` just for style');
   });
@@ -59,9 +60,22 @@ describe('composeShopHomePageSystemPrompt', () => {
 
     expect(out).toContain('match only the visible top hero component');
     expect(out).toContain('Treat customer-asset grids, entry buttons, membership/welcome cards, banners, goods, shop_info, and all lower-page content as forbidden visual regions for the hero.');
-    expect(out).toContain('borrow the visible customer-assets icon-area style language plus its whitespace, information density, text hierarchy, and title scale');
+    expect(out).toContain('borrow the visible customer-assets entry-card layout mode, icon-area style language, card background color, text color contrast, whitespace, information density, text hierarchy, and title scale');
     expect(out).toContain('Do not generate or depend on module-local crop files such as `top-slider-ref-hero.png` or `user-assets-ref-strip.png`');
     expect(out).not.toContain('"reference_regions"');
+  });
+
+  it('lets user_assets references drive card colors instead of forcing white', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+    });
+
+    expect(out).toContain('fallback to a plain white card background with the page text color');
+    expect(out).toContain('card background color');
+    expect(out).toContain('text color contrast');
+    expect(out).not.toContain('the canvas background must stay plain white');
   });
 
   it('requires reference-led prompts to avoid conflicting visual descriptors', () => {

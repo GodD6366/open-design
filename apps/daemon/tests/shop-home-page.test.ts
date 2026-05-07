@@ -223,7 +223,7 @@ describe('collectAssetTasks', () => {
       reference_images: ['page-shot.png'],
       analysis: {
         background_style: 'Warm cream paper tone with large white rounded cards and airy whitespace.',
-        layout_style: 'Airy storefront reference with sparse composition, low information density, small title scale, and large empty areas.',
+        layout_style: 'Airy storefront reference with sparse composition, low information density, small title scale, large empty areas, and a visible customer-assets entry area below the hero.',
       },
       generation_rules: {
         must: ['Use rounded cards when appropriate.'],
@@ -261,6 +261,25 @@ describe('collectAssetTasks', () => {
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('完整填满 schema 给出的卡位尺寸');
     expect(userAssetsPrompt.generation_notes.join('\n')).toContain('布局风格参考');
     expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('超大标题');
+    expect(userAssetsPrompt.style.background_color).toBeUndefined();
+    expect(userAssetsPrompt.style.text_color).toBeUndefined();
+    expect(userAssetsPrompt.style.primary_color).toBeUndefined();
+    expect(userAssetsPrompt.style.accent_color).toBeUndefined();
+    expect(userAssetsPrompt.constraints.pure_white_background).toBeUndefined();
+    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('底色和文字颜色优先跟随可见参考入口区');
+    expect(userAssetsPrompt.generation_notes.join('\n')).not.toContain('背景保持纯白');
+  });
+
+  it('keeps white-card fallback for user_assets without reference images', () => {
+    const schema = createSeedSchema(buildRequirements(), null);
+    const tasks = collectAssetTasks(schema, null, true, new Set());
+    const userAssetsTask = tasks.find((task) => task.fileName === 'user-assets-entry-1.png');
+    const userAssetsPrompt = JSON.parse(userAssetsTask?.prompt ?? '{}');
+
+    expect(userAssetsPrompt.style.background_color).toBe('#FFFFFF');
+    expect(userAssetsPrompt.style.text_color).toBe('#171717');
+    expect(userAssetsPrompt.constraints.pure_white_background).toBe(true);
+    expect(userAssetsPrompt.generation_notes.join('\n')).toContain('无参考图时默认使用纯白直角底卡和页面文字色');
   });
 
   it('adds component-analysis guidance to every referenced image prompt', () => {
