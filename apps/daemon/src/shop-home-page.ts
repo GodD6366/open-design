@@ -2537,7 +2537,9 @@ function normalizeUserAssetsEntries(value, cardLayout, designContext, styleGuide
 }
 
 function validateStorefrontSchema(schema, requirements) {
-  const report = validateHomepageSchema(schema, requirements);
+  const report = validateHomepageSchema(schema, requirements, {
+    allowMissingImagePromptSchema: requirements?.status !== 'confirmed',
+  });
   const errors = [...report.errors];
   const topSlider = schema.modules.find((module) => module.type === 'top_slider');
   const goods = schema.modules.find((module) => module.type === 'goods');

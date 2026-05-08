@@ -122,6 +122,7 @@ export interface OpenClawShopHomePageSessionRequest {
   agentId?: string | null;
   model?: string | null;
   reasoning?: string | null;
+  waitMode?: 'block' | 'defer';
 }
 
 export interface OpenClawShopHomePageMessageRequest {
@@ -130,18 +131,20 @@ export interface OpenClawShopHomePageMessageRequest {
   agentId?: string | null;
   model?: string | null;
   reasoning?: string | null;
+  waitMode?: 'block' | 'defer';
 }
 
 export interface OpenClawShopHomePageSessionResponse {
-  sessionId: string;
   projectId: string;
   conversationId: string;
+  sessionId?: string;
   state: string;
   replyMarkdown: string;
   replyType: OpenClawShopHomePageReplyType;
   previewUrl?: string | null;
   projectUrl?: string | null;
   runId?: string | null;
+  runStatus?: ChatRunStatus | null;
   assetTasks?: Array<{ id: string; fileName?: string; status: string; error?: string | null }>;
   debug?: {
     projectUrl?: string | null;

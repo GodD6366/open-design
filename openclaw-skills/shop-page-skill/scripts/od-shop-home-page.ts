@@ -4,18 +4,21 @@ import path from 'node:path';
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 type OpenClawResponse = {
-  sessionId: string;
   projectId: string;
   conversationId: string;
+  sessionId?: string;
   state: string;
   replyMarkdown: string;
   replyType: 'requirements_form' | 'progress' | 'preview_ready' | 'error';
   previewUrl?: string | null;
   projectUrl?: string | null;
   runId?: string | null;
+  runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | null;
   assetTasks?: Array<{ id: string; fileName?: string; status: string; error?: string | null }>;
   debug?: Json;
 };
+
+const DEFAULT_POLL_INTERVAL_MS = 5000;
 
 function printJson(value: Json): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -61,12 +64,11 @@ function optionList(options: Map<string, string[]>, key: string): string[] {
 }
 
 function toDaemonBaseUrl(raw?: string): string {
-  const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim() || 'http://127.0.0.1:7457';
-  // const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim();
+  const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim();
   if (!value) {
     fail('missing daemon URL', {
       hint: 'pass --daemon-url or set OD_DAEMON_URL to the running daemon origin',
-      avoid: 'do not use a web port such as http://127.0.0.1:7457',
+      avoid: 'do not use a web port such as http://127.0.0.1:3000',
     });
   }
   try {
@@ -156,7 +158,6 @@ function printOpenClaw(action: string, response: OpenClawResponse): void {
   printJson({
     ok: response.replyType !== 'error',
     action,
-    sessionId: response.sessionId,
     projectId: response.projectId,
     conversationId: response.conversationId,
     state: response.state,
@@ -165,8 +166,47 @@ function printOpenClaw(action: string, response: OpenClawResponse): void {
     previewUrl: response.previewUrl ?? null,
     projectUrl: response.projectUrl ?? null,
     runId: response.runId ?? null,
+    runStatus: response.runStatus ?? null,
     assetTasks: response.assetTasks ?? [],
   });
+}
+
+function shouldStopPolling(response: OpenClawResponse): boolean {
+  if (response.replyType === 'requirements_form') return true;
+  if (response.replyType === 'preview_ready') return true;
+  if (response.replyType === 'error') return true;
+  return response.runStatus === 'failed' || response.runStatus === 'canceled';
+}
+
+function shouldPoll(response: OpenClawResponse): boolean {
+  if (shouldStopPolling(response)) return false;
+  if (response.replyType !== 'progress') return false;
+  if (!response.projectId && !response.sessionId) return false;
+  return Boolean(response.runId) || response.runStatus === 'queued' || response.runStatus === 'running' || response.runStatus === 'succeeded';
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollUntilTerminal(
+  baseUrl: string,
+  initial: OpenClawResponse,
+  options: Map<string, string[]>,
+): Promise<OpenClawResponse> {
+  let current = initial;
+  const projectId = initial.projectId || initial.sessionId;
+  if (!projectId) return current;
+  const pollMsRaw = Number(option(options, 'poll-ms') ?? '');
+  const pollMs = Number.isFinite(pollMsRaw) && pollMsRaw > 0 ? Math.round(pollMsRaw) : DEFAULT_POLL_INTERVAL_MS;
+  while (shouldPoll(current)) {
+    await sleep(pollMs);
+    current = await requestJson<OpenClawResponse>(
+      baseUrl,
+      `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}`,
+    );
+  }
+  return current;
 }
 
 async function startSession(baseUrl: string, options: Map<string, string[]>): Promise<void> {
@@ -186,14 +226,15 @@ async function startSession(baseUrl: string, options: Map<string, string[]>): Pr
       agentId: option(options, 'agent-id') ?? null,
       model: option(options, 'model') ?? null,
       reasoning: option(options, 'reasoning') ?? null,
+      waitMode: 'defer',
     }),
   });
-  printOpenClaw('start', response);
+  printOpenClaw('start', await pollUntilTerminal(baseUrl, response, options));
 }
 
 async function sendMessage(baseUrl: string, options: Map<string, string[]>): Promise<void> {
-  const sessionId = option(options, 'session-id') ?? option(options, 'project-id');
-  if (!sessionId) fail('missing --session-id');
+  const projectId = option(options, 'project-id') ?? option(options, 'session-id');
+  if (!projectId) fail('missing --project-id');
   const message =
     option(options, 'message') ??
     option(options, 'answers') ??
@@ -202,7 +243,7 @@ async function sendMessage(baseUrl: string, options: Map<string, string[]>): Pro
   if (!message?.trim()) fail('missing --message/--answers/--message-file/--answers-file');
   const response = await requestJson<OpenClawResponse>(
     baseUrl,
-    `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(sessionId)}/messages`,
+    `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}/messages`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -212,18 +253,19 @@ async function sendMessage(baseUrl: string, options: Map<string, string[]>): Pro
         agentId: option(options, 'agent-id') ?? null,
         model: option(options, 'model') ?? null,
         reasoning: option(options, 'reasoning') ?? null,
+        waitMode: 'defer',
       }),
     },
   );
-  printOpenClaw('send', response);
+  printOpenClaw('send', await pollUntilTerminal(baseUrl, response, options));
 }
 
 async function getStatus(baseUrl: string, options: Map<string, string[]>): Promise<void> {
-  const sessionId = option(options, 'session-id') ?? option(options, 'project-id');
-  if (!sessionId) fail('missing --session-id');
+  const projectId = option(options, 'project-id') ?? option(options, 'session-id');
+  if (!projectId) fail('missing --project-id');
   const response = await requestJson<OpenClawResponse>(
     baseUrl,
-    `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(sessionId)}`,
+    `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}`,
   );
   printOpenClaw('status', response);
 }
@@ -234,8 +276,11 @@ function help(): void {
     daemonUrl: 'required via --daemon-url or OD_DAEMON_URL; no localhost fallback',
     usage: [
       'start --brief <text> [--file <local-image> ...] [--url <image-url> ...] [--thread-id <id>] [--daemon-url <url>]',
-      'send --session-id <id> (--message <text> | --answers-file <path>) [--file <local-image> ...] [--daemon-url <url>]',
-      'status --session-id <id> [--daemon-url <url>]',
+      'send --project-id <id> (--message <text> | --answers-file <path>) [--file <local-image> ...] [--daemon-url <url>]',
+      'status --project-id <id> [--daemon-url <url>]',
+    ],
+    aliases: [
+      '--session-id is accepted as a deprecated alias for --project-id',
     ],
     deprecated: [
       'create',

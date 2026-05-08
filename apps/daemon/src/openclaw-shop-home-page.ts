@@ -15,6 +15,7 @@ type OpenClawReplyInput = {
   previewUrl?: string | null;
   projectUrl?: string | null;
   runId?: string | null;
+  runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | null;
 };
 
 export function openClawShopHomePageReplyFromAssistant({
@@ -25,11 +26,11 @@ export function openClawShopHomePageReplyFromAssistant({
   previewUrl = null,
   projectUrl = null,
   runId = null,
+  runStatus = null,
 }: OpenClawReplyInput) {
   const form = extractFirstQuestionForm(String(assistantText ?? ''));
   if (form) {
     return {
-      sessionId: session.id,
       projectId: session.projectId,
       conversationId: session.conversationId,
       state: 'awaiting_requirements',
@@ -38,6 +39,7 @@ export function openClawShopHomePageReplyFromAssistant({
       previewUrl: null,
       projectUrl: null,
       runId,
+      runStatus,
       assetTasks: tasks,
       debug: {
         projectUrl,
@@ -52,7 +54,6 @@ export function openClawShopHomePageReplyFromAssistant({
     : [];
   if (validationErrors.length > 0) {
     return {
-      sessionId: session.id,
       projectId: session.projectId,
       conversationId: session.conversationId,
       state: state?.status ?? 'schema-error',
@@ -61,6 +62,29 @@ export function openClawShopHomePageReplyFromAssistant({
       previewUrl,
       projectUrl: null,
       runId,
+      runStatus,
+      assetTasks: tasks,
+      debug: {
+        projectUrl,
+        assistantText,
+        validationErrors,
+      },
+    };
+  }
+
+  if (runStatus === 'failed' || runStatus === 'canceled') {
+    return {
+      projectId: session.projectId,
+      conversationId: session.conversationId,
+      state: state?.status ?? runStatus,
+      replyMarkdown:
+        String(assistantText ?? '').trim() ||
+        (runStatus === 'canceled' ? '店铺首页生成已取消。' : '店铺首页生成失败，请检查当前任务输出。'),
+      replyType: 'error',
+      previewUrl,
+      projectUrl: null,
+      runId,
+      runStatus,
       assetTasks: tasks,
       debug: {
         projectUrl,
@@ -72,7 +96,6 @@ export function openClawShopHomePageReplyFromAssistant({
 
   const previewReady = Boolean(previewUrl) && state?.status === 'assets-ready';
   return {
-    sessionId: session.id,
     projectId: session.projectId,
     conversationId: session.conversationId,
     state: state?.status ?? 'progress',
@@ -85,6 +108,7 @@ export function openClawShopHomePageReplyFromAssistant({
     previewUrl,
     projectUrl: null,
     runId,
+    runStatus,
     assetTasks: tasks,
     debug: {
       projectUrl,

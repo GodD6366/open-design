@@ -518,11 +518,14 @@ function validateModuleOrder(schema, expectedModules, errors) {
   return actual.filter((value) => typeof value === "string");
 }
 
-function validateImagePromptSchema(module, item, index, errors) {
+function validateImagePromptSchema(module, item, index, errors, options = null) {
   const promptSchema = item.image_prompt_schema;
   const path = `${module.type}.data.items[${index}].image_prompt_schema`;
 
   if (!isRecord(promptSchema)) {
+    if (options?.allowMissingImagePromptSchema === true && promptSchema == null) {
+      return;
+    }
     fail(errors, `${path} 必须是对象。`);
     return;
   }
@@ -610,7 +613,7 @@ function validateImagePromptSchema(module, item, index, errors) {
   }
 }
 
-function validateImageModule(module, errors) {
+function validateImageModule(module, errors, options = null) {
   if (!isRecord(module.data)) {
     fail(errors, `${module.type}.data 必须是对象。`);
     return;
@@ -663,11 +666,11 @@ function validateImageModule(module, errors) {
       }
     }
 
-    validateImagePromptSchema(module, item, index, errors);
+    validateImagePromptSchema(module, item, index, errors, options);
   }
 }
 
-function validateUserAssets(module, errors) {
+function validateUserAssets(module, errors, options = null) {
   const layout = module.data?.card_layout;
   if (!isRecord(layout)) {
     fail(errors, "user_assets.data.card_layout 必须是对象。");
@@ -751,12 +754,15 @@ function validateUserAssets(module, errors) {
       fail(errors, `user_assets.data.entries.${entry.id} 必须包含 icon。`);
     }
     if (!isRecord(entry.image_prompt_schema)) {
+      if (options?.allowMissingImagePromptSchema === true && entry.image_prompt_schema == null) {
+        continue;
+      }
       fail(errors, `user_assets.data.entries.${entry.id}.image_prompt_schema 必须是对象。`);
     }
   }
 }
 
-function validateHomepageSchema(schema, requirements) {
+function validateHomepageSchema(schema, requirements, options = null) {
   const errors = [];
   const expectedModules = expectedModulesFromRequirements(requirements);
 
@@ -788,9 +794,9 @@ function validateHomepageSchema(schema, requirements) {
     }
 
     if (pageModule.type === "user_assets") {
-      validateUserAssets(pageModule, errors);
+      validateUserAssets(pageModule, errors, options);
     } else {
-      validateImageModule(pageModule, errors);
+      validateImageModule(pageModule, errors, options);
     }
   }
 
@@ -802,8 +808,8 @@ function validateHomepageSchema(schema, requirements) {
   };
 }
 
-function assertHomepageSchemaValid(schema, requirements) {
-  const report = validateHomepageSchema(schema, requirements);
+function assertHomepageSchemaValid(schema, requirements, options = null) {
+  const report = validateHomepageSchema(schema, requirements, options);
   if (!report.isValid) {
     throw new Error(report.errors.join("\n"));
   }

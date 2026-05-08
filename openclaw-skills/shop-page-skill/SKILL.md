@@ -39,8 +39,8 @@ already useful.
 Use the daemon OpenClaw proxy API as the source of truth:
 
 - `POST /api/openclaw/shop-home-page/sessions`
-- `POST /api/openclaw/shop-home-page/sessions/:sessionId/messages`
-- `GET /api/openclaw/shop-home-page/sessions/:sessionId`
+- `POST /api/openclaw/shop-home-page/sessions/:projectId/messages`
+- `GET /api/openclaw/shop-home-page/sessions/:projectId`
 
 These endpoints create and update a real `shopHomePage` project, real
 conversation, real messages, project-local files, schema runtime, asset queue,
@@ -67,10 +67,13 @@ or preview state machine inside the skill.
    - If `replyType = requirements_form`, this Markdown is the human-readable
      mirror of the real B-end `<question-form>`.
    - Wait for the user to edit and reply with the form answers.
-3. For the user's next message, call `sessions/:sessionId/messages` with the
-   stored `sessionId` and the user's text.
-4. Return the next `replyMarkdown` directly.
-5. Continue until `replyType = preview_ready`, then surface `previewUrl`.
+3. For the user's next message, call `sessions/:projectId/messages` with the
+   stored `projectId` and the user's text.
+4. After requirement answers are submitted, treat schema generation as one
+   long-running run. Do not resend the same answers while that run is active.
+5. Poll only with `GET sessions/:projectId` on the same project until the
+   current run reaches a terminal state or the API returns a final reply.
+6. Continue until `replyType = preview_ready`, then surface `previewUrl`.
 
 The B-end page is optional handoff only. Never make it the required next step.
 
@@ -78,12 +81,12 @@ The B-end page is optional handoff only. Never make it the required next step.
 
 Maintain the external chat thread to Open Design session mapping:
 
-- `sessionId`
 - `projectId`
 - `conversationId`
 
-If OpenClaw cannot persist state for the skill, include `sessionId` in the
-assistant response metadata or ask the caller to pass it back on the next turn.
+The caller only needs to persist `projectId` for later edits. `conversationId`
+may be kept as optional debug metadata, but reconnect must work with just
+`projectId`.
 
 ## Attachments
 
@@ -103,8 +106,10 @@ project-local filenames downstream.
 - Do not handwrite a second requirements template in this skill.
 - Do not call legacy `clarify`, `generate`, `assets`, or `preview` private
   commands as the main flow.
-- If `replyType = progress`, explain briefly that generation is still running
-  and keep the same session for polling or the next message.
+- If `replyType = progress`, explain briefly that generation is still running,
+  keep the same project, and keep polling `GET /sessions/:projectId`.
+- Do not resubmit the same requirement answers or retry by calling
+  `POST /messages` again while `runStatus` is `queued` or `running`.
 - If `replyType = error`, return the error text and keep the session so the
   user can correct requirements or continue in B-end if needed.
 

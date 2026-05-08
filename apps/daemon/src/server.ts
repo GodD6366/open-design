@@ -1185,6 +1185,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   const openClawSessions = new Map();
 
+  function normalizeOpenClawWaitMode(value) {
+    return value === 'defer' ? 'defer' : 'block';
+  }
+
   function publicBaseUrl() {
     const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
     return `http://${reportHost}:${resolvedPort}`;
@@ -1208,16 +1212,128 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     return compact ? `店铺首页 · ${compact}` : '店铺首页';
   }
 
-  function getOpenClawSession(id) {
-    const direct = openClawSessions.get(id);
+  function latestOpenClawConversationId(projectId, preferredConversationId = null) {
+    const preferred = cleanString(preferredConversationId);
+    if (preferred) {
+      const conversation = getConversation(db, preferred);
+      if (conversation?.projectId === projectId) return conversation.id;
+    }
+    const project = getProject(db, projectId);
+    const metadataConversationId = cleanString(project?.metadata?.openclawConversationId);
+    if (metadataConversationId) {
+      const conversation = getConversation(db, metadataConversationId);
+      if (conversation?.projectId === projectId) return conversation.id;
+    }
+    return listConversations(db, projectId)[0]?.id ?? null;
+  }
+
+  function createRecoveredOpenClawSession(projectId, conversationId, project = null) {
+    const effectiveConversationId = latestOpenClawConversationId(projectId, conversationId);
+    if (!effectiveConversationId) return null;
+    const resolvedProject = project ?? getProject(db, projectId);
+    if (!resolvedProject) return null;
+    const now = Date.now();
+    return {
+      id: projectId,
+      projectId,
+      conversationId: effectiveConversationId,
+      openclawThreadId: cleanString(resolvedProject.metadata?.openclawThreadId) || null,
+      initialBrief: null,
+      state: 'recovered',
+      createdAt: now,
+      updatedAt: now,
+      lastResponse: null,
+      activeRunId: null,
+      activeRunStatus: null,
+      activeAssistantMessageId: null,
+    };
+  }
+
+  function persistOpenClawProjectLink(session) {
+    const project = getProject(db, session?.projectId);
+    if (!project) return;
+    const currentMetadata =
+      project.metadata && typeof project.metadata === 'object' ? project.metadata : {};
+    const nextMetadata = {
+      ...currentMetadata,
+      kind: currentMetadata.kind ?? SHOP_HOME_PAGE_KIND,
+      externalControlMode:
+        currentMetadata.externalControlMode ?? 'shop-home-page-bridge',
+      ...(cleanString(session?.openclawThreadId)
+        ? { openclawThreadId: cleanString(session.openclawThreadId) }
+        : {}),
+      openclawConversationId: session.conversationId,
+    };
+    updateProject(db, session.projectId, {
+      metadata: nextMetadata,
+    });
+  }
+
+  function getOpenClawSession(id, preferredConversationId = null) {
+    const normalizedId = cleanString(id);
+    if (!normalizedId) return null;
+    const direct = openClawSessions.get(normalizedId);
     const session =
       direct ??
-      [...openClawSessions.values()].find((candidate) => candidate.projectId === id);
-    if (!session) return null;
-    const project = getProject(db, session.projectId);
-    const conversation = getConversation(db, session.conversationId);
-    if (!project || !conversation) return null;
-    return session;
+      [...openClawSessions.values()].find((candidate) => candidate.projectId === normalizedId);
+    if (session) {
+      const project = getProject(db, session.projectId);
+      const conversation = getConversation(db, session.conversationId);
+      if (project && conversation) {
+        return session;
+      }
+      openClawSessions.delete(session.id);
+    }
+    const project = getProject(db, normalizedId);
+    if (!project || !isBranchShopHomePageProject(project)) return null;
+    const recovered = createRecoveredOpenClawSession(project.id, preferredConversationId, project);
+    if (!recovered) return null;
+    openClawSessions.set(project.id, recovered);
+    persistOpenClawProjectLink(recovered);
+    return recovered;
+  }
+
+  function getOpenClawRunStatus(session) {
+    const runId = cleanString(session?.activeRunId);
+    if (!runId) return null;
+    const run = design.runs.get(runId);
+    if (run) {
+      return {
+        runId: run.id,
+        runStatus: run.status,
+        assistantMessageId: run.assistantMessageId,
+      };
+    }
+    const lastStatus =
+      typeof session?.activeRunStatus === 'string' ? session.activeRunStatus : null;
+    if (!lastStatus) return null;
+    return {
+      runId,
+      runStatus: lastStatus,
+      assistantMessageId:
+        typeof session?.activeAssistantMessageId === 'string'
+          ? session.activeAssistantMessageId
+          : null,
+    };
+  }
+
+  function isOpenClawActiveRunStatus(status) {
+    return status === 'queued' || status === 'running';
+  }
+
+  function persistOpenClawRunSession(session, run, assistantMessageId) {
+    session.activeRunId = run?.id ?? null;
+    session.activeRunStatus = run?.status ?? null;
+    session.activeAssistantMessageId = assistantMessageId ?? null;
+    session.updatedAt = Date.now();
+  }
+
+  function clearOpenClawRunSession(session, runStatus = null) {
+    session.activeRunStatus = runStatus;
+    if (runStatus && !isOpenClawActiveRunStatus(runStatus)) {
+      session.activeAssistantMessageId = null;
+    }
+    session.updatedAt = Date.now();
   }
 
   async function resolveShopHomePageSkillIdForOpenClaw() {
@@ -1524,6 +1640,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     agentId,
     model,
     reasoning,
+    waitMode = 'block',
   }) {
     const projectId = session.projectId;
     const conversationId = session.conversationId;
@@ -1600,9 +1717,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         run,
       ),
     );
+    persistOpenClawRunSession(session, run, assistantMessageId);
+    if (waitMode === 'defer') {
+      return formatOpenClawReply({
+        session,
+        runId: run.id,
+        runStatus: run.status,
+        assistantText: null,
+      });
+    }
     await design.runs.wait(run);
     const { text, events } = collectRunTextAndEvents(run);
     const runStatus = run.status;
+    clearOpenClawRunSession(session, runStatus);
     upsertMessage(db, conversationId, {
       id: assistantMessageId,
       role: 'assistant',
@@ -1625,14 +1752,19 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   }
 
   async function maybeEnqueueOpenClawAssets(projectId) {
-    const state = await loadShopHomePageState(PROJECTS_DIR, projectId, SHOP_HOME_PAGE_SKILL_DIR);
+    const project = getProject(db, projectId);
+    const state = await loadShopHomePageState(
+      PROJECTS_DIR,
+      projectId,
+      SHOP_HOME_PAGE_SKILL_DIR,
+      project?.metadata ?? null,
+    );
     const schemaConfirmed = state.requirements?.status === 'confirmed';
     if (
       schemaConfirmed &&
       state.status === 'schema-ready' &&
       (state.validationErrors ?? []).length === 0
     ) {
-      const project = getProject(db, projectId);
       const { tasks, state: nextState } = await enqueueShopHomePageAssetTasks(
         PROJECTS_DIR,
         projectId,
@@ -1651,22 +1783,92 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     return { state, tasks: getShopHomePageAssetTaskStatus(projectId) };
   }
 
-  async function formatOpenClawReply({ session, runId = null, assistantText = null }) {
+  async function finalizeOpenClawRunState(session, runMeta) {
+    if (!runMeta?.runId) return { assistantText: null, runStatus: runMeta?.runStatus ?? null };
+    const { conversationId } = session;
+    const assistantMessageId = runMeta.assistantMessageId;
+    const existing =
+      assistantMessageId && conversationId
+        ? listMessages(db, conversationId).find((message) => message.id === assistantMessageId)
+        : null;
+    if (existing?.runId === runMeta.runId && existing.runStatus === runMeta.runStatus) {
+      clearOpenClawRunSession(session, runMeta.runStatus);
+      return {
+        assistantText: typeof existing.content === 'string' ? existing.content : null,
+        runStatus: runMeta.runStatus,
+      };
+    }
+    const run = design.runs.get(runMeta.runId);
+    if (!run) {
+      clearOpenClawRunSession(session, runMeta.runStatus);
+      return { assistantText: existing?.content ?? null, runStatus: runMeta.runStatus };
+    }
+    const { text, events } = collectRunTextAndEvents(run);
+    const status = run.status;
+    clearOpenClawRunSession(session, status);
+    if (assistantMessageId) {
+      upsertMessage(db, conversationId, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: text,
+        agentId: existing?.agentId,
+        agentName: existing?.agentName,
+        runId: run.id,
+        runStatus: status,
+        events,
+        startedAt: existing?.startedAt,
+        createdAt: existing?.createdAt,
+        endedAt: Date.now(),
+      });
+      updateProject(db, session.projectId, {});
+    }
+    return { assistantText: text, runStatus: status };
+  }
+
+  async function formatOpenClawReply({ session, runId = null, runStatus = null, assistantText = null }) {
     const projectId = session.projectId;
-    const conversationId = session.conversationId;
+    let effectiveRunId = runId;
+    let effectiveRunStatus = runStatus;
+    let effectiveAssistantText = assistantText;
+    const trackedRun = getOpenClawRunStatus(session);
+    const activeTracked =
+      trackedRun &&
+      (!effectiveRunId || trackedRun.runId === effectiveRunId || isOpenClawActiveRunStatus(trackedRun.runStatus));
+
+    if (!effectiveRunId && trackedRun?.runId) {
+      effectiveRunId = trackedRun.runId;
+      effectiveRunStatus = trackedRun.runStatus;
+    }
+
+    if (activeTracked && isOpenClawActiveRunStatus(trackedRun.runStatus)) {
+      effectiveRunId = trackedRun.runId;
+      effectiveRunStatus = trackedRun.runStatus;
+      effectiveAssistantText = null;
+    } else if (trackedRun?.runId && !isOpenClawActiveRunStatus(trackedRun.runStatus)) {
+      effectiveRunId = trackedRun.runId;
+      const finalized = await finalizeOpenClawRunState(session, trackedRun);
+      effectiveRunStatus = finalized.runStatus;
+      if (effectiveAssistantText == null) effectiveAssistantText = finalized.assistantText;
+    }
+
     const { state, tasks } = await maybeEnqueueOpenClawAssets(projectId);
     const exposePreviewUrl =
       state.requirements?.status === 'confirmed' && state.previewUrl
         ? new URL(state.previewUrl, `${publicBaseUrl()}/`).toString()
         : null;
+    const stillRunning = isOpenClawActiveRunStatus(effectiveRunStatus);
     const response = openClawShopHomePageReplyFromAssistant({
       session,
-      assistantText,
+      assistantText:
+        stillRunning && !effectiveAssistantText
+          ? '店铺首页结构仍在生成中，请继续等待当前任务完成。'
+          : effectiveAssistantText,
       state,
       tasks,
       previewUrl: exposePreviewUrl,
       projectUrl: maybeProjectPageUrl(projectId),
-      runId,
+      runId: effectiveRunId,
+      runStatus: effectiveRunStatus,
     });
     session.lastResponse = response;
     session.state = response.state;
@@ -1708,7 +1910,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     });
     await ensureProject(PROJECTS_DIR, project.id);
     const session = {
-      id: randomId(),
+      id: project.id,
       projectId: project.id,
       conversationId: conversation.id,
       openclawThreadId: cleanString(body?.openclawThreadId) || null,
@@ -1717,8 +1919,12 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       createdAt: now,
       updatedAt: now,
       lastResponse: null,
+      activeRunId: null,
+      activeRunStatus: null,
+      activeAssistantMessageId: null,
     };
-    openClawSessions.set(session.id, session);
+    openClawSessions.set(session.projectId, session);
+    persistOpenClawProjectLink(session);
     return runOpenClawTurn({
       session,
       message: brief,
@@ -1726,6 +1932,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       agentId: body?.agentId,
       model: body?.model,
       reasoning: body?.reasoning,
+      waitMode: normalizeOpenClawWaitMode(body?.waitMode),
     });
   }
 
@@ -1745,38 +1952,26 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.post('/api/openclaw/shop-home-page/sessions/:sessionId/messages', async (req, res) => {
     try {
-      let session = getOpenClawSession(req.params.sessionId);
+      let session = getOpenClawSession(req.params.sessionId, req.body?.conversationId);
       if (!session) {
-        const project = getProject(db, req.params.sessionId);
-        const requestedConversationId = cleanString(req.body?.conversationId);
-        const conversation = requestedConversationId ? getConversation(db, requestedConversationId) : null;
-        if (
-          project &&
-          isBranchShopHomePageProject(project) &&
-          conversation &&
-          conversation.projectId === project.id
-        ) {
-          session = {
-            id: project.id,
-            projectId: project.id,
-            conversationId: conversation.id,
-            openclawThreadId: null,
-            initialBrief: null,
-            state: 'b-end-chat',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            lastResponse: null,
-          };
-          openClawSessions.set(session.id, session);
-        } else {
-          return sendApiError(res, 404, 'NOT_FOUND', 'session not found');
-        }
+        return sendApiError(res, 404, 'NOT_FOUND', 'project not found');
       }
       const message = cleanString(req.body?.message);
       if (!message) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'message required');
       }
       session.updatedAt = Date.now();
+      persistOpenClawProjectLink(session);
+      const trackedRun = getOpenClawRunStatus(session);
+      if (trackedRun && isOpenClawActiveRunStatus(trackedRun.runStatus)) {
+        const response = await formatOpenClawReply({
+          session,
+          runId: trackedRun.runId,
+          runStatus: trackedRun.runStatus,
+          assistantText: null,
+        });
+        return res.json(response);
+      }
       const response = await runOpenClawTurn({
         session,
         message,
@@ -1784,6 +1979,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         agentId: req.body?.agentId,
         model: req.body?.model,
         reasoning: req.body?.reasoning,
+        waitMode: normalizeOpenClawWaitMode(req.body?.waitMode),
       });
       res.json(response);
     } catch (err) {
@@ -1798,10 +1994,11 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
 
   app.get('/api/openclaw/shop-home-page/sessions/:sessionId', async (req, res) => {
     try {
-      const session = getOpenClawSession(req.params.sessionId);
+      const session = getOpenClawSession(req.params.sessionId, req.query?.conversationId);
       if (!session) {
-        return sendApiError(res, 404, 'NOT_FOUND', 'session not found');
+        return sendApiError(res, 404, 'NOT_FOUND', 'project not found');
       }
+      persistOpenClawProjectLink(session);
       const response = await formatOpenClawReply({
         session,
         runId: null,
@@ -2545,6 +2742,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         PROJECTS_DIR,
         req.params.projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
+        project.metadata ?? null,
       );
       res.json({ state });
     } catch (err) {
@@ -2572,11 +2770,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         SHOP_HOME_PAGE_SKILL_DIR,
         schemaText,
         moduleSpecs,
+        project.metadata ?? null,
       );
       const state = await loadShopHomePageState(
         PROJECTS_DIR,
         projectId,
         SHOP_HOME_PAGE_SKILL_DIR,
+        project.metadata ?? null,
       );
       res.json({ state });
     } catch (err) {
@@ -2606,6 +2806,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
               ? project.metadata.imageModel
               : undefined,
           projectRoot: PROJECT_ROOT,
+          metadata: project.metadata ?? null,
         },
       );
       res.json({ tasks, state });

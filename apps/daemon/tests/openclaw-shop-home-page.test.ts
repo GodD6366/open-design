@@ -39,12 +39,15 @@ describe('OpenClaw shop-home-page helpers', () => {
     });
 
     expect(response.replyType).toBe('requirements_form');
+    expect(response.projectId).toBe('project-1');
+    expect('sessionId' in response).toBe(false);
     expect(response.replyMarkdown).toContain('## 需求澄清');
     expect(response.replyMarkdown).toContain('[form answers — storefront-requirements]');
     expect(response.replyMarkdown).not.toContain('<question-form');
     expect(response.replyMarkdown).not.toContain('打开');
     expect(response.projectUrl).toBeNull();
     expect(response.debug.projectUrl).toBeNull();
+    expect(response.runStatus).toBeNull();
   });
 
   it('keeps optional B-end handoff URLs out of the primary response', () => {
@@ -53,11 +56,13 @@ describe('OpenClaw shop-home-page helpers', () => {
       assistantText: '继续处理中。',
       state: { status: 'schema-ready', validationErrors: [] },
       projectUrl: 'http://127.0.0.1:17573/projects/project-1',
+      runStatus: 'running',
     });
 
     expect(response.replyType).toBe('progress');
     expect(response.projectUrl).toBeNull();
     expect(response.debug.projectUrl).toBe('http://127.0.0.1:17573/projects/project-1');
+    expect(response.runStatus).toBe('running');
   });
 
   it('does not treat schema-ready preview artifacts as final preview-ready chat output', () => {
@@ -67,11 +72,13 @@ describe('OpenClaw shop-home-page helpers', () => {
       state: { status: 'schema-ready', validationErrors: [] },
       previewUrl: 'http://127.0.0.1:17456/api/projects/p/files/shop-home-page.preview.html',
       tasks: [],
+      runStatus: 'succeeded',
     });
 
     expect(response.replyType).toBe('progress');
     expect(response.previewUrl).toBe('http://127.0.0.1:17456/api/projects/p/files/shop-home-page.preview.html');
     expect(response.replyMarkdown).not.toContain('预览链接');
+    expect(response.runStatus).toBe('succeeded');
   });
 
   it('normalizes user-edited markdown back to UI-equivalent form answers', () => {

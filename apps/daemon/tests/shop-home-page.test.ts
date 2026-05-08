@@ -321,6 +321,68 @@ describe('reference-state sync', () => {
 });
 
 describe('applyShopHomePageSchemaText with module specs sync', () => {
+  it('allows promptless storefront schemas before requirements are confirmed', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-promptless-needs-confirmation';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+
+    const requirements = {
+      status: 'needs_confirmation',
+      source_prompt: '店铺首页',
+      module_specs: [
+        { type: 'top_slider', content: '' },
+        { type: 'user_assets', content: '' },
+        { type: 'shop_info', content: '' },
+      ],
+      modules: ['top_slider', 'user_assets', 'shop_info'],
+      module_content: {
+        top_slider: '',
+        user_assets: '',
+        shop_info: '',
+      },
+      style: {
+        industry: '',
+        brand_name: '',
+        primary_color: '',
+        tone: '',
+        avoid: [],
+      },
+      brand_logo: '',
+      action_buttons: {
+        selected: ['到店自取', '外卖点单'],
+        custom: '',
+      },
+      other_requirements: '',
+      counts: {
+        sliderCount: 1,
+        goodsCount: 2,
+      },
+      confirmation_questions: [],
+    };
+    const schema = createSeedSchema(
+      requirements as any,
+      null,
+      { skipSeedImagePrompts: true } as any,
+    ) as any;
+
+    await writeFile(path.join(projectDir, 'shop-home-page.requirements.json'), `${JSON.stringify(requirements, null, 2)}\n`);
+    await writeFile(path.join(projectDir, SHOP_HOME_PAGE_SCHEMA_FILE), `${JSON.stringify(schema, null, 2)}\n`);
+
+    const state = await applyShopHomePageSchemaText(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      `${JSON.stringify(schema, null, 2)}\n`,
+      requirements.module_specs as any,
+    );
+
+    expect(state.validationErrors).toEqual([]);
+    expect((state.schema as any).modules[0].data.items[0].image_prompt_schema).toBeUndefined();
+    expect((state.schema as any).modules[1].data.entries[0].image_prompt_schema).toBeUndefined();
+  });
+
   it('reorders requirements.module_specs and schema.modules together', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
     const projectsRoot = path.join(root, 'projects');
