@@ -151,6 +151,11 @@ export function openClawProjectPageUrl({ host, resolvedPort, projectId, webPort 
   return `http://${reportHost}:${webPort || resolvedPort}/projects/${encodeURIComponent(projectId)}`;
 }
 
+export function openClawProjectPageUrlFromBase(baseUrl, projectId) {
+  if (!baseUrl) return null;
+  return new URL(`/projects/${encodeURIComponent(projectId)}`, `${String(baseUrl).replace(/\/$/, '')}/`).toString();
+}
+
 export function openClawAttachmentNameFromUrl(rawUrl, requestedName) {
   try {
     const parsed = new URL(String(rawUrl));

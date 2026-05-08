@@ -36,6 +36,7 @@ import {
   DEFAULT_START_APPS,
   DEFAULT_STOP_APPS,
   parsePortOption,
+  resolveHostOption,
   resolveRunApps,
   resolveStartApps,
   resolveStopApps,
@@ -405,15 +406,18 @@ async function spawnSidecarRuntime(request: {
 async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
+  const host = resolveHostOption(options.host);
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
+    await logHandle.write(`[tools-dev] binding daemon to ${host}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
       config,
       env: {
+        OD_BIND_HOST: host,
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
@@ -430,6 +434,7 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
   if (daemonStatus.url == null) throw new Error("daemon must be running before web starts");
 
   const webPort = parsePortOption(options.webPort, "--web-port");
+  const host = resolveHostOption(options.host);
   const daemonPort = urlPort(daemonStatus.url);
   const logHandle = await openAppLog(config, APP_KEYS.WEB);
 
@@ -437,6 +442,7 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
     await ensureWebDevNodeModules(config);
     await writeWebDevTsconfig(config);
     await logHandle.write(`\n[tools-dev] launching web at ${new Date().toISOString()}\n`);
+    await logHandle.write(`[tools-dev] binding web to ${host}\n`);
     await logHandle.write(`[tools-dev] proxying web API requests to daemon port ${daemonPort}\n`);
     return await spawnSidecarRuntime({
       appName: APP_KEYS.WEB,
@@ -450,6 +456,7 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
         [SIDECAR_ENV.WEB_DIST_DIR]: config.apps.web.nextDistDir,
         [SIDECAR_ENV.WEB_TSCONFIG_PATH]: config.apps.web.nextTsconfigPath,
         [SIDECAR_ENV.WEB_PORT]: String(webPort ?? 0),
+        OD_HOST: host,
         PORT: String(webPort ?? 0),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(options.prod === true
@@ -907,6 +914,7 @@ function addSharedOptions(command: ReturnType<typeof cli.command>) {
 
 function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
+    .option("--host <addr>", "bind web + daemon to a specific interface (default: 127.0.0.1)")
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
     .option("--prod", "use production build (requires pnpm build first)");

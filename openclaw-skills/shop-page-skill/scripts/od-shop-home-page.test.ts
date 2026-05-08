@@ -6,7 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const scriptPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'od-shop-home-page.ts');
+const scriptPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'od-shop-home-page.cjs');
 
 async function closeServer(server: http.Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -27,7 +27,7 @@ function runCli(
     else env[key] = value;
   }
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--experimental-strip-types', scriptPath, ...args], {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

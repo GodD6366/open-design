@@ -1189,9 +1189,31 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     return value === 'defer' ? 'defer' : 'block';
   }
 
-  function publicBaseUrl() {
+  function forwardedHostHeader(req) {
+    const forwarded = req?.headers?.['x-forwarded-host'];
+    if (Array.isArray(forwarded)) return cleanString(forwarded[0]);
+    return cleanString(forwarded);
+  }
+
+  function requestHostHeader(req) {
+    return forwardedHostHeader(req) || cleanString(req?.headers?.host);
+  }
+
+  function requestProtocol(req) {
+    const forwardedProto = req?.headers?.['x-forwarded-proto'];
+    const raw = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+    return raw === 'https' ? 'https' : 'http';
+  }
+
+  function publicBaseUrlForRequest(req = null) {
+    const visibleHost = requestHostHeader(req);
+    if (visibleHost) return `${requestProtocol(req)}://${visibleHost}`;
     const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
     return `http://${reportHost}:${resolvedPort}`;
+  }
+
+  function publicBaseUrl() {
+    return publicBaseUrlForRequest(null);
   }
 
   function projectPageUrl(projectId) {
@@ -1199,8 +1221,13 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     return openClawProjectPageUrl({ host, resolvedPort, projectId, webPort });
   }
 
-  function maybeProjectPageUrl(projectId) {
-    return process.env.OD_WEB_PORT ? projectPageUrl(projectId) : null;
+  function maybeProjectPageUrl(projectId, req = null) {
+    if (!process.env.OD_WEB_PORT) return null;
+    const visibleHost = requestHostHeader(req);
+    if (visibleHost) {
+      return new URL(`/projects/${encodeURIComponent(projectId)}`, `${requestProtocol(req)}://${visibleHost}/`).toString();
+    }
+    return projectPageUrl(projectId);
   }
 
   function safeProjectId(prefix = 'shop-home-page') {
@@ -1641,6 +1668,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     model,
     reasoning,
     waitMode = 'block',
+    req = null,
   }) {
     const projectId = session.projectId;
     const conversationId = session.conversationId;
@@ -1724,6 +1752,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         runId: run.id,
         runStatus: run.status,
         assistantText: null,
+        req,
       });
     }
     await design.runs.wait(run);
@@ -1748,6 +1777,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       runId: run.id,
       runStatus,
       assistantText: text,
+      req,
     });
   }
 
@@ -1825,7 +1855,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     return { assistantText: text, runStatus: status };
   }
 
-  async function formatOpenClawReply({ session, runId = null, runStatus = null, assistantText = null }) {
+  async function formatOpenClawReply({ session, runId = null, runStatus = null, assistantText = null, req = null }) {
     const projectId = session.projectId;
     let effectiveRunId = runId;
     let effectiveRunStatus = runStatus;
@@ -1854,7 +1884,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     const { state, tasks } = await maybeEnqueueOpenClawAssets(projectId);
     const exposePreviewUrl =
       state.requirements?.status === 'confirmed' && state.previewUrl
-        ? new URL(state.previewUrl, `${publicBaseUrl()}/`).toString()
+        ? new URL(state.previewUrl, `${publicBaseUrlForRequest(req)}/`).toString()
         : null;
     const stillRunning = isOpenClawActiveRunStatus(effectiveRunStatus);
     const response = openClawShopHomePageReplyFromAssistant({
@@ -1866,7 +1896,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       state,
       tasks,
       previewUrl: exposePreviewUrl,
-      projectUrl: maybeProjectPageUrl(projectId),
+      projectUrl: maybeProjectPageUrl(projectId, req),
       runId: effectiveRunId,
       runStatus: effectiveRunStatus,
     });
@@ -1969,6 +1999,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           runId: trackedRun.runId,
           runStatus: trackedRun.runStatus,
           assistantText: null,
+          req,
         });
         return res.json(response);
       }
@@ -1980,6 +2011,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         model: req.body?.model,
         reasoning: req.body?.reasoning,
         waitMode: normalizeOpenClawWaitMode(req.body?.waitMode),
+        req,
       });
       res.json(response);
     } catch (err) {
@@ -2004,6 +2036,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         runId: null,
         runStatus: null,
         assistantText: null,
+        req,
       });
       res.json(response);
     } catch (err) {

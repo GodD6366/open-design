@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   normalizeDaemonProxyOriginHeader,
+  resolveDaemonForwardedHost,
   resolveDaemonProxyTarget,
 } from '../sidecar/server';
 
@@ -88,5 +89,15 @@ describe('normalizeDaemonProxyOriginHeader', () => {
         webPort: 3000,
       }),
     ).toBe('null');
+  });
+});
+
+describe('resolveDaemonForwardedHost', () => {
+  it('passes through the browser-visible host for daemon URL generation', () => {
+    expect(resolveDaemonForwardedHost('192.168.1.8:17573')).toBe('192.168.1.8:17573');
+  });
+
+  it('preserves missing hosts as undefined', () => {
+    expect(resolveDaemonForwardedHost(undefined)).toBeUndefined();
   });
 });

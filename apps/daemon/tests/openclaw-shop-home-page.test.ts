@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   openClawNormalizeFormReply,
   openClawProjectPageUrl,
+  openClawProjectPageUrlFromBase,
   openClawShopHomePageReplyFromAssistant,
 } from '../src/openclaw-shop-home-page.js';
 import { extractFirstQuestionForm } from '@open-design/contracts/question-form';
@@ -111,5 +112,9 @@ describe('OpenClaw shop-home-page helpers', () => {
       projectId: 'p1',
       webPort: 17573,
     })).toBe('http://127.0.0.1:17573/projects/p1');
+  });
+
+  it('can derive project URLs from the current browser-visible base URL', () => {
+    expect(openClawProjectPageUrlFromBase('http://192.168.1.8:17573', 'p1')).toBe('http://192.168.1.8:17573/projects/p1');
   });
 });

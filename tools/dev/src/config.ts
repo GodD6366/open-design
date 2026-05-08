@@ -32,6 +32,7 @@ export type ToolDevAppName = (typeof ALL_APPS)[number];
 
 export type ToolDevOptions = {
   daemonPort?: number | string | null;
+  host?: string | null;
   json?: boolean;
   namespace?: string;
   prod?: boolean;
@@ -62,12 +63,21 @@ export type ToolDevConfig = {
       sidecarEntryPath: string;
     };
   };
+  host: string;
   namespace: string;
   namespaceRoot: string;
   toolsDevRoot: string;
   tsxCliPath: string;
   workspaceRoot: string;
 };
+
+export function resolveHostOption(value: string | null | undefined): string {
+  const host = value?.trim() || process.env.OD_HOST || process.env.OD_BIND_HOST || "127.0.0.1";
+  if (!/^[a-zA-Z0-9._\-:[\]@*]+$/.test(host)) {
+    throw new Error(`--host contains invalid characters: ${host}`);
+  }
+  return host;
+}
 
 function resolveTsxCliPath(): string {
   const require = createRequire(import.meta.url);
@@ -145,6 +155,7 @@ export function parsePortOption(value: number | string | null | undefined, optio
 }
 
 export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfig {
+  const host = resolveHostOption(options.host);
   const namespace = resolveNamespace({ namespace: options.namespace, env: process.env, contract: OPEN_DESIGN_SIDECAR_CONTRACT });
   const toolsDevRoot = resolveSidecarBase({
     base: options.toolsDevRoot ?? process.env[SIDECAR_ENV.BASE] ?? resolveSourceRuntimeRoot({
@@ -186,6 +197,7 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
         sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/web/sidecar/index.ts"),
       },
     },
+    host,
     namespace,
     namespaceRoot,
     toolsDevRoot,

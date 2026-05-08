@@ -62,7 +62,11 @@ function attachParentMonitor(stop: () => Promise<void>): void {
 }
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
-  const started = await startServer({ port: parsePort(process.env[DAEMON_PORT_ENV]), returnServer: true }) as
+  const started = await startServer({
+    host: process.env.OD_BIND_HOST || "127.0.0.1",
+    port: parsePort(process.env[DAEMON_PORT_ENV]),
+    returnServer: true,
+  }) as
     | string
     | { server: Server; url: string };
   if (typeof started === "string") {

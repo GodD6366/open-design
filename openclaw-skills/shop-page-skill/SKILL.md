@@ -47,7 +47,7 @@ conversation, real messages, project-local files, schema runtime, asset queue,
 and preview artifacts.
 
 Always execute the main flow through
-`openclaw-skills/shop-page-skill/scripts/od-shop-home-page.ts`.
+`openclaw-skills/shop-page-skill/scripts/od-shop-home-page.cjs`.
 
 - Let the helper script construct the daemon API paths.
 - Treat `OD_DAEMON_URL` as the only default daemon origin. If the caller cannot

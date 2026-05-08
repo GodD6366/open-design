@@ -1,6 +1,7 @@
 import {
   createServer as createHttpServer,
   request as createHttpRequest,
+  type IncomingHttpHeaders,
   type IncomingMessage,
   type Server,
   type ServerResponse,
@@ -135,6 +136,11 @@ export function normalizeDaemonProxyOriginHeader(options: {
   return allowedWebOrigins.has(options.origin) ? options.daemonOrigin : options.origin;
 }
 
+export function resolveDaemonForwardedHost(requestHost: string | undefined): string | undefined {
+  if (requestHost == null || requestHost.length === 0) return requestHost;
+  return requestHost;
+}
+
 async function proxyToDaemon(
   target: URL,
   request: IncomingMessage,
@@ -142,13 +148,17 @@ async function proxyToDaemon(
   webPort: number,
 ): Promise<void> {
   const proxyRequestFactory = target.protocol === "https:" ? createHttpsRequest : createHttpRequest;
-  const headers = { ...request.headers, host: target.host };
+  const headers: IncomingHttpHeaders = { ...request.headers, host: target.host };
+  const forwardedHost = resolveDaemonForwardedHost(typeof request.headers.host === "string" ? request.headers.host : undefined);
   const origin = normalizeDaemonProxyOriginHeader({
     daemonOrigin: target.origin,
     origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
     requestHost: typeof request.headers.host === "string" ? request.headers.host : undefined,
     webPort,
   });
+  if (forwardedHost != null && forwardedHost.length > 0) {
+    headers["x-forwarded-host"] = forwardedHost;
+  }
   if (origin == null || origin.length === 0) {
     delete headers.origin;
   } else {

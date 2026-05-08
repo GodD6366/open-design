@@ -1,41 +1,24 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
-
-type OpenClawResponse = {
-  projectId: string;
-  conversationId: string;
-  sessionId?: string;
-  state: string;
-  replyMarkdown: string;
-  replyType: 'requirements_form' | 'progress' | 'preview_ready' | 'error';
-  previewUrl?: string | null;
-  projectUrl?: string | null;
-  runId?: string | null;
-  runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | null;
-  assetTasks?: Array<{ id: string; fileName?: string; status: string; error?: string | null }>;
-  debug?: Json;
-};
+const fs = require('node:fs/promises');
+const path = require('node:path');
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 
-function printJson(value: Json): void {
+function printJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-function fail(message: string, details?: Json): never {
-  const payload: Record<string, Json> = { ok: false, error: message };
+function fail(message, details) {
+  const payload = { ok: false, error: message };
   if (details !== undefined) payload.details = details;
   printJson(payload);
   process.exit(1);
 }
 
-function parseArgs(argv: string[]) {
-  const positional: string[] = [];
-  const options = new Map<string, string[]>();
+function parseArgs(argv) {
+  const positional = [];
+  const options = new Map();
   for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i]!;
+    const token = argv[i];
     if (!token.startsWith('--')) {
       positional.push(token);
       continue;
@@ -45,8 +28,8 @@ function parseArgs(argv: string[]) {
     const value =
       eq >= 0
         ? token.slice(eq + 1)
-        : i + 1 < argv.length && !argv[i + 1]!.startsWith('--')
-          ? argv[++i]!
+        : i + 1 < argv.length && !argv[i + 1].startsWith('--')
+          ? argv[++i]
           : 'true';
     const current = options.get(key) ?? [];
     current.push(value);
@@ -55,15 +38,15 @@ function parseArgs(argv: string[]) {
   return { positional, options };
 }
 
-function option(options: Map<string, string[]>, key: string): string | undefined {
+function option(options, key) {
   return options.get(key)?.[0];
 }
 
-function optionList(options: Map<string, string[]>, key: string): string[] {
+function optionList(options, key) {
   return options.get(key) ?? [];
 }
 
-function toDaemonBaseUrl(raw?: string): string {
+function toDaemonBaseUrl(raw) {
   const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim();
   if (!value) {
     fail('missing daemon URL', {
@@ -82,31 +65,31 @@ function toDaemonBaseUrl(raw?: string): string {
   }
 }
 
-async function readBody(resp: Response): Promise<string> {
+async function readBody(resp) {
   const text = await resp.text().catch(() => '');
   if (text) return text;
   return `HTTP ${resp.status}`;
 }
 
-async function readJson<T>(resp: Response): Promise<T> {
+async function readJson(resp) {
   if (!resp.ok) {
-    let details: Json | undefined;
+    let details;
     try {
-      details = (await resp.json()) as Json;
+      details = await resp.json();
     } catch {
       details = await readBody(resp);
     }
     fail(`request failed: ${resp.status} ${resp.statusText}`, details);
   }
-  return (await resp.json()) as T;
+  return resp.json();
 }
 
-async function requestJson<T>(baseUrl: string, pathname: string, init?: RequestInit): Promise<T> {
+async function requestJson(baseUrl, pathname, init) {
   const resp = await fetch(new URL(pathname, `${baseUrl}/`), init);
-  return readJson<T>(resp);
+  return readJson(resp);
 }
 
-async function readTextOptionFile(options: Map<string, string[]>, key: string): Promise<string | null> {
+async function readTextOptionFile(options, key) {
   const filePath = option(options, key);
   if (!filePath) return null;
   const absolute = path.resolve(filePath);
@@ -121,7 +104,7 @@ async function readTextOptionFile(options: Map<string, string[]>, key: string): 
   }
 }
 
-async function encodeAttachment(filePath: string): Promise<Json> {
+async function encodeAttachment(filePath) {
   const absolute = path.resolve(filePath);
   try {
     const bytes = await fs.readFile(absolute);
@@ -137,8 +120,8 @@ async function encodeAttachment(filePath: string): Promise<Json> {
   }
 }
 
-async function buildAttachments(options: Map<string, string[]>): Promise<Json[]> {
-  const attachments: Json[] = [];
+async function buildAttachments(options) {
+  const attachments = [];
   for (const filePath of optionList(options, 'file')) {
     attachments.push(await encodeAttachment(filePath));
   }
@@ -154,7 +137,7 @@ async function buildAttachments(options: Map<string, string[]>): Promise<Json[]>
   return attachments;
 }
 
-function printOpenClaw(action: string, response: OpenClawResponse): void {
+function printOpenClaw(action, response) {
   printJson({
     ok: response.replyType !== 'error',
     action,
@@ -171,37 +154,41 @@ function printOpenClaw(action: string, response: OpenClawResponse): void {
   });
 }
 
-function shouldStopPolling(response: OpenClawResponse): boolean {
+function shouldStopPolling(response) {
   if (response.replyType === 'requirements_form') return true;
   if (response.replyType === 'preview_ready') return true;
   if (response.replyType === 'error') return true;
   return response.runStatus === 'failed' || response.runStatus === 'canceled';
 }
 
-function shouldPoll(response: OpenClawResponse): boolean {
+function shouldPoll(response) {
   if (shouldStopPolling(response)) return false;
   if (response.replyType !== 'progress') return false;
   if (!response.projectId && !response.sessionId) return false;
-  return Boolean(response.runId) || response.runStatus === 'queued' || response.runStatus === 'running' || response.runStatus === 'succeeded';
+  return (
+    Boolean(response.runId) ||
+    response.runStatus === 'queued' ||
+    response.runStatus === 'running' ||
+    response.runStatus === 'succeeded'
+  );
 }
 
-async function sleep(ms: number): Promise<void> {
+async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function pollUntilTerminal(
-  baseUrl: string,
-  initial: OpenClawResponse,
-  options: Map<string, string[]>,
-): Promise<OpenClawResponse> {
+async function pollUntilTerminal(baseUrl, initial, options) {
   let current = initial;
   const projectId = initial.projectId || initial.sessionId;
   if (!projectId) return current;
   const pollMsRaw = Number(option(options, 'poll-ms') ?? '');
-  const pollMs = Number.isFinite(pollMsRaw) && pollMsRaw > 0 ? Math.round(pollMsRaw) : DEFAULT_POLL_INTERVAL_MS;
+  const pollMs =
+    Number.isFinite(pollMsRaw) && pollMsRaw > 0
+      ? Math.round(pollMsRaw)
+      : DEFAULT_POLL_INTERVAL_MS;
   while (shouldPoll(current)) {
     await sleep(pollMs);
-    current = await requestJson<OpenClawResponse>(
+    current = await requestJson(
       baseUrl,
       `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}`,
     );
@@ -209,14 +196,14 @@ async function pollUntilTerminal(
   return current;
 }
 
-async function startSession(baseUrl: string, options: Map<string, string[]>): Promise<void> {
+async function startSession(baseUrl, options) {
   const brief =
     option(options, 'brief') ??
     option(options, 'message') ??
     (await readTextOptionFile(options, 'brief-file')) ??
     (await readTextOptionFile(options, 'message-file'));
   if (!brief?.trim()) fail('missing --brief/--message/--brief-file/--message-file');
-  const response = await requestJson<OpenClawResponse>(baseUrl, '/api/openclaw/shop-home-page/sessions', {
+  const response = await requestJson(baseUrl, '/api/openclaw/shop-home-page/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -232,7 +219,7 @@ async function startSession(baseUrl: string, options: Map<string, string[]>): Pr
   printOpenClaw('start', await pollUntilTerminal(baseUrl, response, options));
 }
 
-async function sendMessage(baseUrl: string, options: Map<string, string[]>): Promise<void> {
+async function sendMessage(baseUrl, options) {
   const projectId = option(options, 'project-id') ?? option(options, 'session-id');
   if (!projectId) fail('missing --project-id');
   const message =
@@ -241,7 +228,7 @@ async function sendMessage(baseUrl: string, options: Map<string, string[]>): Pro
     (await readTextOptionFile(options, 'message-file')) ??
     (await readTextOptionFile(options, 'answers-file'));
   if (!message?.trim()) fail('missing --message/--answers/--message-file/--answers-file');
-  const response = await requestJson<OpenClawResponse>(
+  const response = await requestJson(
     baseUrl,
     `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}/messages`,
     {
@@ -260,17 +247,17 @@ async function sendMessage(baseUrl: string, options: Map<string, string[]>): Pro
   printOpenClaw('send', await pollUntilTerminal(baseUrl, response, options));
 }
 
-async function getStatus(baseUrl: string, options: Map<string, string[]>): Promise<void> {
+async function getStatus(baseUrl, options) {
   const projectId = option(options, 'project-id') ?? option(options, 'session-id');
   if (!projectId) fail('missing --project-id');
-  const response = await requestJson<OpenClawResponse>(
+  const response = await requestJson(
     baseUrl,
     `/api/openclaw/shop-home-page/sessions/${encodeURIComponent(projectId)}`,
   );
   printOpenClaw('status', response);
 }
 
-function help(): void {
+function help() {
   printJson({
     ok: true,
     daemonUrl: 'required via --daemon-url or OD_DAEMON_URL; no localhost fallback',
@@ -279,17 +266,8 @@ function help(): void {
       'send --project-id <id> (--message <text> | --answers-file <path>) [--file <local-image> ...] [--daemon-url <url>]',
       'status --project-id <id> [--daemon-url <url>]',
     ],
-    aliases: [
-      '--session-id is accepted as a deprecated alias for --project-id',
-    ],
-    deprecated: [
-      'create',
-      'clarify',
-      'generate',
-      'assets',
-      'preview',
-      'revise',
-    ],
+    aliases: ['--session-id is accepted as a deprecated alias for --project-id'],
+    deprecated: ['create', 'clarify', 'generate', 'assets', 'preview', 'revise'],
   });
 }
 
@@ -321,11 +299,12 @@ async function main() {
       fail(`deprecated private command: ${command}`, {
         hint: 'use start/send/status so the daemon OpenClaw chat proxy owns the real project conversation',
       });
+      return;
     default:
       fail('unknown command', { command });
   }
 }
 
-void main().catch((error: unknown) => {
+void main().catch((error) => {
   fail(error instanceof Error ? error.message : String(error));
 });
