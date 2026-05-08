@@ -8,6 +8,7 @@ export interface ChatRequest {
   message: string;
   systemPrompt?: string;
   automationMode?: boolean | null;
+  requestSource?: 'web-chat' | 'openclaw' | null;
   persistMessages?: boolean | null;
   projectId?: string | null;
   conversationId?: string | null;

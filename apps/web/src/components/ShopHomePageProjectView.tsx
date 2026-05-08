@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getShopHomePageTonePresets } from '../prompts/shop-home-page-tones';
 import { streamMessage } from '../providers/anthropic';
-import { sendShopHomePageConversationTurn } from '../providers/daemon';
+import { streamViaDaemon } from '../providers/daemon';
 import {
   fetchProjectFiles,
   projectFileUrl,
@@ -60,6 +60,7 @@ import type {
   ShopHomePageComposerDraftItem,
   ShopHomePageState,
 } from '../shop-home-page/types';
+import { agentModelDisplayName } from '../utils/agentLabels';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
@@ -176,6 +177,7 @@ export function ShopHomePageProjectView({
   });
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const cancelRef = useRef<AbortController | null>(null);
   const bridgeInitialPromptRef = useRef<string | undefined>(project.pendingPrompt);
   const seededExternalPromptRef = useRef(false);
   const tabsLoadedRef = useRef(false);
@@ -302,14 +304,33 @@ export function ShopHomePageProjectView({
         id: createClientId(),
         role: 'user',
         content: prompt,
+        createdAt: startedAt,
         attachments: attachments.length > 0 ? attachments : undefined,
       };
+      const selectedAgent =
+        config.mode === 'daemon' && config.agentId
+          ? agents.find((agent) => agent.id === config.agentId)
+          : null;
+      const selectedAgentChoice =
+        config.mode === 'daemon' && config.agentId
+          ? config.agentModels?.[config.agentId]
+          : undefined;
       const assistantId = createClientId();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
         content: '',
+        agentId: config.mode === 'daemon' ? config.agentId ?? undefined : undefined,
+        agentName:
+          config.mode === 'daemon'
+            ? agentModelDisplayName(
+                config.agentId,
+                selectedAgent?.name,
+                selectedAgentChoice?.model,
+              )
+            : undefined,
         events: [],
+        createdAt: startedAt,
         startedAt,
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
       };
@@ -349,7 +370,11 @@ export function ShopHomePageProjectView({
       };
 
       const controller = new AbortController();
+      const cancelController = new AbortController();
       abortRef.current = controller;
+      cancelRef.current = cancelController;
+      persistMessage(userMsg);
+      persistMessage(assistantMsg);
 
       const finalizeTurn = async () => {
         const nextFiles = await refreshProjectFiles();
@@ -377,6 +402,7 @@ export function ShopHomePageProjectView({
           updateAssistant((prev) => ({ ...prev, endedAt: Date.now() }));
           setStreaming(false);
           abortRef.current = null;
+          cancelRef.current = null;
           void finalizeTurn();
         },
         onError: (err: Error) => {
@@ -384,6 +410,7 @@ export function ShopHomePageProjectView({
           updateAssistant((prev) => ({ ...prev, endedAt: Date.now() }));
           setStreaming(false);
           abortRef.current = null;
+          cancelRef.current = null;
           void finalizeTurn();
         },
       };
@@ -394,30 +421,43 @@ export function ShopHomePageProjectView({
           return;
         }
         const choice = config.agentModels?.[config.agentId];
-        try {
-          await sendShopHomePageConversationTurn({
-            agentId: config.agentId,
-            projectId: project.id,
-            conversationId: activeConversationId,
-            message: prompt,
-            attachments: attachments.map((attachment) => attachment.path),
-            model: choice?.model ?? null,
-            reasoning: choice?.reasoning ?? null,
-          });
-          const refreshed = await listMessages(project.id, activeConversationId);
-          setMessages(refreshed);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : String(err));
-        } finally {
-          setStreaming(false);
-          abortRef.current = null;
-          void finalizeTurn();
-        }
+        void streamViaDaemon({
+          agentId: config.agentId,
+          history: nextHistory,
+          signal: controller.signal,
+          cancelSignal: cancelController.signal,
+          handlers,
+          projectId: project.id,
+          conversationId: activeConversationId,
+          assistantMessageId: assistantId,
+          clientRequestId: createClientId(),
+          skillId: project.skillId ?? null,
+          designSystemId: project.designSystemId ?? null,
+          attachments: attachments.map((attachment) => attachment.path),
+          model: choice?.model ?? null,
+          reasoning: choice?.reasoning ?? null,
+          requestSource: 'web-chat',
+          onRunCreated: (runId) => {
+            updateAssistant((prev) => ({ ...prev, runId, runStatus: 'queued' }));
+          },
+          onRunStatus: (runStatus) => {
+            updateAssistant((prev) => ({
+              ...prev,
+              runStatus,
+              endedAt:
+                runStatus === 'succeeded' || runStatus === 'failed' || runStatus === 'canceled'
+                  ? prev.endedAt ?? Date.now()
+                  : prev.endedAt,
+            }));
+          },
+          onRunEventId: (lastRunEventId) => {
+            updateAssistant((prev) => ({ ...prev, lastRunEventId }));
+          },
+        });
         return;
       }
 
       const systemPrompt = '店铺首页项目对话';
-      persistMessage(userMsg);
       pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
       void streamMessage(config, systemPrompt, nextHistory, controller.signal, {
         onDelta: (delta) => {
@@ -443,6 +483,8 @@ export function ShopHomePageProjectView({
   );
 
   const handleStop = useCallback(() => {
+    cancelRef.current?.abort();
+    cancelRef.current = null;
     abortRef.current?.abort();
     abortRef.current = null;
     setStreaming(false);

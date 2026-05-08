@@ -57,6 +57,7 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  requestSource?: 'web-chat' | 'openclaw' | null;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
@@ -99,6 +100,7 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  requestSource,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
@@ -123,6 +125,7 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    requestSource: requestSource ?? 'web-chat',
   };
   const body = JSON.stringify(request);
 

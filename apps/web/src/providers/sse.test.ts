@@ -333,6 +333,7 @@ describe('streamViaDaemon', () => {
       conversationId: 'conversation-1',
       assistantMessageId: 'assistant-1',
       clientRequestId: 'client-1',
+      requestSource: 'web-chat',
       onRunCreated,
       onRunStatus,
       onRunEventId,
@@ -343,6 +344,7 @@ describe('streamViaDaemon', () => {
       conversationId: 'conversation-1',
       assistantMessageId: 'assistant-1',
       clientRequestId: 'client-1',
+      requestSource: 'web-chat',
     });
     expect(onRunCreated).toHaveBeenCalledWith('run-1');
     expect(onRunStatus).toHaveBeenCalledWith('queued');
@@ -350,6 +352,26 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenCalledWith('succeeded');
     expect(onRunEventId).toHaveBeenCalledWith('4');
     expect(onRunEventId).toHaveBeenCalledWith('5');
+  });
+
+  it('defaults daemon run requests to web-chat source', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toMatchObject({
+      requestSource: 'web-chat',
+    });
   });
 
   it('reattaches to an existing daemon run after the last stored event id', async () => {

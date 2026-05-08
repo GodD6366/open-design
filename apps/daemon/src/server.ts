@@ -1739,6 +1739,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           skillId: project.skillId || 'shop-home-page',
           systemPrompt: openClawAutomationInstruction(),
           openClawMessage: userContent,
+          requestSource: 'openclaw',
           model: cleanString(model) || null,
           reasoning: cleanString(reasoning) || null,
         },
@@ -3371,6 +3372,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     designSystemId,
     automationMode,
     message,
+    requestSource,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -3464,6 +3466,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
           rawMessage.includes('[form answers — storefront-requirements]'),
         automationHasVisualAnswers:
           rawMessage.includes('[form answers — shop-home-page-visual]'),
+        requestSource:
+          requestSource === 'openclaw' ? 'openclaw' : 'web-chat',
       });
       return {
         prompt: shopHomePagePrompt,
@@ -3509,6 +3513,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       model,
       reasoning,
       openClawMessage,
+      requestSource,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
@@ -3608,6 +3613,8 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         skillId,
         designSystemId,
         automationMode: automationMode === true,
+        requestSource:
+          requestSource === 'openclaw' ? 'openclaw' : 'web-chat',
         message: typeof openClawMessage === 'string' ? openClawMessage : message,
       });
     const instructionPrompt = [daemonSystemPrompt, systemPrompt]
