@@ -34,6 +34,12 @@ export interface ShopHomePageRequirements {
     custom: string;
   };
   other_requirements: string;
+  extended_answers?: Array<{
+    id: string;
+    label: string;
+    type: string;
+    answer: string | string[];
+  }>;
   counts: {
     sliderCount: number;
     goodsCount: number;

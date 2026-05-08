@@ -113,6 +113,7 @@ describe('composeShopHomePageSystemPrompt', () => {
         kind: 'shopHomePage',
       },
       automationMode: true,
+      requestSource: 'openclaw',
     });
 
     expect(out).toContain('## Automation mode');
@@ -128,6 +129,7 @@ describe('composeShopHomePageSystemPrompt', () => {
       automationMode: true,
       automationHasRequirementsAnswers: true,
       automationHasVisualAnswers: true,
+      requestSource: 'openclaw',
     });
 
     expect(out).toContain('already contains `[form answers — storefront-requirements]`');
@@ -149,5 +151,70 @@ describe('composeShopHomePageSystemPrompt', () => {
     expect(out).toContain('Treat it as a known default for `所属行业`');
     expect(out).toContain('do not re-ask that field as unknown');
     expect(out).toContain('allow the user to override it later');
+  });
+
+  it('documents fixed requirements questions, conditional module analysis, and dynamic extensions', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+    });
+
+    expect(out).toContain('Always include these fixed questions in this exact order:');
+    expect(out).toContain('1. `brand_name`');
+    expect(out).toContain('4. `modules`');
+    expect(out).toContain('5. `action_buttons`');
+    expect(out).toContain('6. `action_buttons_custom`');
+    expect(out).toContain('7. `other_requirements`');
+    expect(out).toContain('Default this field to `top_slider + user_assets + goods + shop_info`');
+    expect(out).toContain('When usable opening reference images exist, insert one conditional question immediately after `modules`: `module_analysis`');
+    expect(out).toContain('If there are no usable opening reference images, do not include `module_analysis` at all.');
+    expect(out).toContain('You may append 0-3 additional extension questions between `action_buttons_custom` and `other_requirements`.');
+    expect(out).toContain('prefixed with `ext_`');
+    expect(out).toContain('"extended_answers"');
+    expect(out).toContain('Persist every non-fixed question answer into `extended_answers`');
+    expect(out).toContain('When `module_analysis` is absent, derive `module_specs` deterministically by filtering the fixed module order `top_slider -> user_assets -> banner -> goods -> shop_info -> image_ad`');
+  });
+
+  it('keeps bridge metadata on the normal two-step flow for web chat', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+        externalControlMode: 'shop-home-page-bridge',
+      },
+      requestSource: 'web-chat',
+    });
+
+    expect(out).toContain('On a fresh storefront brief, your first assistant turn must be');
+    expect(out).toContain('<question-form id="shop-home-page-visual" title="视觉澄清">');
+    expect(out).not.toContain('do not emit a second human-facing visual clarification form');
+  });
+
+  it('keeps bridge metadata in bridge mode for openclaw requests', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+        externalControlMode: 'shop-home-page-bridge',
+      },
+      requestSource: 'openclaw',
+    });
+
+    expect(out).toContain('external-control bridge project');
+    expect(out).toContain('do not emit a second human-facing visual clarification form');
+    expect(out).not.toContain(
+      'your next assistant turn must be: one short Chinese sentence + a `<question-form id="shop-home-page-visual" title="视觉澄清">` block + stop.',
+    );
+  });
+
+  it('uses the normalized visual form id in the interactive workflow text', () => {
+    const out = composeShopHomePageSystemPrompt({
+      metadata: {
+        kind: 'shopHomePage',
+      },
+      requestSource: 'web-chat',
+    });
+
+    expect(out).toContain('<question-form id="shop-home-page-visual" title="视觉澄清">');
+    expect(out).not.toContain('<question-form id="storefront-visual" title="视觉澄清">');
   });
 });

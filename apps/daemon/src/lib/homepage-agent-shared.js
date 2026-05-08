@@ -148,6 +148,27 @@ function normalizeActionButtons(value) {
   };
 }
 
+function normalizeExtendedAnswers(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const id = typeof item.id === "string" ? item.id.trim() : "";
+      const label = typeof item.label === "string" ? item.label.trim() : "";
+      const type = typeof item.type === "string" ? item.type.trim() : "";
+      const answer = Array.isArray(item.answer)
+        ? item.answer.filter((entry) => typeof entry === "string")
+        : typeof item.answer === "string"
+          ? item.answer.trim()
+          : "";
+      return { id, label, type, answer };
+    })
+    .filter((item) => item.id && item.label && item.type);
+}
+
 function splitActionButtonCustom(value) {
   if (typeof value !== "string" || !value.trim()) {
     return [];
@@ -404,6 +425,7 @@ function buildInitialHomepageRequirements(prompt, overrides = {}) {
       typeof overrides.other_requirements === "string"
         ? overrides.other_requirements.trim()
         : "",
+    extended_answers: normalizeExtendedAnswers(overrides.extended_answers),
     counts,
     confirmation_questions: [
       "确认 module_specs 的顺序、模块类型、内容目标和 image_ad 比例提示。",
@@ -448,6 +470,12 @@ function buildPromptFromRequirements(requirements) {
     `- 功能按钮: ${Array.isArray(actionButtons.selected) ? actionButtons.selected.join("、") : ""}`,
     `- 按钮补充: ${actionButtons.custom || ""}`,
     `- 其他要求: ${requirements.other_requirements || ""}`,
+    ...(Array.isArray(requirements.extended_answers) && requirements.extended_answers.length > 0
+      ? requirements.extended_answers.map((item) => {
+          const answer = Array.isArray(item.answer) ? item.answer.join("、") : item.answer || "";
+          return `- 扩展问题 ${item.label || item.id}: ${answer}`;
+        })
+      : []),
     "",
     "已确认模块规格:",
     ...specs.map((spec, index) => {

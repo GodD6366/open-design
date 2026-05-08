@@ -19,6 +19,11 @@ const QUESTION = `<question-form id="storefront-requirements" title="需求澄�
       "required": true,
       "options": ["top_slider（顶部主视觉轮播）", "user_assets（客户资产功能入口）"],
       "defaultValue": ["top_slider（顶部主视觉轮播）", "user_assets（客户资产功能入口）"]
+    },
+    {
+      "id": "ext_campaign_focus",
+      "label": "本次重点想推什么",
+      "type": "text"
     }
   ]
 }
@@ -89,6 +94,7 @@ describe('OpenClaw shop-home-page helpers', () => {
       [
         '- 店铺名称: 山野咖啡',
         '- 本次需要的模块: top_slider（顶部主视觉轮播）, user_assets（客户资产功能入口）',
+        '- 本次重点想推什么: 新品礼盒',
       ].join('\n'),
     );
 
@@ -96,6 +102,7 @@ describe('OpenClaw shop-home-page helpers', () => {
       '[form answers — storefront-requirements]',
       '- 店铺名称: 山野咖啡',
       '- 本次需要的模块: top_slider（顶部主视觉轮播）, user_assets（客户资产功能入口）',
+      '- 本次重点想推什么: 新品礼盒',
     ].join('\n'));
   });
 

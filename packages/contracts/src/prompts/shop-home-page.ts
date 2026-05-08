@@ -61,6 +61,7 @@ type ShopHomePagePromptInput = {
   automationMode?: boolean | undefined;
   automationHasRequirementsAnswers?: boolean | undefined;
   automationHasVisualAnswers?: boolean | undefined;
+  requestSource?: 'web-chat' | 'openclaw' | undefined;
 };
 
 export function composeShopHomePageSystemPrompt({
@@ -70,9 +71,11 @@ export function composeShopHomePageSystemPrompt({
   automationMode,
   automationHasRequirementsAnswers,
   automationHasVisualAnswers,
+  requestSource,
 }: ShopHomePagePromptInput): string {
   const externalBridgeMode =
-    metadata?.externalControlMode === 'shop-home-page-bridge';
+    metadata?.externalControlMode === 'shop-home-page-bridge' &&
+    requestSource === 'openclaw';
   const automationSection = automationMode
     ? [
         '## Automation mode',
@@ -116,12 +119,12 @@ export function composeShopHomePageSystemPrompt({
       ? '1. On a fresh storefront brief for this external-control bridge project, your first assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-requirements" title="需求澄清">` block + stop.'
       : '1. On a fresh storefront brief, your first assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-requirements" title="需求澄清">` block + stop.',
     '   - If the opening turn already includes local reference images that are available in the current daemon run, analyze them before emitting the form.',
-    '   - Reflect that analysis directly in the form defaults: infer the default `本次需要的模块` selection and prefill `参考图模块分析` with ordered module suggestions from top to bottom.',
+    '   - Reflect that analysis directly in the form defaults: infer the default `本次需要的模块` selection and, only when usable opening reference images exist, prefill `参考图模块分析` with ordered module suggestions from top to bottom.',
     '   - Only treat modules that are visibly present in the uploaded frame as confirmed evidence. Do not infer off-screen / next-screen modules from a partial screenshot.',
     '   - Ignore phone chrome, system status UI, bottom tabs, floating widgets, and other host-app UI when mapping storefront modules.',
     externalBridgeMode
       ? '2. After the user answers that requirements form, do not emit a second human-facing visual clarification form. Infer the visual answers from project-local references when available, otherwise choose a deterministic storefront tone preset, then write `shop-home-page.requirements.json`, `shop-home-page.reference-state.json`, `shop-home-page.style-guide.json`, and `shop-home-page.schema.json` in place.'
-      : '2. After the user answers that requirements form, your next assistant turn must be: one short Chinese sentence + a `<question-form id="storefront-visual" title="视觉澄清">` block + stop.',
+      : '2. After the user answers that requirements form, your next assistant turn must be: one short Chinese sentence + a `<question-form id="shop-home-page-visual" title="视觉澄清">` block + stop.',
     externalBridgeMode
       ? '3. Once schema generation succeeds in this bridge project, the host UI will auto-trigger storefront asset generation. Keep `shop-home-page.reference-state.json`, the style guide, and the schema compatible with that automatic follow-up step.'
       : '3. After the user answers the visual form, read any referenced project files if needed, then write `shop-home-page.requirements.json`, `shop-home-page.reference-state.json`, and `shop-home-page.schema.json` in place.',
@@ -150,7 +153,8 @@ export function composeShopHomePageSystemPrompt({
     '## Turn-1 form contract',
     '',
     'Your first response must emit `<question-form id="storefront-requirements" title="需求澄清">` with a JSON body.',
-    'The JSON body must use `submitLabel = "继续视觉澄清"` and include these questions in this exact order:',
+    'The JSON body must use `submitLabel = "继续视觉澄清"`.',
+    'Always include these fixed questions in this exact order:',
     '1. `brand_name`: label `店铺名称`, type `text`, required `true`, placeholder `例如：山野咖啡`.',
     '2. `brand_logo`: label `店铺 Logo`, type `text`, placeholder `例如：logo.png、https://...、圆形咖啡豆字标`.',
     '3. `industry`: label `所属行业`, type `text`, required `true`, placeholder `例如：咖啡、烘焙、美妆、零售`.',
@@ -161,12 +165,15 @@ export function composeShopHomePageSystemPrompt({
     '   - `goods（商品展示）`',
     '   - `shop_info（品牌信息长图）`',
     '   - `image_ad（参考图兜底广告块）`',
-    '   Default this field to `top_slider + user_assets + shop_info` when there is no usable opening reference image analysis. If you did analyze opening reference images, default it to the visibly inferred module families instead.',
-    '5. `module_analysis`: label `参考图模块分析`, type `textarea`, help `这是基于首轮参考图生成的模块顺序建议。可直接编辑、删除或补充，生成 requirements 时会按这里的顺序和说明写入 module_specs。`, placeholder `例如：1. top_slider: 首屏品牌海报；2. image_ad [ratio=3:4]: 特色活动广告块`.',
-    '   If you analyzed opening reference images, prefill `defaultValue` with an ordered summary from top to bottom. Preserve repeated `image_ad` and include `[ratio=WxH]` hints when they matter. If you did not analyze any usable image, leave this field empty but still include it.',
-    '6. `action_buttons`: label `功能按钮需要覆盖哪些功能`, type `checkbox`, required `true`, options `到店自取`, `外卖点单`, `扫码下单`, `会员专享`, default `到店自取 + 外卖点单`.',
-    '7. `action_buttons_custom`: label `其他功能按钮补充`, type `textarea`, placeholder `例如：拼团秒杀、优惠券中心、到店核销`.',
-    '8. `other_requirements`: label `其他要求`, type `textarea`, placeholder `例如：突出新品、保留品牌故事、不要复杂促销氛围`.',
+    '   Default this field to `top_slider + user_assets + goods + shop_info` when there is no usable opening reference image analysis. If you did analyze opening reference images, default it to the visibly inferred module families instead.',
+    '5. `action_buttons`: label `功能按钮需要覆盖哪些功能`, type `checkbox`, required `true`, options `到店自取`, `外卖点单`, `扫码下单`, `会员专享`, default `到店自取 + 外卖点单`.',
+    '6. `action_buttons_custom`: label `其他功能按钮补充`, type `textarea`, placeholder `例如：拼团秒杀、优惠券中心、到店核销`.',
+    '7. `other_requirements`: label `其他要求`, type `textarea`, placeholder `例如：突出新品、保留品牌故事、不要复杂促销氛围`.',
+    'When usable opening reference images exist, insert one conditional question immediately after `modules`: `module_analysis`, label `参考图模块分析`, type `textarea`, help `这是基于首轮参考图生成的模块顺序建议。可直接编辑、删除或补充，生成 requirements 时会按这里的顺序和说明写入 module_specs。`, placeholder `例如：1. top_slider: 首屏品牌海报；2. image_ad [ratio=3:4]: 特色活动广告块`.',
+    'If `module_analysis` is present, prefill `defaultValue` with an ordered summary from top to bottom. Preserve repeated `image_ad` and include `[ratio=WxH]` hints when they matter.',
+    'If there are no usable opening reference images, do not include `module_analysis` at all.',
+    'You may append 0-3 additional extension questions between `action_buttons_custom` and `other_requirements`.',
+    'Each extension question must satisfy all of these rules: it materially affects storefront schema, copy, or asset generation; it does not duplicate fixed-question coverage; it uses a stable ASCII `snake_case` id prefixed with `ext_`; it uses only `text`, `textarea`, `radio`, or `checkbox`; and its wording stays storefront-native.',
     'Set the form `description` to mention whether opening reference images were analyzed. If they were, say that the module order suggestions came from those images; otherwise use the generic requirement-clarification description.',
     '',
     'After `</question-form>`, stop immediately.',
@@ -210,6 +217,10 @@ export function composeShopHomePageSystemPrompt({
     '    "custom": "string"',
     '  },',
     '  "other_requirements": "string",',
+    '  "extended_answers": [',
+    '    { "id": "module_analysis", "label": "参考图模块分析", "type": "textarea", "answer": "string" },',
+    '    { "id": "ext_campaign_focus", "label": "本次重点想推什么", "type": "text", "answer": "string | string[]" }',
+    '  ],',
     '  "counts": {',
     '    "sliderCount": 1,',
     '    "goodsCount": 2',
@@ -223,9 +234,12 @@ export function composeShopHomePageSystemPrompt({
     '- `module_specs` can only contain: `top_slider`, `user_assets`, `banner`, `goods`, `shop_info`, `image_ad`.',
     '- Keep `module_specs` order exactly as confirmed by the user. Only `image_ad` may repeat; repeated `image_ad` entries each represent one unmatched reference block.',
     '- `modules` is the ordered module family list derived from `module_specs`, so repeated `image_ad` entries collapse to one family entry there.',
-    '- Map the clarified fields as follows: `店铺名称 -> style.brand_name`, `店铺 Logo -> brand_logo`, `所属行业 -> style.industry`, `功能按钮需要覆盖哪些功能 -> action_buttons.selected`, `其他功能按钮补充 -> action_buttons.custom`, `其他要求 -> other_requirements`.',
-    '- If the requirements form includes `参考图模块分析`, treat that field as editable daemon-side structured analysis. Parse it back into ordered `module_specs`, preserve repeated `image_ad`, and keep any user edits to wording or ratio hints.',
-    '- The `本次需要的模块` checkbox is an inclusion filter for module families. If a family is unchecked, remove those specs. If a checked family is missing from `参考图模块分析`, append one inferred spec for that family in checkbox order.',
+    '- Map the fixed fields as follows: `店铺名称 -> style.brand_name`, `店铺 Logo -> brand_logo`, `所属行业 -> style.industry`, `功能按钮需要覆盖哪些功能 -> action_buttons.selected`, `其他功能按钮补充 -> action_buttons.custom`, `其他要求 -> other_requirements`.',
+    '- Persist every non-fixed question answer into `extended_answers` with its original `id`, `label`, `type`, and parsed answer. This includes `module_analysis` when present.',
+    '- If the requirements form includes `参考图模块分析`, treat that field as editable daemon-side structured analysis. Parse it back into ordered `module_specs`, preserve repeated `image_ad`, keep any user edits to wording or ratio hints, and also retain the raw answer in `extended_answers`.',
+    '- The `本次需要的模块` checkbox is an inclusion filter for module families. If a family is unchecked, remove those specs.',
+    '- When `module_analysis` is present, if a checked family is missing from it, append one inferred spec for that family in checkbox order after the analyzed specs.',
+    '- When `module_analysis` is absent, derive `module_specs` deterministically by filtering the fixed module order `top_slider -> user_assets -> banner -> goods -> shop_info -> image_ad` against the checked families. Do not let the model invent a different order.',
     '- Reference screenshots only prove the modules visible in that frame. Never use them to silently add `banner`, `goods`, or `shop_info` from speculative lower content.',
     '- When a visible block does not map cleanly to the supported module families, use `image_ad` with a ratio hint only if that block is part of the storefront canvas. Ignore phone chrome, status bars, bottom tabs, floating widgets, and other non-storefront UI.',
     '- Keep `action_buttons.selected` in the same order as the checked labels, and keep `action_buttons.custom` as raw free-text.',

@@ -71,6 +71,26 @@ function normalizeActionButtons(input: ShopHomePageState['requirements']['action
   return { selected, custom };
 }
 
+function normalizeExtendedAnswers(
+  input: ShopHomePageState['requirements']['extended_answers'] | undefined,
+) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((item): item is NonNullable<ShopHomePageState['requirements']['extended_answers']>[number] =>
+      Boolean(item && typeof item === 'object' && typeof item.id === 'string' && typeof item.label === 'string' && typeof item.type === 'string'),
+    )
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      type: item.type,
+      answer: Array.isArray(item.answer)
+        ? item.answer.filter((value): value is string => typeof value === 'string')
+        : typeof item.answer === 'string'
+          ? item.answer
+          : '',
+    }));
+}
+
 function normalizeShopHomePageRequirements(
   input: ShopHomePageState['requirements'] | undefined,
 ): ShopHomePageState['requirements'] {
@@ -91,6 +111,7 @@ function normalizeShopHomePageRequirements(
     brand_logo: input?.brand_logo ?? '',
     action_buttons: normalizeActionButtons(input?.action_buttons),
     other_requirements: input?.other_requirements ?? '',
+    extended_answers: normalizeExtendedAnswers(input?.extended_answers),
     counts: {
       sliderCount: input?.counts?.sliderCount ?? 1,
       goodsCount: input?.counts?.goodsCount ?? 2,

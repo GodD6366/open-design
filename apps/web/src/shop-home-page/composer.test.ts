@@ -39,6 +39,7 @@ function buildState(): ShopHomePageState {
         custom: '',
       },
       other_requirements: '',
+      extended_answers: [],
       counts: {
         sliderCount: 1,
         goodsCount: 2,

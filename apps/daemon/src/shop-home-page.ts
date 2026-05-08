@@ -1017,6 +1017,7 @@ function buildDefaultRequirementsTemplate() {
       custom: '',
     },
     other_requirements: '',
+    extended_answers: [],
   });
 }
 
@@ -1327,6 +1328,19 @@ function coerceRequirements(raw) {
       brand_logo: stringOr(raw.brand_logo),
       action_buttons: normalizeActionButtons(raw.action_buttons),
       other_requirements: stringOr(raw.other_requirements),
+      extended_answers: Array.isArray(raw.extended_answers)
+        ? raw.extended_answers
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+              id: stringOr(item.id),
+              label: stringOr(item.label),
+              type: stringOr(item.type),
+              answer: Array.isArray(item.answer)
+                ? item.answer.filter((value) => typeof value === 'string')
+                : stringOr(item.answer),
+            }))
+            .filter((item) => item.id && item.label && item.type)
+        : [],
       counts: {
         sliderCount: getRequestedItemCount(specs, 'top_slider', toPositiveInteger(raw.counts?.sliderCount, 1)),
         goodsCount: getRequestedItemCount(specs, 'goods', toPositiveInteger(raw.counts?.goodsCount, 2)),
@@ -1370,6 +1384,7 @@ function legacyBriefToRequirements(rawBrief) {
     avoid: [],
     brand_logo: stringOr(brief.brandLogo),
     other_requirements: '',
+    extended_answers: [],
   });
 }
 

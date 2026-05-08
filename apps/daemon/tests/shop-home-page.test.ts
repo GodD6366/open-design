@@ -38,6 +38,7 @@ function buildRequirements() {
       selected: ['到店自取', '外卖点单'],
       custom: '',
     },
+    extended_answers: [],
     counts: {
       sliderCount: 2,
       goodsCount: 2,
@@ -251,6 +252,7 @@ describe('reference-state sync', () => {
     );
 
     expect(state.requirements.style.industry).toBe('咖啡茶饮');
+    expect(state.requirements.extended_answers).toEqual([]);
   });
 
   it('keeps legacy compatibility when metadata industry is missing', async () => {
@@ -268,6 +270,46 @@ describe('reference-state sync', () => {
     );
 
     expect(state.requirements.style.industry).toBe('');
+    expect(state.requirements.extended_answers).toEqual([]);
+  });
+
+  it('keeps structured extended_answers when loading requirements', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'shop-home-page-'));
+    const projectsRoot = path.join(root, 'projects');
+    const projectId = 'project-extended-answers';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+
+    const requirements = {
+      ...buildRequirements(),
+      extended_answers: [
+        {
+          id: 'module_analysis',
+          label: '参考图模块分析',
+          type: 'textarea',
+          answer: '1. top_slider: 首屏品牌海报；2. goods: 新品展示',
+        },
+        {
+          id: 'ext_campaign_focus',
+          label: '本次重点想推什么',
+          type: 'text',
+          answer: '端午礼盒',
+        },
+      ],
+    };
+    await writeFile(
+      path.join(projectDir, 'shop-home-page.requirements.json'),
+      `${JSON.stringify(requirements, null, 2)}\n`,
+    );
+
+    const state = await loadShopHomePageState(
+      projectsRoot,
+      projectId,
+      shopHomePageSkillDir(process.cwd()),
+      { kind: 'shopHomePage' } as any,
+    );
+
+    expect(state.requirements.extended_answers).toEqual(requirements.extended_answers);
   });
 
   it('lets user_explicit reference images override template defaults at load time', async () => {
@@ -355,6 +397,7 @@ describe('applyShopHomePageSchemaText with module specs sync', () => {
         custom: '',
       },
       other_requirements: '',
+      extended_answers: [],
       counts: {
         sliderCount: 1,
         goodsCount: 2,
