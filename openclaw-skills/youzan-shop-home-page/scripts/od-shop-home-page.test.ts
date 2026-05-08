@@ -125,6 +125,96 @@ test('start exits immediately when the daemon returns a requirements form', asyn
   }
 });
 
+test('start with --template-id includes shopHomePageTemplateId in POST body', async () => {
+  let capturedBody: Record<string, unknown> = {};
+  const server = http.createServer((req, res) => {
+    assert.equal(req.method, 'POST');
+    assert.equal(req.url, '/api/openclaw/shop-home-page/sessions');
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      capturedBody = JSON.parse(body);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          projectId: 'p-tpl',
+          conversationId: 'c-tpl',
+          state: 'awaiting_requirements',
+          replyType: 'requirements_form',
+          replyMarkdown: '## 需求澄清',
+          runId: null,
+          runStatus: null,
+          assetTasks: [],
+        }),
+      );
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+
+  try {
+    const result = await runCli(
+      ['start', '--brief', '帮我生成首页', '--template-id', 'bakery-doodle-toast', '--poll-ms', '5'],
+      { OD_DAEMON_URL: `http://127.0.0.1:${port}` },
+    );
+
+    assert.equal(result.status, 0);
+    assert.equal(capturedBody.shopHomePageTemplateId, 'bakery-doodle-toast');
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('start without --template-id sends shopHomePageTemplateId as null', async () => {
+  let capturedBody: Record<string, unknown> = {};
+  const server = http.createServer((req, res) => {
+    assert.equal(req.method, 'POST');
+    assert.equal(req.url, '/api/openclaw/shop-home-page/sessions');
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      capturedBody = JSON.parse(body);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          projectId: 'p-no-tpl',
+          conversationId: 'c-no-tpl',
+          state: 'awaiting_requirements',
+          replyType: 'requirements_form',
+          replyMarkdown: '## 需求澄清',
+          runId: null,
+          runStatus: null,
+          assetTasks: [],
+        }),
+      );
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+
+  try {
+    const result = await runCli(
+      ['start', '--brief', '帮我生成首页', '--poll-ms', '5'],
+      { OD_DAEMON_URL: `http://127.0.0.1:${port}` },
+    );
+
+    assert.equal(result.status, 0);
+    assert.equal(capturedBody.shopHomePageTemplateId, null);
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('send polls status instead of resending the same message while the run is active', async () => {
   const hits = { send: 0, status: 0 };
   const statusReplies = [

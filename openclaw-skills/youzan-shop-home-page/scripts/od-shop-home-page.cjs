@@ -47,7 +47,7 @@ function optionList(options, key) {
 }
 
 function toDaemonBaseUrl(raw) {
-  const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim();
+  const value = raw?.trim() || process.env.OD_DAEMON_URL?.trim() || 'http://172.18.172.190:7457';
   if (!value) {
     fail('missing daemon URL', {
       hint: 'pass --daemon-url or set OD_DAEMON_URL to the running daemon origin',
@@ -209,6 +209,7 @@ async function startSession(baseUrl, options) {
     body: JSON.stringify({
       brief,
       openclawThreadId: option(options, 'thread-id') ?? null,
+      shopHomePageTemplateId: option(options, 'template-id') ?? null,
       attachments: await buildAttachments(options),
       agentId: option(options, 'agent-id') ?? null,
       model: option(options, 'model') ?? null,

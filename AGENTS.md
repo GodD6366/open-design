@@ -35,6 +35,8 @@
 - In the storefront homepage flow, external storefront-control entrypoints must persist and expose `projectId` as the stable resume handle. Reattachment after local restarts should recover the same persisted project conversation by `projectId`; do not require a separate ephemeral session ID from callers.
 - In the storefront homepage preview, pending image placeholders should fully fill their module bounds and keep the waiting mark visually centered instead of leaving trailing blank space.
 - In the storefront homepage preview contract, `storefront.screen.html` is inner content only; system status UI and phone chrome belong to the outer preview/debug hosts.
+- In the storefront homepage flow, project creation must prioritize calling `youzan-shop` to retrieve shop information (industry, shop name); when the industry is `烘焙`, automatically pick one of the three bakery templates (`bakery-doodle-toast`, `bakery-botanical-paper`, `bakery-autumn-sunroom`) at random instead of using the empty template.
+- In the storefront homepage flow, product image generation must call `youzan-item` to fetch product data (name, description, price, existing product images), then pass both the product photo URLs and structured product information to the image generation model as context.
 - When `shopHomePage` behavior changes on this branch, update this file in the same change with the new high-level direction. Keep the notes behavioral and concise; do not turn `AGENTS.md` into an implementation log.
 
 # Directory Guide

@@ -1912,6 +1912,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       err.statusCode = 400;
       throw err;
     }
+    const templateId = cleanString(body?.shopHomePageTemplateId) || null;
     const id = safeProjectId('shop-home-page');
     const now = Date.now();
     const skillId = await resolveShopHomePageSkillIdForOpenClaw();
@@ -1924,6 +1925,7 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
         metadata: {
           kind: SHOP_HOME_PAGE_KIND,
           externalControlMode: 'shop-home-page-bridge',
+          ...(templateId ? { shopHomePageTemplateId: templateId } : {}),
           ...(cleanString(body?.openclawThreadId)
             ? { openclawThreadId: cleanString(body.openclawThreadId) }
             : {}),
@@ -1939,6 +1941,9 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       updatedAt: now,
     });
     await ensureProject(PROJECTS_DIR, project.id);
+    if (templateId) {
+      await initializeShopHomePageTemplateProject(PROJECTS_DIR, id, PROJECT_ROOT, { ...project.metadata, shopHomePageTemplateId: templateId });
+    }
     const session = {
       id: project.id,
       projectId: project.id,
