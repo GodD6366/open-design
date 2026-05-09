@@ -200,7 +200,7 @@ async function main() {
 
   let manifest: JsonObject = {
     version: "1.0.0",
-    generator: "youzan-image-skill",
+    generator: "generate-image-assets.ts",
     generated_at: new Date().toISOString(),
     items: {},
   };
@@ -246,15 +246,15 @@ async function main() {
   }
 
   manifest.items = items;
-  manifest.generator = "youzan-image-skill";
+  manifest.generator = "generate-image-assets.ts";
   manifest.generated_at = new Date().toISOString();
   await writeJson(manifestPath, manifest);
   await writeJson(requestsPath, {
     version: "1.0.0",
-    generator: "youzan-image-skill",
+    generator: "generate-image-assets.ts",
     generated_at: new Date().toISOString(),
     instructions:
-      "Use the global youzan-image Skill for every pending item. After each Skill call returns a URL, run record-image-result.ts with the item id and URL.",
+      "Run generate-image-assets.ts for every pending item. It tries the global youzan-image Skill first, then falls back to built-in OpenAI image generation plus youzan-oss upload, and records the final CDN URL.",
     items: requestItems,
   });
   process.stdout.write(

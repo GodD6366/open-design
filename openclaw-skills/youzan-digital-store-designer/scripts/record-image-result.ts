@@ -53,7 +53,7 @@ function asObject(value: unknown): JsonObject {
 
 function assertUrl(value: string) {
   if (!/^https?:\/\/\S+$/i.test(value)) {
-    throw new Error("--url must be an http(s) URL returned by the youzan-image Skill");
+    throw new Error("--url must be a real generated image http(s) URL");
   }
   if (/example\.invalid/i.test(value)) {
     throw new Error("--url must be a real generated image URL, not a dry-run placeholder");
@@ -65,6 +65,7 @@ async function main() {
   const rootDir = path.resolve(positional[0] ?? ".");
   const id = option(options, "id");
   const url = option(options, "url");
+  const source = option(options, "source");
   if (!id) throw new Error("--id is required");
   if (!url) throw new Error("--url is required");
   assertUrl(url);
@@ -78,9 +79,10 @@ async function main() {
     throw new Error(`unknown image target id: ${id}`);
   }
   manifestItem.url = url;
+  if (source) manifestItem.source = source;
   items[id] = manifestItem;
   manifest.items = items;
-  manifest.generator = "youzan-image-skill";
+  manifest.generator = source ? "generate-image-assets.ts" : "youzan-image-skill";
   manifest.generated_at = new Date().toISOString();
   await writeJson(manifestPath, manifest);
 
@@ -90,7 +92,7 @@ async function main() {
     requests.items = requestItems.map((item) => {
       const requestItem = asObject(item);
       if (cleanString(requestItem.id) !== id) return item;
-      return { ...requestItem, status: "done", url };
+      return { ...requestItem, status: "done", url, ...(source ? { source } : {}) };
     });
     requests.generated_at = new Date().toISOString();
     await writeJson(requestsPath, requests);

@@ -17,8 +17,9 @@ triggers:
 # 有赞数字店铺设计器
 
 本 Skill 在当前工作目录生成一个完整的静态店铺首页包。流程包括：
-整理需求、生成 `requirements.json` 和 `schema.json`、调用全局 `youzan-image`
-Skill 生成图片、渲染 `dist/shop-home-page.preview.html`，并在完成前校验产物。
+整理需求、生成 `requirements.json` 和 `schema.json`、运行
+`generate-image-assets.ts` 生成真实图片资产、渲染
+`dist/shop-home-page.preview.html`，并在完成前校验产物。
 
 不要依赖 Open Design host、项目数据库、预览运行时、聊天 UI 控件或旧的店铺首页资产流水线。不要要求用户打开其它 UI 才能继续。
 
@@ -64,6 +65,7 @@ youzan-digital-store-designer/
 │   └── tokens.css
 └── scripts/
     ├── generate-images.ts
+    ├── generate-image-assets.ts
     ├── record-image-result.ts
     ├── render-page.ts
     └── validate-output.ts
@@ -79,16 +81,19 @@ youzan-digital-store-designer/
    node --experimental-strip-types "$SKILL_DIR/scripts/generate-images.ts" "$OUTPUT_DIR"
    ```
 
-   该脚本只写入 `image-requests.json` 和带空 URL 槽位的 `assets-manifest.json`，不要在该脚本中直接调用图片 CLI。
-4. 对 `image-requests.json.items` 中每个 `status = "pending"` 的条目，调用全局 `youzan-image` Skill 生图。每次调用都把该条目的 `prompt`、`size`、`files` 原样作为生图需求；不要改写或合并 prompt。
-
-   `youzan-image` Skill 返回图片 URL 后，立刻记录结果：
+   该脚本只写入 `image-requests.json` 和带空 URL 槽位的 `assets-manifest.json`，不要在该脚本中直接调用图片服务。
+4. 消费 `image-requests.json.items` 中每个 `status = "pending"` 的条目，生成真实图片资产并回写 CDN URL：
 
    ```bash
-   node --experimental-strip-types "$SKILL_DIR/scripts/record-image-result.ts" "$OUTPUT_DIR" --id "<image-request-id>" --url "<youzan-image 返回的 URL>"
+   node --experimental-strip-types "$SKILL_DIR/scripts/generate-image-assets.ts" "$OUTPUT_DIR"
    ```
 
-   必须等所有 pending 条目都有真实 URL 后再进入渲染。不要使用 dry-run URL、`example.invalid`、空 URL 或本地占位图完成页面。
+   `generate-image-assets.ts` 必须负责整条图片工作流，而不是让操作者人工逐条补图：
+   - 优先调用全局 `youzan-image`，并将每个条目的 `prompt`、`size`、`files` 原样传入，不要改写、截断或合并 prompt。
+   - 当 `youzan-image` 缺失、超时、调用失败、返回 5xx / 504、返回空结果、没有可用 URL，或 URL 不是可直接访问的真实 http(s) 地址时，自动兜底到 Skill 内置 OpenAI 生图流程。
+   - OpenAI 兜底生成后，必须通过 `youzan-oss` 上传，并把最终 CDN URL 写回 `assets-manifest.json`；静态包中不允许保留本地文件路径或临时文件引用。
+   - 严禁依赖 OD daemon、旧资产队列、Codex `image_gen`、dry-run URL、`example.invalid`、空 URL 或任意占位图完成页面。
+   - 必须等所有图片条目都有真实可访问的 http(s) CDN URL 后再进入渲染。
 5. 渲染静态页面：
 
    ```bash
@@ -153,12 +158,13 @@ youzan-digital-store-designer/
 - 不使用 OD daemon、web、数据库、项目状态、聊天 UI 控件、旧资产队列或 daemon 资产接口。
 - `shop-home-page.preview.html` 必须是可直接打开的自包含静态页面，不包含 OD 运行时、iframe、接口请求、localhost 地址或项目文件 URL。
 - 预览页必须用 CSS 响应式适配：手机视口直接显示页面，PC / 宽屏视口显示手机壳包裹效果。
-- 页面图片必须使用 `assets-manifest.json` 中由 `youzan-image` Skill 返回的 http(s) CDN 地址。
+- 页面图片必须使用 `assets-manifest.json` 中的真实 http(s) CDN 地址；优先来自 `youzan-image`，兜底时来自 Skill 内置 OpenAI 生图后再经 `youzan-oss` 上传。
 - 视觉细节从用户回答、参考图、行业、店铺名、商品和首页目标推断。
 - `banner` 和 `goods` 默认可选。
 - 3 个 `user_assets` 入口默认布局是 `一行三个`。
 - 只有用户明确说 `左一右二`、`一大两小`、`主次入口` 或等价表达时，才使用 `左一右二`。
 - 只有入口数量超过 5 个，或用户明确要求热区 / 自由布局时，才使用 `hotzone`。
 - 图片提示词默认要求直角边缘、零内边距；除非用户明确要求，不要生成圆角卡片壳或额外白边。
-- v1 唯一图片生成依赖是全局 `youzan-image` Skill；本 Skill 只负责整理请求、记录 URL、渲染和校验。
+- 图片生成入口固定为 `generate-image-assets.ts`。它优先使用全局 `youzan-image`，必要时自动兜底到 Skill 内置 OpenAI 生图 + `youzan-oss` 上传；不要改回人工逐条调用。
+- 严禁使用 OD daemon、Codex `image_gen`、dry-run URL、占位图或非 http(s) 资源冒充已完成图片。
 - `youzan-shop` 和 `youzan-item` 是未来可选集成，不要假设它们已存在。

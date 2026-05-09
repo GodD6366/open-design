@@ -215,9 +215,15 @@ async function validatePreviewHtml(packageDir: string, errors: string[]) {
       errors.push(`shop-home-page.preview.html contains forbidden runtime dependency: ${pattern}`);
     }
   }
-  for (const className of ["preview-stage", "preview-device", "preview-screen", "shop-page"]) {
+  for (const className of [
+    "storefront-phone-stage",
+    "storefront-phone-device",
+    "storefront-phone-screen",
+    "storefront-phone-scroll",
+    "sf-root",
+  ]) {
     if (!html.includes(className)) {
-      errors.push(`shop-home-page.preview.html missing responsive preview shell class: ${className}`);
+      errors.push(`shop-home-page.preview.html missing standard storefront preview class: ${className}`);
     }
   }
 }

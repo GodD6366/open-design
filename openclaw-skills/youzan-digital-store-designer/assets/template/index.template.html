@@ -9,20 +9,94 @@ __APP_CSS__
     </style>
   </head>
   <body>
-    <div class="preview-stage">
-      <div class="preview-device" aria-label="手机预览外壳">
-        <span class="preview-rail preview-rail-left-1" aria-hidden="true"></span>
-        <span class="preview-rail preview-rail-left-2" aria-hidden="true"></span>
-        <span class="preview-rail preview-rail-left-3" aria-hidden="true"></span>
-        <span class="preview-rail preview-rail-right-1" aria-hidden="true"></span>
-        <span class="preview-island" aria-hidden="true"></span>
-        <div class="preview-screen">
-          <main class="shop-page" aria-label="__PAGE_TITLE__">
+    <div class="storefront-phone-stage" id="storefrontPhoneStage">
+      <div class="storefront-phone-scale-box" id="storefrontPhoneScaleBox">
+        <div class="storefront-phone-device" id="storefrontPhoneDevice" aria-label="店铺首页手机预览">
+          <span class="storefront-phone-rail storefront-phone-rail-left-1" aria-hidden="true"></span>
+          <span class="storefront-phone-rail storefront-phone-rail-left-2" aria-hidden="true"></span>
+          <span class="storefront-phone-rail storefront-phone-rail-left-3" aria-hidden="true"></span>
+          <span class="storefront-phone-rail storefront-phone-rail-right-1" aria-hidden="true"></span>
+          <span class="storefront-phone-island" aria-hidden="true"></span>
+          <div class="storefront-phone-screen" id="storefrontPhoneScreen">
+            <div class="storefront-phone-overlay">
+              <div class="storefront-phone-statusbar">
+                <span>9:41</span>
+                <span class="storefront-phone-status-right">
+                  __STATUS_SIGNAL__
+                  __STATUS_WIFI__
+                  __STATUS_BATTERY__
+                </span>
+              </div>
+              <div class="storefront-phone-capsule-wrap">
+                __MINI_CAPSULE__
+              </div>
+            </div>
+            <div class="storefront-phone-scroll" id="storefrontPhoneScroll">
+              <main class="sf-root" aria-label="__PAGE_TITLE__">
+                <div class="sf-root__relative">
 __APP_HTML__
-          </main>
+                </div>
+              </main>
+            </div>
+            <div class="storefront-phone-home-indicator" aria-hidden="true"></div>
+          </div>
         </div>
       </div>
     </div>
     <script type="application/json" id="youzan-shop-home-page-schema">__SCHEMA_JSON__</script>
+    <script>
+      (function () {
+        var PHONE_W = 390;
+        var PHONE_H = 844;
+        var stage = document.getElementById("storefrontPhoneStage");
+        var scaleBox = document.getElementById("storefrontPhoneScaleBox");
+        var device = document.getElementById("storefrontPhoneDevice");
+        var screen = document.getElementById("storefrontPhoneScreen");
+        var scrollRoot = document.getElementById("storefrontPhoneScroll");
+
+        function updateScale() {
+          if (!stage || !scaleBox || !device) return;
+          if (window.matchMedia("(max-width: 699px)").matches) {
+            device.style.transform = "";
+            scaleBox.style.width = "";
+            scaleBox.style.height = "";
+            return;
+          }
+          var bounds = stage.getBoundingClientRect();
+          var availableW = Math.max(0, bounds.width - 32);
+          var availableH = Math.max(0, bounds.height - 32);
+          var scale = Math.min(1, availableW / PHONE_W, availableH / PHONE_H);
+          device.style.transform = "scale(" + scale + ")";
+          scaleBox.style.width = PHONE_W * scale + "px";
+          scaleBox.style.height = PHONE_H * scale + "px";
+        }
+
+        function updateChrome() {
+          if (!screen || !scrollRoot) return;
+          screen.classList.toggle("is-scrolled", (scrollRoot.scrollTop || 0) > 36);
+        }
+
+        updateScale();
+        updateChrome();
+        window.addEventListener("resize", updateScale);
+        if (scrollRoot) {
+          scrollRoot.addEventListener("scroll", updateChrome, { passive: true });
+        }
+
+        document.querySelectorAll("[data-carousel]").forEach(function (root) {
+          var items = root.querySelectorAll(".sf-carousel__item");
+          var dots = root.querySelectorAll(".sf-carousel__dots span");
+          if (!items || items.length < 2) return;
+          var index = 0;
+          window.setInterval(function () {
+            items[index].classList.remove("is-active");
+            if (dots[index]) dots[index].classList.remove("is-active");
+            index = (index + 1) % items.length;
+            items[index].classList.add("is-active");
+            if (dots[index]) dots[index].classList.add("is-active");
+          }, 3000);
+        });
+      })();
+    </script>
   </body>
 </html>
