@@ -171,6 +171,10 @@ function option(options: Map<string, string[]>, key: string, fallback = "") {
   return options.get(key)?.[0] ?? fallback;
 }
 
+function hasFlag(options: Map<string, string[]>, key: string) {
+  return options.has(key);
+}
+
 async function readJson(filePath: string): Promise<JsonObject> {
   const raw = await fs.readFile(filePath, "utf8");
   const parsed = JSON.parse(raw) as unknown;
@@ -282,10 +286,12 @@ function resolveReusableUrl(value: unknown) {
   return /^https?:\/\//i.test(input) ? input : "";
 }
 
-function assertRenderableAssetUrl(id: string, value: unknown, errors: string[]) {
+function assertRenderableAssetUrl(id: string, value: unknown, errors: string[], strictImages: boolean) {
   const url = cleanString(value);
   if (!url) {
-    errors.push(`${id} missing generated image URL`);
+    if (strictImages) {
+      errors.push(`${id} missing generated image URL`);
+    }
     return;
   }
   if (!/^https?:\/\/\S+$/i.test(url)) {
@@ -297,7 +303,7 @@ function assertRenderableAssetUrl(id: string, value: unknown, errors: string[]) 
   }
 }
 
-function assertManifestReadyForRendering(schema: JsonObject, manifest: JsonObject) {
+function assertManifestReadyForRendering(schema: JsonObject, manifest: JsonObject, strictImages: boolean) {
   const manifestItems = asObject(manifest.items);
   const errors: string[] = [];
   for (const moduleValue of asArray(schema.modules)) {
@@ -311,7 +317,7 @@ function assertManifestReadyForRendering(schema: JsonObject, manifest: JsonObjec
         const entryId = stringOr(asObject(entryValue).id);
         if (!entryId) continue;
         const id = `${moduleId}.entries.${entryId}`;
-        assertRenderableAssetUrl(id, asObject(manifestItems[id]).url, errors);
+        assertRenderableAssetUrl(id, asObject(manifestItems[id]).url, errors, strictImages);
       }
       continue;
     }
@@ -320,7 +326,7 @@ function assertManifestReadyForRendering(schema: JsonObject, manifest: JsonObjec
       const itemId = stringOr(asObject(itemValue).id);
       if (!itemId) continue;
       const id = `${moduleId}.items.${itemId}`;
-      assertRenderableAssetUrl(id, asObject(manifestItems[id]).url, errors);
+      assertRenderableAssetUrl(id, asObject(manifestItems[id]).url, errors, strictImages);
     }
   }
   if (errors.length > 0) {
@@ -961,13 +967,14 @@ async function copyIfExists(from: string, to: string) {
 async function main() {
   const { positional, options } = parseArgs(process.argv.slice(2));
   const rootDir = path.resolve(positional[0] ?? ".");
+  const strictImages = hasFlag(options, "strict-images");
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const skillDir = path.resolve(scriptDir, "..");
   const templateDir = path.resolve(option(options, "template-dir", path.join(skillDir, "assets", "template")));
   const rawSchema = await readJson(path.join(rootDir, "schema.json"));
   const requirements = await readJson(path.join(rootDir, "requirements.json"));
   const manifest = await readJson(path.join(rootDir, "assets-manifest.json"));
-  assertManifestReadyForRendering(rawSchema, manifest);
+  assertManifestReadyForRendering(rawSchema, manifest, strictImages);
   const schema = normalizeSchemaForRendering(rawSchema, manifest);
   const template = await fs.readFile(path.join(templateDir, "index.template.html"), "utf8");
   const baseCss = await fs.readFile(path.join(templateDir, "tokens.css"), "utf8");

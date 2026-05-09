@@ -29,12 +29,16 @@ dist/references/
   phone shell.
 - Do not depend on external JavaScript, runtime APIs, databases, iframes, or a
   host preview shell.
-- The page must contain real generated http(s) CDN image URLs from
-  `assets-manifest.json`. Prefer URLs returned by `youzan-image`; when that
-  path is unavailable or fails, use the Skill's built-in OpenAI image fallback
-  and upload the result through `youzan-oss` before rendering.
-- Do not treat placeholders, `example.invalid`, dry-run URLs, empty URLs, local
-  file paths, or non-http(s) URLs as completed images.
+- `render-page.ts` must be able to render the page framework before image
+  generation finishes. Empty manifest URLs mean "image pending" and should
+  render the standard component pending state.
+- Final image-ready renders must contain real generated http(s) CDN image URLs
+  from `assets-manifest.json`. Prefer URLs returned by `youzan-image`; when
+  that path is unavailable or fails, use the Skill's built-in OpenAI image
+  fallback and upload the result through `youzan-oss`.
+- Do not treat placeholders, `example.invalid`, dry-run URLs, local file paths,
+  or non-http(s) URLs as completed images. Empty URLs are allowed only for the
+  early framework preview.
 - Do not include OD runtime dependencies such as interface requests, project
   file URLs, localhost URLs, daemon env vars, or legacy asset commands.
 - Do not depend on OD daemon, Codex `image_gen`, or any host-only image flow.
@@ -93,7 +97,8 @@ every pending item; it is not a manual handoff checklist:
 }
 ```
 
-`generate-image-assets.ts` must resolve every pending item before rendering:
+`generate-image-assets.ts` can run after the initial framework preview exists.
+It must resolve every pending item before the final image-ready render:
 
 - First try the global `youzan-image` Skill with the item's `prompt`, `size`,
   and `files` unchanged.
@@ -105,5 +110,7 @@ every pending item; it is not a manual handoff checklist:
 - Never complete the flow with placeholders, dry-run URLs, `example.invalid`,
   local temp paths, or any other fake asset URL.
 
-The manifest is authoritative for rendering, and every rendered image URL must
-be a real reachable http(s) CDN URL.
+The manifest is authoritative for rendering. Empty URLs render pending states in
+the early preview; every non-empty rendered image URL must be a real reachable
+http(s) CDN URL. Final renders should run `render-page.ts --strict-images` and
+`validate-output.ts` without `--allow-missing-images`.
