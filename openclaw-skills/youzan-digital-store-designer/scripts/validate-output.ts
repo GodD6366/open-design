@@ -176,6 +176,9 @@ function validateManifest(schema: JsonObject, manifest: JsonObject, allowMissing
     if (!url && !allowMissingImages) {
       errors.push(`assets-manifest missing generated url for ${id}`);
     }
+    if (url && /example\.invalid/i.test(url)) {
+      errors.push(`assets-manifest contains placeholder url for ${id}`);
+    }
   }
 }
 

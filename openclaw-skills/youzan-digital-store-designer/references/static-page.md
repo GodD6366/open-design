@@ -26,9 +26,8 @@ dist/references/
 - Render a mobile-first page at a 375px content width.
 - Do not depend on external JavaScript, runtime APIs, databases, iframes, or a
   host preview shell.
-- The page should contain real generated image URLs from `assets-manifest.json`.
-- If an image is unavailable during a dry run, render a visibly labeled placeholder
-  so validation can distinguish it from a completed run.
+- The page must contain real generated image URLs from `assets-manifest.json`.
+- Do not treat placeholders, `example.invalid`, or empty URLs as completed images.
 - Keep text compact and aligned with the shop scene.
 - Use restrained, work-focused styling suitable for a merchant homepage.
 
@@ -39,7 +38,7 @@ dist/references/
 ```json
 {
   "version": "1.0.0",
-  "generator": "youzan-image",
+  "generator": "youzan-image-skill",
   "generated_at": "2026-05-09T00:00:00.000Z",
   "items": {
     "top_slider_1.items.hero": {
@@ -60,3 +59,29 @@ Target ids are stable:
 
 - image module item: `<module_id>.items.<item_id>`
 - user asset entry: `<module_id>.entries.<entry_id>`
+
+## Image Requests
+
+Before rendering, `generate-images.ts` writes `image-requests.json` in the output
+directory. This file is the handoff to the global `youzan-image` Skill:
+
+```json
+{
+  "version": "1.0.0",
+  "generator": "youzan-image-skill",
+  "items": [
+    {
+      "id": "top_slider_1.items.hero",
+      "size": "1008x1344",
+      "prompt": "string",
+      "files": [],
+      "status": "pending",
+      "url": ""
+    }
+  ]
+}
+```
+
+For each pending item, call the global `youzan-image` Skill with the item's
+`prompt`, `size`, and `files`. After the Skill returns a URL, record it with
+`record-image-result.ts`; the manifest is authoritative for rendering.

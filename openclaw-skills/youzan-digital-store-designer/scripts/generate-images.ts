@@ -1,8 +1,6 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const DEFAULT_YOUZAN_IMAGE_BIN = "/Users/godd/.cc-switch/skills/youzan-image/bin/youzan-image.js";
 const SUPPORTED_MODULES = new Set(["top_slider", "user_assets", "banner", "goods", "shop_info", "image_ad"]);
 
 type JsonObject = Record<string, unknown>;
@@ -40,10 +38,6 @@ function parseArgs(argv: string[]) {
     args.options.set(key, list);
   }
   return args;
-}
-
-function option(options: Map<string, string[]>, key: string, fallback = "") {
-  return options.get(key)?.[0] ?? fallback;
 }
 
 function hasFlag(options: Map<string, string[]>, key: string) {
@@ -194,51 +188,19 @@ async function collectTargets(rootDir: string, schema: JsonObject) {
   return targets;
 }
 
-async function runYouzanImage(binPath: string, target: ImageTarget, quality: string, model: string) {
-  const args = [binPath, "--prompt", target.prompt, "--size", target.size, "--quality", quality, "--model", model];
-  for (const file of target.files) {
-    args.push("--file", file);
-  }
-  return await new Promise<string>((resolve, reject) => {
-    const child = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", reject);
-    child.on("close", (status) => {
-      if (status !== 0) {
-        reject(new Error(stderr.trim() || stdout.trim() || `youzan-image exited with status ${status}`));
-        return;
-      }
-      const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
-      resolve(lines[lines.length - 1] ?? "");
-    });
-  });
-}
-
 async function main() {
   const { positional, options } = parseArgs(process.argv.slice(2));
   const rootDir = path.resolve(positional[0] ?? ".");
   const schemaPath = path.join(rootDir, "schema.json");
   const manifestPath = path.join(rootDir, "assets-manifest.json");
+  const requestsPath = path.join(rootDir, "image-requests.json");
   const schema = await readJson(schemaPath);
   const targets = await collectTargets(rootDir, schema);
-  const dryRun = hasFlag(options, "dry-run");
   const force = hasFlag(options, "force");
-  const quality = option(options, "quality", "medium");
-  const model = option(options, "model", "gpt-image-2");
-  const binPath = option(options, "youzan-image", DEFAULT_YOUZAN_IMAGE_BIN);
 
   let manifest: JsonObject = {
     version: "1.0.0",
-    generator: "youzan-image",
+    generator: "youzan-image-skill",
     generated_at: new Date().toISOString(),
     items: {},
   };
@@ -247,19 +209,16 @@ async function main() {
   } catch {
     // A missing manifest is expected on the first run.
   }
-  const items = asObject(manifest.items);
+  const previousItems = asObject(manifest.items);
+  const items: JsonObject = {};
+  const requestItems: JsonObject[] = [];
 
   for (const target of targets) {
     if (!target.prompt) {
       throw new Error(`missing image_prompt for ${target.id}`);
     }
-    const previous = asObject(items[target.id]);
-    let url = cleanString(previous.url);
-    if (!url || force) {
-      url = dryRun
-        ? `https://example.invalid/youzan-image/${encodeURIComponent(target.id)}.png`
-        : await runYouzanImage(binPath, target, quality, model);
-    }
+    const previous = asObject(previousItems[target.id]);
+    const url = force ? "" : cleanString(previous.url);
     items[target.id] = {
       module_id: target.moduleId,
       module_type: target.moduleType,
@@ -271,12 +230,46 @@ async function main() {
       files: target.files,
       url,
     };
+    requestItems.push({
+      id: target.id,
+      module_id: target.moduleId,
+      module_type: target.moduleType,
+      target_id: target.targetId,
+      target_kind: target.targetKind,
+      aspect_ratio: target.aspectRatio,
+      size: target.size,
+      prompt: target.prompt,
+      files: target.files,
+      status: url ? "done" : "pending",
+      url,
+    });
   }
 
   manifest.items = items;
+  manifest.generator = "youzan-image-skill";
   manifest.generated_at = new Date().toISOString();
   await writeJson(manifestPath, manifest);
-  process.stdout.write(`${JSON.stringify({ ok: true, targets: targets.length, manifest: manifestPath }, null, 2)}\n`);
+  await writeJson(requestsPath, {
+    version: "1.0.0",
+    generator: "youzan-image-skill",
+    generated_at: new Date().toISOString(),
+    instructions:
+      "Use the global youzan-image Skill for every pending item. After each Skill call returns a URL, run record-image-result.ts with the item id and URL.",
+    items: requestItems,
+  });
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        ok: true,
+        targets: targets.length,
+        pending: requestItems.filter((item) => item.status === "pending").length,
+        requests: requestsPath,
+        manifest: manifestPath,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 main().catch((error) => {
