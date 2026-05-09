@@ -16,9 +16,27 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: color-mix(in srgb, var(--shop-bg) 72%, #ffffff);
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--shop-accent) 18%, transparent), transparent 34%),
+    color-mix(in srgb, var(--shop-bg) 72%, #ffffff);
   color: var(--shop-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.preview-stage {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.preview-device,
+.preview-screen {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.preview-rail,
+.preview-island {
+  display: none;
 }
 
 .shop-page {
@@ -196,4 +214,138 @@ body {
   color: var(--shop-muted);
   font-size: 12px;
   text-align: center;
+}
+
+@media (min-width: 700px) {
+  body {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 24px;
+    overflow: hidden;
+  }
+
+  .preview-stage {
+    display: grid;
+    width: min(100%, 430px);
+    min-height: 0;
+    place-items: center;
+  }
+
+  .preview-device {
+    position: relative;
+    width: 390px;
+    height: 844px;
+    min-height: 0;
+    padding: 12px;
+    border-radius: 56px;
+    background:
+      linear-gradient(160deg, #2a2a2c 0%, #1a1a1c 50%, #0e0e10 100%);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 0 0 2px #000 inset,
+      0 28px 60px -12px rgba(0, 0, 0, 0.45),
+      0 8px 20px -8px rgba(0, 0, 0, 0.35);
+    isolation: isolate;
+  }
+
+  .preview-device::before,
+  .preview-device::after {
+    content: "";
+    position: absolute;
+    top: 100px;
+    bottom: 100px;
+    width: 3px;
+    background:
+      linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(255, 255, 255, 0.06) 8%,
+        transparent 16%,
+        transparent 84%,
+        rgba(255, 255, 255, 0.04) 92%,
+        transparent 100%
+      );
+    pointer-events: none;
+  }
+
+  .preview-device::before {
+    left: -1px;
+  }
+
+  .preview-device::after {
+    right: -1px;
+  }
+
+  .preview-rail,
+  .preview-island {
+    display: block;
+    position: absolute;
+    z-index: 5;
+    background: #0a0a0c;
+  }
+
+  .preview-rail {
+    width: 4px;
+    border-radius: 2px;
+  }
+
+  .preview-rail-left-1 {
+    top: 174px;
+    left: -3px;
+    height: 32px;
+  }
+
+  .preview-rail-left-2 {
+    top: 220px;
+    left: -3px;
+    height: 60px;
+  }
+
+  .preview-rail-left-3 {
+    top: 290px;
+    left: -3px;
+    height: 60px;
+  }
+
+  .preview-rail-right-1 {
+    top: 250px;
+    right: -3px;
+    height: 100px;
+  }
+
+  .preview-island {
+    top: 22px;
+    left: 50%;
+    width: 124px;
+    height: 36px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+  }
+
+  .preview-screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    border-radius: 44px;
+    background: var(--shop-bg);
+    scrollbar-width: none;
+  }
+
+  .preview-screen::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shop-page {
+    width: 100%;
+    min-height: 100%;
+  }
+}
+
+@media (min-width: 700px) and (max-height: 900px) {
+  .preview-device {
+    transform: scale(calc((100vh - 48px) / 844));
+  }
 }

@@ -114,6 +114,9 @@ textarea immediately after `modules`. It is an editable ordered module analysis:
 - `brand_logo` maps to `brand_logo`; do not force it into every image prompt.
 - `industry` maps to top-level `industry` and `schema.page.industry`.
 - `homepage_goal` maps to top-level `homepage_goal` and `schema.page.goal`.
+- Module labels from clarification map to schema types: `顶部轮播` -> `top_slider`,
+  `客户资产` -> `user_assets`, `活动轮播` -> `banner`, `商品展示` -> `goods`,
+  `店铺细心` -> `shop_info`, `图片广告` -> `image_ad`.
 - `modules` is an inclusion filter over the fixed order
   `top_slider -> user_assets -> banner -> goods -> shop_info -> image_ad`.
 - `action_buttons` maps to `action_buttons.selected` in the submitted order.

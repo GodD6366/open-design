@@ -68,9 +68,9 @@ function escapeScriptJson(value: unknown) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function assetUrl(manifest: JsonObject, id: string, fallback = "") {
+function assetUrl(manifest: JsonObject, id: string) {
   const items = asObject(manifest.items);
-  return cleanString(asObject(items[id]).url) || fallback;
+  return cleanString(asObject(items[id]).url);
 }
 
 function imageHtml(url: string, alt: string, className: string) {
@@ -90,7 +90,7 @@ function renderTopSlider(module: JsonObject, manifest: JsonObject) {
   const itemId = cleanString(item.id) || "hero";
   const title = cleanString(item.title) || cleanString(module.title);
   const subtitle = cleanString(item.subtitle) || cleanString(module.subtitle);
-  const url = assetUrl(manifest, `${moduleId}.items.${itemId}`, cleanString(item.image_url));
+  const url = assetUrl(manifest, `${moduleId}.items.${itemId}`);
   return `<section class="module hero">
   ${imageHtml(url, title || "顶部主视觉", "hero__image")}
   <div class="hero__copy">
@@ -111,7 +111,7 @@ function renderUserAssets(module: JsonObject, manifest: JsonObject) {
       const id = cleanString(entry.id);
       const title = cleanString(entry.title);
       const subtitle = cleanString(entry.subtitle);
-      const url = assetUrl(manifest, `${moduleId}.entries.${id}`, cleanString(entry.image_url));
+      const url = assetUrl(manifest, `${moduleId}.entries.${id}`);
       return `<article class="asset-entry">
   ${imageHtml(url, title || "功能入口", "asset-entry__image")}
   <h3 class="asset-entry__title">${escapeHtml(title)}</h3>
@@ -136,7 +136,7 @@ function renderImageModule(module: JsonObject, manifest: JsonObject, className: 
   const itemId = cleanString(item.id) || "image";
   const title = cleanString(item.title) || cleanString(module.title);
   const subtitle = cleanString(item.subtitle) || cleanString(module.subtitle);
-  const url = assetUrl(manifest, `${moduleId}.items.${itemId}`, cleanString(item.image_url));
+  const url = assetUrl(manifest, `${moduleId}.items.${itemId}`);
   return `<section class="module ${className}">
   ${imageHtml(url, title || cleanString(module.type), `${className}__image`)}
   <div class="${className}__copy">
@@ -210,7 +210,8 @@ async function main() {
 
   const distDir = path.join(rootDir, "dist");
   await fs.mkdir(distDir, { recursive: true });
-  await fs.writeFile(path.join(distDir, "index.html"), html);
+  const entryPath = path.join(distDir, "shop-home-page.preview.html");
+  await fs.writeFile(entryPath, html);
   await writeJson(path.join(distDir, "schema.json"), schema);
   await writeJson(path.join(distDir, "requirements.json"), requirements);
   await writeJson(path.join(distDir, "assets-manifest.json"), manifest);
@@ -226,7 +227,7 @@ async function main() {
     // Reference copies are optional; rendering should not fail because of them.
   }
 
-  process.stdout.write(`${JSON.stringify({ ok: true, entry: path.join(distDir, "index.html") }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, entry: entryPath }, null, 2)}\n`);
 }
 
 main().catch((error) => {

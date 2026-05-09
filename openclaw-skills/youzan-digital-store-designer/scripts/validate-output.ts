@@ -179,14 +179,47 @@ function validateManifest(schema: JsonObject, manifest: JsonObject, allowMissing
     if (url && /example\.invalid/i.test(url)) {
       errors.push(`assets-manifest contains placeholder url for ${id}`);
     }
+    if (url && !/^https?:\/\//i.test(url)) {
+      errors.push(`assets-manifest url for ${id} must be an http(s) CDN URL`);
+    }
   }
 }
 
 async function resolvePackageDir(rootDir: string) {
-  if (await exists(path.join(rootDir, "index.html"))) return rootDir;
+  if (await exists(path.join(rootDir, "shop-home-page.preview.html"))) return rootDir;
   const distDir = path.join(rootDir, "dist");
-  if (await exists(path.join(distDir, "index.html"))) return distDir;
+  if (await exists(path.join(distDir, "shop-home-page.preview.html"))) return distDir;
   return rootDir;
+}
+
+async function validatePreviewHtml(packageDir: string, errors: string[]) {
+  const filePath = path.join(packageDir, "shop-home-page.preview.html");
+  let html = "";
+  try {
+    html = await fs.readFile(filePath, "utf8");
+  } catch {
+    return;
+  }
+  const forbiddenPatterns = [
+    /<iframe\b/i,
+    /\/api\/shop-home-page/i,
+    /\/api\/projects/i,
+    new RegExp(`OD_${"DAEMON"}_URL`, "i"),
+    new RegExp(`OD_${"PROJECT"}_ID`, "i"),
+    new RegExp(`shop-home-page-${"assets"}`, "i"),
+    new RegExp(`apps/${"daemon"}`, "i"),
+    /localhost:\d+/i,
+  ];
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(html)) {
+      errors.push(`shop-home-page.preview.html contains forbidden runtime dependency: ${pattern}`);
+    }
+  }
+  for (const className of ["preview-stage", "preview-device", "preview-screen", "shop-page"]) {
+    if (!html.includes(className)) {
+      errors.push(`shop-home-page.preview.html missing responsive preview shell class: ${className}`);
+    }
+  }
 }
 
 async function main() {
@@ -194,7 +227,7 @@ async function main() {
   const rootDir = path.resolve(positional[0] ?? ".");
   const packageDir = await resolvePackageDir(rootDir);
   const errors: string[] = [];
-  for (const fileName of ["index.html", "schema.json", "requirements.json", "assets-manifest.json"]) {
+  for (const fileName of ["shop-home-page.preview.html", "schema.json", "requirements.json", "assets-manifest.json"]) {
     if (!(await exists(path.join(packageDir, fileName)))) {
       errors.push(`missing ${path.join(packageDir, fileName)}`);
     }
@@ -207,6 +240,7 @@ async function main() {
   validateRequirements(requirements, errors);
   validateSchema(schema, requirements, errors);
   validateManifest(schema, manifest, hasFlag(options, "allow-missing-images"), errors);
+  await validatePreviewHtml(packageDir, errors);
   if (errors.length > 0) fail(errors);
 
   process.stdout.write(`${JSON.stringify({ ok: true, packageDir }, null, 2)}\n`);

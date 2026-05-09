@@ -18,7 +18,7 @@ triggers:
 
 本 Skill 在当前工作目录生成一个完整的静态店铺首页包。流程包括：
 整理需求、生成 `requirements.json` 和 `schema.json`、调用全局 `youzan-image`
-Skill 生成图片、渲染 `dist/index.html`，并在完成前校验产物。
+Skill 生成图片、渲染 `dist/shop-home-page.preview.html`，并在完成前校验产物。
 
 不要依赖 Open Design host、项目数据库、预览运行时、聊天 UI 控件或旧的店铺首页资产流水线。不要要求用户打开其它 UI 才能继续。
 
@@ -36,7 +36,7 @@ Skill 生成图片、渲染 `dist/index.html`，并在完成前校验产物。
 【需求澄清】
 1. 店铺名称：
 2. 首页目标：例如突出新品、引导到店自取、提升会员复购
-3. 需要的模块：可选 top_slider、user_assets、banner、goods、shop_info、image_ad；留空默认由我判断
+3. 需要的模块：可选 顶部轮播、客户资产、活动轮播、商品展示、店铺细心、图片广告；留空默认由我判断
 4. 功能入口：例如到店自取、外卖点单、会员权益、优惠券、新品上新、门店导航；留空默认由我判断
 5. 主推商品 / 服务：
 6. 其他内容要求：
@@ -95,14 +95,14 @@ youzan-digital-store-designer/
    node --experimental-strip-types "$SKILL_DIR/scripts/render-page.ts" "$OUTPUT_DIR"
    ```
 
-   该步骤写入 `dist/index.html`、`dist/schema.json`、`dist/requirements.json` 和 `dist/assets-manifest.json`。
+   该步骤写入 `dist/shop-home-page.preview.html`、`dist/schema.json`、`dist/requirements.json` 和 `dist/assets-manifest.json`。
 6. 回复前必须校验：
 
    ```bash
    node --experimental-strip-types "$SKILL_DIR/scripts/validate-output.ts" "$OUTPUT_DIR"
    ```
 
-7. 最终只需简短回复完成状态和本地入口文件 `dist/index.html`。
+7. 最终只需简短回复完成状态和本地入口文件 `dist/shop-home-page.preview.html`。
 
 `$SKILL_DIR` 指包含本 `SKILL.md` 的目录。`$OUTPUT_DIR` 指当前任务的输出目录，也就是 `requirements.json` 和 `schema.json` 所在目录。如果运行器已把脚本复制到输出目录，也可以使用 `scripts/<name>.ts`。
 
@@ -113,6 +113,7 @@ youzan-digital-store-designer/
 - `店铺名称` -> `requirements.shop_name`
 - `首页目标` -> `requirements.homepage_goal`
 - `需要的模块` -> `requirements.module_specs` 和 `requirements.modules`
+- 模块中文名映射：`顶部轮播` -> `top_slider`，`客户资产` -> `user_assets`，`活动轮播` -> `banner`，`商品展示` -> `goods`，`店铺细心` -> `shop_info`，`图片广告` -> `image_ad`
 - `功能入口` -> `requirements.action_buttons.selected`
 - `主推商品 / 服务` -> `requirements.product_focus`
 - `其他内容要求` -> `requirements.other_requirements`
@@ -139,7 +140,7 @@ youzan-digital-store-designer/
 
 完成后必须有：
 
-- `dist/index.html`
+- `dist/shop-home-page.preview.html`
 - `dist/schema.json`
 - `dist/requirements.json`
 - `dist/assets-manifest.json`
@@ -150,6 +151,9 @@ youzan-digital-store-designer/
 
 - 澄清只使用纯文本，不使用 OD 的交互式 UI 协议。
 - 不使用 OD daemon、web、数据库、项目状态、聊天 UI 控件、旧资产队列或 daemon 资产接口。
+- `shop-home-page.preview.html` 必须是可直接打开的自包含静态页面，不包含 OD 运行时、iframe、接口请求、localhost 地址或项目文件 URL。
+- 预览页必须用 CSS 响应式适配：手机视口直接显示页面，PC / 宽屏视口显示手机壳包裹效果。
+- 页面图片必须使用 `assets-manifest.json` 中由 `youzan-image` Skill 返回的 http(s) CDN 地址。
 - 视觉细节从用户回答、参考图、行业、店铺名、商品和首页目标推断。
 - `banner` 和 `goods` 默认可选。
 - 3 个 `user_assets` 入口默认布局是 `一行三个`。

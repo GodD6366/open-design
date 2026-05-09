@@ -1,7 +1,7 @@
 # Static Page Contract
 
 The generated package is a standalone static mobile homepage. It must be useful
-when opened directly from `dist/index.html`.
+when opened directly from `dist/shop-home-page.preview.html`.
 
 ## Files
 
@@ -9,7 +9,7 @@ when opened directly from `dist/index.html`.
 
 ```text
 dist/
-├── index.html
+├── shop-home-page.preview.html
 ├── schema.json
 ├── requirements.json
 └── assets-manifest.json
@@ -24,10 +24,16 @@ dist/references/
 ## Rendering Rules
 
 - Render a mobile-first page at a 375px content width.
+- When opened on a phone-sized viewport, show the shop page directly.
+- When opened on a desktop/wide viewport, wrap the same static page in a CSS-only
+  phone shell.
 - Do not depend on external JavaScript, runtime APIs, databases, iframes, or a
   host preview shell.
-- The page must contain real generated image URLs from `assets-manifest.json`.
+- The page must contain real generated http(s) CDN image URLs from
+  `assets-manifest.json`.
 - Do not treat placeholders, `example.invalid`, or empty URLs as completed images.
+- Do not include OD runtime dependencies such as interface requests, project
+  file URLs, localhost URLs, daemon env vars, or legacy asset commands.
 - Keep text compact and aligned with the shop scene.
 - Use restrained, work-focused styling suitable for a merchant homepage.
 
