@@ -42,12 +42,14 @@ import {
   applyShopHomePageSchemaText,
   enqueueShopHomePageAssetTasks,
   getShopHomePageAssetTaskStatus,
+  getShopHomePageAssetWaitSnapshot,
   initializeShopHomePageTemplateProject,
   loadShopHomePageState,
   migrateLegacyStorefrontProjectFiles,
   SHOP_HOME_PAGE_PREVIEW_FILE,
   SHOP_HOME_PAGE_SCREEN_FILE,
   shopHomePageSkillDir,
+  waitForShopHomePageAssetTasks,
 } from './shop-home-page.js';
 import {
   isBranchShopHomePageProject,
@@ -2854,6 +2856,42 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     }
   });
 
+  app.post('/api/shop-home-page/assets/generate', express.json({ limit: '1mb' }), async (req, res) => {
+    try {
+      const { projectId, fileNames, forceRegenerate } = req.body || {};
+      const project = typeof projectId === 'string' ? getProject(db, projectId) : null;
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      }
+      if (!isBranchShopHomePageProject(project)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
+      }
+      await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, projectId);
+      const { tasks } = await enqueueShopHomePageAssetTasks(
+        PROJECTS_DIR,
+        projectId,
+        SHOP_HOME_PAGE_SKILL_DIR,
+        {
+          fileNames: Array.isArray(fileNames) ? fileNames : undefined,
+          forceRegenerate: Boolean(forceRegenerate),
+          imageModel:
+            typeof project.metadata?.imageModel === 'string' && project.metadata.imageModel
+              ? project.metadata.imageModel
+              : undefined,
+          projectRoot: PROJECT_ROOT,
+          metadata: project.metadata ?? null,
+        },
+      );
+      res.json({
+        projectId,
+        status: tasks.length === 0 ? 'done' : 'running',
+        tasks,
+      });
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
   app.get('/api/shop-home-page/generate-tasks/:projectId', async (req, res) => {
     try {
       const project = getProject(db, req.params.projectId);
@@ -2866,6 +2904,32 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
       await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, req.params.projectId);
       const tasks = getShopHomePageAssetTaskStatus(req.params.projectId);
       res.json({ tasks });
+    } catch (err) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/shop-home-page/generate-tasks/:projectId/wait', express.json({ limit: '128kb' }), async (req, res) => {
+    try {
+      const project = getProject(db, req.params.projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      }
+      if (!isBranchShopHomePageProject(project)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'project is not a shopHomePage project');
+      }
+      await migrateLegacyStorefrontProjectFiles(PROJECTS_DIR, db, req.params.projectId);
+      const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
+      const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
+        ? Number(req.body.timeoutMs)
+        : 25_000;
+      const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);
+      const snapshot = await waitForShopHomePageAssetTasks(
+        req.params.projectId,
+        since,
+        timeoutMs,
+      );
+      res.json(snapshot);
     } catch (err) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }

@@ -3901,7 +3901,7 @@ function resolveUserAssetsLayoutMetrics(cardLayout) {
   };
 }
 
-export function collectAssetTasks(schema, styleGuide, forceRegenerate, availableFiles = new Set()) {
+export function collectAssetTasks(schema, styleGuide, forceRegenerate, availableFiles = new Set(), onlyFileNames = null) {
   const tasks = [];
 
   for (const module of schema.modules) {
@@ -3998,7 +3998,153 @@ export function collectAssetTasks(schema, styleGuide, forceRegenerate, available
     });
   }
 
-  return tasks;
+  if (!(onlyFileNames instanceof Set)) {
+    return tasks;
+  }
+
+  const taskGraph = new Map();
+  for (const task of tasks) {
+    const meta = inferStorefrontTaskMeta(task.fileName);
+    taskGraph.set(task.fileName, {
+      ...task,
+      moduleType: meta.moduleType,
+      ordinal: meta.ordinal,
+      displayLabel: meta.displayLabel,
+      requested: false,
+      autoIncluded: false,
+    });
+  }
+
+  const resolved = resolveRequestedStorefrontTasks(
+    { byFileName: taskGraph },
+    Array.from(onlyFileNames),
+  );
+  return resolved;
+}
+
+function storefrontAssetDisplayLabel(moduleType, ordinal) {
+  switch (moduleType) {
+    case 'top_slider':
+      return `头图素材 ${ordinal}`;
+    case 'user_assets':
+      return `客户资产入口素材 ${ordinal}`;
+    case 'banner':
+      return `横幅素材 ${ordinal}`;
+    case 'goods':
+      return ordinal === 1 ? '主推商品素材 1' : `商品网格素材 ${ordinal}`;
+    case 'shop_info':
+      return `品牌故事素材 ${ordinal}`;
+    case 'image_ad':
+      return `参考广告块素材 ${ordinal}`;
+    default:
+      return `图片素材 ${ordinal}`;
+  }
+}
+
+function inferStorefrontTaskMeta(fileName) {
+  const normalized = stringOr(fileName);
+  let moduleType = 'image_ad';
+  let ordinal = 1;
+  if (/^top-slider-(\d+)\.png$/i.test(normalized)) {
+    moduleType = 'top_slider';
+    ordinal = Number(/^top-slider-(\d+)\.png$/i.exec(normalized)?.[1] ?? 1);
+  } else if (/^user-assets-entry-(\d+)\.png$/i.test(normalized)) {
+    moduleType = 'user_assets';
+    ordinal = Number(/^user-assets-entry-(\d+)\.png$/i.exec(normalized)?.[1] ?? 1);
+  } else if (/^banner-(\d+)\.png$/i.test(normalized)) {
+    moduleType = 'banner';
+    ordinal = Number(/^banner-(\d+)\.png$/i.exec(normalized)?.[1] ?? 1);
+  } else if (/^goods-(\d+)\.png$/i.test(normalized)) {
+    moduleType = 'goods';
+    ordinal = Number(/^goods-(\d+)\.png$/i.exec(normalized)?.[1] ?? 1);
+  } else if (/^shop-info-(\d+)\.png$/i.test(normalized)) {
+    moduleType = 'shop_info';
+    ordinal = Number(/^shop-info-(\d+)\.png$/i.exec(normalized)?.[1] ?? 1);
+  } else if (/^image-ad-(\d+)\.png$/i.test(normalized)) {
+    moduleType = 'image_ad';
+    ordinal = Number(/^image-ad-(\d+)\.png$/i.exec(normalized)?.[1] ?? 1);
+  }
+  return {
+    moduleType,
+    ordinal,
+    displayLabel: storefrontAssetDisplayLabel(moduleType, ordinal),
+  };
+}
+
+function normalizeRequestedFileNames(input) {
+  if (!Array.isArray(input)) return null;
+  const out = [];
+  const seen = new Set();
+  for (const value of input) {
+    const fileName = stringOr(value);
+    if (!fileName || seen.has(fileName)) continue;
+    seen.add(fileName);
+    out.push(fileName);
+  }
+  return out.length > 0 ? out : [];
+}
+
+function collectStorefrontTaskGraph(schema, styleGuide, forceRegenerate, availableFiles = new Set()) {
+  const tasks = collectAssetTasks(schema, styleGuide, forceRegenerate, availableFiles, null);
+  const byFileName = new Map();
+  for (const task of tasks) {
+    const meta = inferStorefrontTaskMeta(task.fileName);
+    const enriched = {
+      ...task,
+      moduleType: meta.moduleType,
+      ordinal: meta.ordinal,
+      displayLabel: meta.displayLabel,
+      requested: false,
+      autoIncluded: false,
+    };
+    byFileName.set(enriched.fileName, enriched);
+  }
+  return { tasks, byFileName };
+}
+
+function resolveRequestedStorefrontTasks(taskGraph, requestedFileNames) {
+  if (!Array.isArray(requestedFileNames)) {
+    return Array.from(taskGraph.byFileName.values());
+  }
+  const requestedSet = new Set(requestedFileNames);
+  const resolved = new Map();
+
+  const visit = (fileName, autoIncluded = false) => {
+    const task = taskGraph.byFileName.get(fileName);
+    if (!task) return false;
+    if (resolved.has(fileName)) {
+      const current = resolved.get(fileName);
+      if (!autoIncluded) {
+        current.requested = true;
+        current.autoIncluded = false;
+      }
+      return true;
+    }
+    const next = { ...task, requested: !autoIncluded, autoIncluded };
+    resolved.set(fileName, next);
+    if (task.dependsOnFileName) {
+      visit(task.dependsOnFileName, true);
+    }
+    return true;
+  };
+
+  const missing = [];
+  for (const fileName of requestedFileNames) {
+    if (!visit(fileName, false)) {
+      missing.push(fileName);
+    }
+  }
+  if (missing.length > 0) {
+    const err = new Error(`Unknown storefront asset target(s): ${missing.join(', ')}`);
+    err.statusCode = 422;
+    throw err;
+  }
+
+  return Array.from(resolved.values()).sort((left, right) => {
+    if (left.dependsOnFileName === right.fileName) return 1;
+    if (right.dependsOnFileName === left.fileName) return -1;
+    return left.fileName.localeCompare(right.fileName);
+  });
 }
 
 function resolveReusableProjectImage(fileName, availableFiles) {
@@ -4425,12 +4571,14 @@ async function runAssetTask(task) {
     await persistSchema(task.projectDir, task.projectId, task.schema, task.requirements, task.styleGuide);
     await writeRuntimeState(task.projectDir, 'assets-ready', 'info', `${task.fileName}: generated`);
     task.status = 'done';
+    notifyStorefrontTaskWaiters(task.projectId);
     console.log(`[storefront] 生图完成: ${task.fileName}`);
   } catch (error) {
     task.error = error instanceof Error ? error.message : String(error);
     console.error(`[storefront] 生图失败: ${task.fileName} — ${task.error}`);
     await writeRuntimeState(task.projectDir, 'assets-ready', 'error', `${task.fileName}: ${task.error}`);
     task.status = 'failed';
+    notifyStorefrontTaskWaiters(task.projectId);
   }
 }
 
@@ -4438,7 +4586,17 @@ export function getShopHomePageAssetTaskStatus(projectId) {
   const out = [];
   for (const task of assetQueue.tasks.values()) {
     if (task.projectId !== projectId) continue;
-    out.push({ id: task.id, fileName: task.fileName, status: task.status, error: task.error ?? null });
+    out.push({
+      id: task.id,
+      fileName: task.fileName,
+      status: task.status,
+      error: task.error ?? null,
+      displayLabel: task.displayLabel ?? inferStorefrontTaskMeta(task.fileName).displayLabel,
+      moduleType: task.moduleType ?? inferStorefrontTaskMeta(task.fileName).moduleType,
+      ordinal: task.ordinal ?? inferStorefrontTaskMeta(task.fileName).ordinal,
+      requested: task.requested === true,
+      autoIncluded: task.autoIncluded === true,
+    });
   }
   return out;
 }
@@ -4449,6 +4607,88 @@ export function cleanupAssetTasks(projectId) {
       assetQueue.tasks.delete(id);
     }
   }
+}
+
+function cleanupSupersededAssetTasks(projectId, fileNames = []) {
+  const targetNames = new Set(Array.isArray(fileNames) ? fileNames.filter(Boolean) : []);
+  if (targetNames.size === 0) return;
+  for (const [id, task] of assetQueue.tasks) {
+    if (task.projectId !== projectId) continue;
+    if (!targetNames.has(task.fileName)) continue;
+    if (task.status === 'pending' || task.status === 'running') continue;
+    assetQueue.tasks.delete(id);
+  }
+}
+
+const storefrontTaskWaiters = new Map();
+
+function notifyStorefrontTaskWaiters(projectId) {
+  const waiters = storefrontTaskWaiters.get(projectId);
+  if (!waiters || waiters.size === 0) return;
+  for (const waiter of waiters) {
+    waiter();
+  }
+}
+
+export function getShopHomePageAssetWaitSnapshot(projectId, since = 0) {
+  const tasks = getShopHomePageAssetTaskStatus(projectId);
+  const progressEntries = [];
+  for (const task of tasks) {
+    if (
+      typeof task.id === 'string'
+      && task.id.length > 0
+      && task.id.localeCompare(String(since)) > 0
+      && (task.status === 'done' || task.status === 'failed')
+    ) {
+      progressEntries.push({
+        id: task.id,
+        line:
+          task.status === 'done'
+            ? `${task.displayLabel}: generated`
+            : `${task.displayLabel}: ${task.error ?? 'failed'}`,
+      });
+    }
+  }
+  const terminal = tasks.length > 0 && tasks.every((task) => task.status === 'done' || task.status === 'failed');
+  return {
+    projectId,
+    status: terminal ? 'done' : tasks.length > 0 ? 'running' : 'done',
+    tasks,
+    progress: progressEntries.map((entry) => entry.line),
+    nextSince: progressEntries.length > 0 ? progressEntries[progressEntries.length - 1].id : since,
+  };
+}
+
+export async function waitForShopHomePageAssetTasks(projectId, since = 0, timeoutMs = 25_000) {
+  const snapshot = getShopHomePageAssetWaitSnapshot(projectId, since);
+  if (snapshot.progress.length > 0 || snapshot.status === 'done') {
+    return snapshot;
+  }
+  return new Promise((resolve) => {
+    const waiters = storefrontTaskWaiters.get(projectId) ?? new Set();
+    storefrontTaskWaiters.set(projectId, waiters);
+    let settled = false;
+
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      waiters.delete(onWake);
+      if (waiters.size === 0) storefrontTaskWaiters.delete(projectId);
+    };
+
+    const onWake = () => {
+      cleanup();
+      resolve(getShopHomePageAssetWaitSnapshot(projectId, since));
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(getShopHomePageAssetWaitSnapshot(projectId, since));
+    }, timeoutMs);
+
+    waiters.add(onWake);
+  });
 }
 
 export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, skillRoot, options = {}) {
@@ -4485,12 +4725,14 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
         .filter(Boolean)
       : [],
   );
-  const collected = collectAssetTasks(
+  const requestedFileNames = normalizeRequestedFileNames(options.fileNames);
+  const taskGraph = collectStorefrontTaskGraph(
     schema,
     styleGuide,
     Boolean(options.forceRegenerate),
     availableFiles,
   );
+  const collected = resolveRequestedStorefrontTasks(taskGraph, requestedFileNames);
   if (collected.length === 0) {
     await writeRuntimeState(projectDir, 'assets-ready', 'info', 'No pending storefront image slots required generation.');
     return { tasks: [], state: await loadShopHomePageState(projectsRoot, projectId, skillRoot, options.metadata ?? null) };
@@ -4498,6 +4740,7 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
 
   // Clean up finished tasks for this project before enqueuing new ones
   cleanupAssetTasks(projectId);
+  cleanupSupersededAssetTasks(projectId, collected.map((task) => task.fileName));
 
   const enqueued = [];
   for (const task of collected) {
@@ -4522,8 +4765,22 @@ export async function enqueueShopHomePageAssetTasks(projectsRoot, projectId, ski
       imageConfigOptions: options,
       status: 'pending',
       error: null,
+      displayLabel: task.displayLabel,
+      moduleType: task.moduleType,
+      ordinal: task.ordinal,
+      requested: task.requested === true,
+      autoIncluded: task.autoIncluded === true,
     });
-    enqueued.push({ id, fileName: task.fileName, status: 'pending' });
+    enqueued.push({
+      id,
+      fileName: task.fileName,
+      status: 'pending',
+      displayLabel: task.displayLabel,
+      moduleType: task.moduleType,
+      ordinal: task.ordinal,
+      requested: task.requested === true,
+      autoIncluded: task.autoIncluded === true,
+    });
   }
 
   await writeRuntimeState(projectDir, 'assets-generating', 'info', `Enqueued ${enqueued.length} image task(s).`);

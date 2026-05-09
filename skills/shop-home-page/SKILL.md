@@ -39,7 +39,7 @@ The host is responsible for:
 - compiling `shop-home-page.screen.html`
 - compiling `shop-home-page.preview.html`
 - rendering the iPhone frame
-- generating images later
+- compiling preview/runtime state after schema edits
 
 ## Resource map
 
@@ -96,6 +96,23 @@ shop-home-page/
 9. When the user clarifies which images are references vs assets, update `shop-home-page.reference-state.json` first, then keep `shop-home-page.style-guide.json.reference_images` in sync with its effective reference set.
 10. Overwrite those same project-local files in place.
 11. Re-check `references/checklist.md`.
+
+## Asset generation phases
+
+1. Normal schema-building turns:
+   - Do not trigger full-page asset generation on your own.
+   - Your job is still to maintain `requirements`, `reference-state`, `style-guide`, and `schema`.
+2. Failed asset repair turns:
+   - If the user explicitly asks to retry / regenerate failed storefront images, first inspect the current storefront asset task status.
+   - If the user names a single failed asset, only repair that target.
+   - If the user only says “重试生图 / 重新生成图片”, treat it as “retry all currently failed storefront assets”.
+   - If the user names multiple concrete targets with different requested edits, ask them to split the request before executing.
+   - You may make a lightweight edit to the target `image_prompt_schema` (or `user_assets.entries[*].image_prompt_schema`) before retrying.
+   - Do not use a failed-image repair turn to reorder modules, reopen requirement clarification, or redesign the whole page.
+   - Trigger the actual rerender through:
+     - `node "$OD_BIN" shop-home-page-assets generate --project "$OD_PROJECT_ID" --force`
+     - Add repeated `--file "<schema-derived filename>"` flags when targeting specific failed assets.
+   - If the command returns a running handoff, continue with `node "$OD_BIN" shop-home-page-assets wait "$OD_PROJECT_ID" --since <n>`.
 
 ## Output contract
 

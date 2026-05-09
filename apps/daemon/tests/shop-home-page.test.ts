@@ -586,6 +586,60 @@ describe('applyShopHomePageSchemaText with module specs sync', () => {
 });
 
 describe('collectAssetTasks', () => {
+  it('filters to a requested hero asset file when onlyFileNames targets it', () => {
+    const schema = createSeedSchema(buildRequirements(), null);
+    const tasks = collectAssetTasks(
+      schema,
+      null,
+      true,
+      new Set(),
+      new Set(['top-slider-1.png']) as any,
+    );
+
+    expect(tasks.map((task) => task.fileName)).toEqual(['top-slider-1.png']);
+  });
+
+  it('includes required goods dependencies when targeting a later goods asset', () => {
+    const schema = createSeedSchema(buildRequirements(), null);
+    const tasks = collectAssetTasks(
+      schema,
+      null,
+      true,
+      new Set(),
+      new Set(['goods-2.png']) as any,
+    );
+
+    expect(tasks.map((task) => task.fileName)).toEqual(['goods-1.png', 'goods-2.png']);
+  });
+
+  it('includes required user_assets dependencies when targeting a later entry asset', () => {
+    const schema = createSeedSchema(buildRequirements(), null);
+    const tasks = collectAssetTasks(
+      schema,
+      null,
+      true,
+      new Set(),
+      new Set(['user-assets-entry-2.png']) as any,
+    );
+
+    expect(tasks.map((task) => task.fileName)).toEqual([
+      'user-assets-entry-1.png',
+      'user-assets-entry-2.png',
+    ]);
+  });
+
+  it('throws when a requested file is not a valid current schema asset target', () => {
+    const schema = createSeedSchema(buildRequirements(), null);
+    expect(() =>
+      collectAssetTasks(
+        schema,
+        null,
+        true,
+        new Set(),
+        new Set(['missing-target.png']) as any,
+      )).toThrow(/missing-target\.png/);
+  });
+
   it('re-enqueues the first user_assets entry when schema metadata points at a missing file', () => {
     const schema = {
       modules: [

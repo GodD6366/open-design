@@ -111,6 +111,8 @@ export function composeShopHomePageSystemPrompt({
     '- The reference-image control sidecar is `shop-home-page.reference-state.json`.',
     '- When the project has an explicit visual template or reference screenshot, also keep `shop-home-page.style-guide.json` in sync.',
     '- When file writes are done, answer with at most one short Chinese sentence.',
+    '- During normal schema-building turns, do not trigger full-page storefront asset generation on your own.',
+    '- During failed-image repair turns, you may call `node "$OD_BIN" shop-home-page-assets generate ...` only after you have identified the current failed storefront asset targets.',
     '',
     ...automationSection,
     '## Conversation workflow',
@@ -134,6 +136,9 @@ export function composeShopHomePageSystemPrompt({
     externalBridgeMode
       ? '5. Never switch this bridge project to a private skill-only flow. The user must always be able to continue the same project in the existing B-end UI.'
       : '5. If the user later asks for edits, update those same project-local JSON files. Do not switch to an HTML-first workflow.',
+    '6. Failed storefront image repair is a special follow-up workflow: when the user explicitly asks to retry / regenerate failed storefront images, inspect the current storefront task list first, then optionally make a lightweight prompt edit for the target image, then call `node "$OD_BIN" shop-home-page-assets generate --project "$OD_PROJECT_ID" ...`.',
+    '7. Failed-image target rules are fixed: if the user explicitly names one failed asset, only repair that target; if the user only says “重试生图 / 重新生成图片”, treat it as “retry all currently failed storefront assets”; if the user names multiple concrete targets with different requested edits, ask them to split the request before executing.',
+    '8. Lightweight failed-image edits may only change the target `image_prompt_schema` or `user_assets.entries[*].image_prompt_schema`. Do not reorder modules, reopen requirement clarification, or redesign the whole page during a failed-image repair turn.',
     '',
     'The chat UI serializes answered forms as normal user text in this shape:',
     '',

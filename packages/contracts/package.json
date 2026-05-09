@@ -7,31 +7,31 @@
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "default": "./dist/index.js"
     },
     "./shop-home-page": {
       "types": "./src/prompts/shop-home-page.ts",
-      "default": "./src/prompts/shop-home-page.ts"
+      "default": "./dist/prompts/shop-home-page.js"
     },
     "./shop-home-page-tones": {
       "types": "./src/prompts/shop-home-page-tones.ts",
-      "default": "./src/prompts/shop-home-page-tones.ts"
+      "default": "./dist/prompts/shop-home-page-tones.js"
     },
     "./question-form": {
       "types": "./src/question-form.ts",
-      "default": "./src/question-form.ts"
+      "default": "./dist/question-form.js"
     },
     "./shop-home-page-templates": {
       "types": "./src/shop-home-page-templates.ts",
-      "default": "./src/shop-home-page-templates.ts"
+      "default": "./dist/shop-home-page-templates.js"
     },
     "./shop-home-page-phone-chrome": {
       "types": "./src/shop-home-page-phone-chrome.ts",
-      "default": "./src/shop-home-page-phone-chrome.ts"
+      "default": "./dist/shop-home-page-phone-chrome.js"
     },
     "./critique": {
       "types": "./src/critique.ts",
-      "default": "./src/critique.ts"
+      "default": "./dist/critique.js"
     }
   },
   "types": "./src/index.ts",

@@ -45,9 +45,28 @@ const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
+const SHOP_HOME_PAGE_ASSET_GENERATE_STRING_FLAGS = new Set([
+  'project',
+  'file',
+  'daemon-url',
+]);
+const SHOP_HOME_PAGE_ASSET_GENERATE_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+  'force',
+]);
+const SHOP_HOME_PAGE_ASSET_WAIT_STRING_FLAGS = new Set([
+  'since',
+  'daemon-url',
+]);
+const SHOP_HOME_PAGE_ASSET_WAIT_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+]);
 
 const SUBCOMMAND_MAP = {
   media: runMedia,
+  'shop-home-page-assets': runShopHomePageAssets,
 };
 
 const first = argv.find((a) => !a.startsWith('-'));
@@ -99,6 +118,10 @@ function printRootHelp() {
       Designed to be invoked by a code agent — picks up OD_DAEMON_URL
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
 
+  od shop-home-page-assets generate --project <id> [--file <name> ...] [--force]
+      Re-generate targeted shopHomePage asset files for the active project.
+      Designed to be invoked by a code agent during storefront repair turns.
+
 Options:
   --port <n>       Port to listen on (default: 7456, env: OD_PORT).
   --host <addr>    Interface address to bind to (default: 127.0.0.1, env: OD_BIND_HOST).
@@ -134,6 +157,24 @@ async function runMedia(args) {
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
   if (sub === 'wait') return runMediaWait(subArgs);
   return runMediaGenerate(subArgs);
+}
+
+async function runShopHomePageAssets(args) {
+  const sub = args.find((a) => !a.startsWith('-')) || '';
+  if (sub === 'help' || sub === '-h' || sub === '--help' || sub === '') {
+    printShopHomePageAssetsHelp();
+    return;
+  }
+  if (sub !== 'generate' && sub !== 'wait') {
+    console.error(`unknown subcommand: od shop-home-page-assets ${sub}`);
+    printShopHomePageAssetsHelp();
+    process.exit(1);
+  }
+
+  const idx = args.indexOf(sub);
+  const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  if (sub === 'wait') return runShopHomePageAssetsWait(subArgs);
+  return runShopHomePageAssetsGenerate(subArgs);
 }
 
 async function runMediaGenerate(rawArgs) {
@@ -235,6 +276,82 @@ async function runMediaWait(rawArgs) {
   await pollUntilDoneOrBudget(daemonUrl, taskId, since);
 }
 
+async function runShopHomePageAssetsGenerate(rawArgs) {
+  let flags;
+  try {
+    flags = parseFlags(rawArgs, {
+      string: SHOP_HOME_PAGE_ASSET_GENERATE_STRING_FLAGS,
+      boolean: SHOP_HOME_PAGE_ASSET_GENERATE_BOOLEAN_FLAGS,
+      repeatable: new Set(['file']),
+    });
+  } catch (err) {
+    console.error(err.message);
+    printShopHomePageAssetsHelp();
+    process.exit(2);
+  }
+
+  const daemonUrl = flags['daemon-url'] || process.env.OD_DAEMON_URL || 'http://127.0.0.1:7456';
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
+  if (!projectId) {
+    console.error(
+      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+    );
+    process.exit(2);
+  }
+
+  const body = {
+    projectId,
+    fileNames: Array.isArray(flags.file) ? flags.file : typeof flags.file === 'string' ? [flags.file] : undefined,
+    forceRegenerate: flags.force === true,
+  };
+
+  const url = `${daemonUrl.replace(/\/$/, '')}/api/shop-home-page/assets/generate`;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, daemonUrl);
+    process.exit(3);
+  }
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error(`daemon ${resp.status}: ${text}`);
+    process.exit(4);
+  }
+  const accepted = await resp.json();
+  await pollShopHomePageAssetsUntilDoneOrBudget(daemonUrl, projectId, 0, accepted);
+}
+
+async function runShopHomePageAssetsWait(rawArgs) {
+  const projectId = rawArgs.find((a) => a && !a.startsWith('--'));
+  if (!projectId) {
+    console.error('usage: od shop-home-page-assets wait <projectId> [--since <n>] [--daemon-url <url>]');
+    process.exit(2);
+  }
+  const flagsOnly = rawArgs.filter((a) => a !== projectId);
+  let flags;
+  try {
+    flags = parseFlags(flagsOnly, {
+      string: SHOP_HOME_PAGE_ASSET_WAIT_STRING_FLAGS,
+      boolean: SHOP_HOME_PAGE_ASSET_WAIT_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printShopHomePageAssetsHelp();
+    process.exit(2);
+  }
+  const daemonUrl =
+    flags['daemon-url'] || process.env.OD_DAEMON_URL || 'http://127.0.0.1:7456';
+  const since = Number.isFinite(Number(flags.since))
+    ? Number(flags.since)
+    : 0;
+  await pollShopHomePageAssetsUntilDoneOrBudget(daemonUrl, projectId, since);
+}
+
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart) {
   const totalBudgetMs = 25_000;
   const perCallTimeoutMs = 4_000;
@@ -327,6 +444,88 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart) {
   process.exit(2);
 }
 
+async function pollShopHomePageAssetsUntilDoneOrBudget(daemonUrl, projectId, sinceStart, initialSnapshot = null) {
+  const totalBudgetMs = 25_000;
+  const perCallTimeoutMs = 4_000;
+  const startedAt = Date.now();
+  const url = `${daemonUrl.replace(/\/$/, '')}/api/shop-home-page/generate-tasks/${encodeURIComponent(projectId)}/wait`;
+
+  let since = Number.isFinite(sinceStart) ? sinceStart : 0;
+  let pendingSnapshot = initialSnapshot;
+
+  while (Date.now() - startedAt < totalBudgetMs) {
+    let snap;
+    if (pendingSnapshot) {
+      snap = pendingSnapshot;
+      pendingSnapshot = null;
+    } else {
+      const remaining = totalBudgetMs - (Date.now() - startedAt);
+      const callTimeout = Math.max(500, Math.min(perCallTimeoutMs, remaining));
+      let resp;
+      try {
+        resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ since, timeoutMs: callTimeout }),
+        });
+      } catch (err) {
+        surfaceFetchError(err, daemonUrl);
+        process.exit(3);
+      }
+      if (resp.status === 404) {
+        console.error(`project ${projectId} not found or storefront tasks unavailable`);
+        process.exit(4);
+      }
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(`daemon ${resp.status}: ${text}`);
+        process.exit(4);
+      }
+      try {
+        snap = await resp.json();
+      } catch {
+        console.error('daemon returned non-JSON for storefront asset wait');
+        process.exit(4);
+      }
+    }
+
+    if (Array.isArray(snap.progress)) {
+      for (const line of snap.progress) {
+        process.stderr.write(line + '\n');
+        process.stdout.write(`# ${line}\n`);
+      }
+    }
+    if (typeof snap.nextSince === 'number') since = snap.nextSince;
+
+    if (snap.status === 'done') {
+      process.stdout.write(JSON.stringify({
+        projectId,
+        status: snap.status,
+        nextSince: since,
+        tasks: Array.isArray(snap.tasks) ? snap.tasks : [],
+      }) + '\n');
+      const failedTasks = Array.isArray(snap.tasks)
+        ? snap.tasks.filter((task) => task?.status === 'failed')
+        : [];
+      process.exit(failedTasks.length > 0 ? 5 : 0);
+    }
+  }
+
+  const handoff = {
+    projectId,
+    status: 'running',
+    nextSince: since,
+    elapsed: Math.round((Date.now() - startedAt) / 1000),
+  };
+  process.stdout.write(JSON.stringify(handoff) + '\n');
+  process.stderr.write(
+    `storefront asset tasks for ${projectId} still running after ${handoff.elapsed}s. ` +
+      `Run \`od shop-home-page-assets wait ${projectId} --since ${since}\` to continue ` +
+      `(exit code 2 = still running).\n`,
+  );
+  process.exit(2);
+}
+
 function surfaceFetchError(err, daemonUrl) {
   const cause = err && typeof err === 'object' ? err.cause : null;
   const code =
@@ -354,6 +553,7 @@ function surfaceFetchError(err, daemonUrl) {
 function parseFlags(argv, opts = {}) {
   const stringFlags = opts.string instanceof Set ? opts.string : new Set();
   const booleanFlags = opts.boolean instanceof Set ? opts.boolean : new Set();
+  const repeatableFlags = opts.repeatable instanceof Set ? opts.repeatable : new Set();
   const knownFlags = new Set([...stringFlags, ...booleanFlags]);
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -369,7 +569,7 @@ function parseFlags(argv, opts = {}) {
       );
     }
     if (eq >= 0) {
-      out[key] = a.slice(eq + 1);
+      assignFlagValue(out, key, a.slice(eq + 1), repeatableFlags);
       continue;
     }
     if (booleanFlags.has(key)) {
@@ -381,19 +581,28 @@ function parseFlags(argv, opts = {}) {
       if (next == null) {
         throw new Error(`flag --${key} requires a value`);
       }
-      out[key] = next;
+      assignFlagValue(out, key, next, repeatableFlags);
       i++;
       continue;
     }
     const next = argv[i + 1];
     if (next != null && !next.startsWith('--')) {
-      out[key] = next;
+      assignFlagValue(out, key, next, repeatableFlags);
       i++;
     } else {
       out[key] = true;
     }
   }
   return out;
+}
+
+function assignFlagValue(target, key, value, repeatableFlags) {
+  if (repeatableFlags.has(key)) {
+    if (!Array.isArray(target[key])) target[key] = [];
+    target[key].push(value);
+    return;
+  }
+  target[key] = value;
 }
 
 function printMediaHelp() {
@@ -428,4 +637,37 @@ Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}.
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
 files folder so the FileViewer can preview them immediately.`);
+}
+
+function printShopHomePageAssetsHelp() {
+  console.log(`Usage: od shop-home-page-assets generate --project <id> [opts]
+
+Generate or re-generate shopHomePage assets by schema-derived file name.
+
+Required:
+  --project <id>          shopHomePage project id. Auto-resolved from
+                          OD_PROJECT_ID when invoked by the daemon.
+
+Generate options:
+  --file <filename>       Target one schema-derived asset file. Repeatable.
+                          If omitted, daemon keeps its normal "all pending
+                          storefront assets" behavior.
+  --force                 Ignore existing files and force regeneration.
+  --daemon-url <url>      Defaults to OD_DAEMON_URL or http://127.0.0.1:7456
+
+Wait usage:
+  od shop-home-page-assets wait <projectId> [--since <n>] [--daemon-url <url>]
+
+Output:
+  - Progress lines are mirrored as \`# ...\` on stdout for chat-friendly streaming.
+  - Terminal success/failure emits JSON:
+      {"projectId":"...","status":"done","nextSince":n,"tasks":[...]}
+  - Long-running calls emit a handoff JSON:
+      {"projectId":"...","status":"running","nextSince":n}
+
+Exit codes:
+  0 = all targeted tasks completed successfully
+  2 = tasks still running; continue with \`wait\`
+  5 = run finished but at least one targeted task failed
+  1-4 = argument / daemon / transport errors`);
 }
