@@ -5,13 +5,14 @@ when opened directly from `dist/shop-home-page.preview.html`.
 
 ## Files
 
-`render-page.ts` writes:
+`render-page.cjs` writes:
 
 ```text
 dist/
 ├── shop-home-page.preview.html
 ├── schema.json
 ├── requirements.json
+├── generated-images/
 └── assets-manifest.json
 ```
 
@@ -29,7 +30,7 @@ dist/references/
   phone shell.
 - Do not depend on external JavaScript, runtime APIs, databases, iframes, or a
   host preview shell.
-- `render-page.ts` must be able to render the page framework before image
+- `render-page.cjs` must be able to render the page framework before image
   generation finishes. Empty manifest URLs mean "image pending" and should
   render the standard component pending state.
 - Final image-ready renders must contain real generated http(s) CDN image URLs
@@ -52,7 +53,7 @@ dist/references/
 ```json
 {
   "version": "1.0.0",
-  "generator": "generate-image-assets.ts",
+  "generator": "generate-image-assets.cjs",
   "generated_at": "2026-05-09T00:00:00.000Z",
   "items": {
     "top_slider_1.items.hero": {
@@ -63,6 +64,7 @@ dist/references/
       "size": "1008x1344",
       "prompt": "string",
       "files": [],
+      "backup_file": "generated-images/top_slider_1.items.hero.png",
       "url": "https://..."
     }
   }
@@ -76,20 +78,21 @@ Target ids are stable:
 
 ## Image Requests
 
-Before rendering, `generate-images.ts` writes `image-requests.json` in the
-output directory. `generate-image-assets.ts` then consumes this file and resolves
+Before rendering, `generate-images.cjs` writes `image-requests.json` in the
+output directory. `generate-image-assets.cjs` then consumes this file and resolves
 every pending item; it is not a manual handoff checklist:
 
 ```json
 {
   "version": "1.0.0",
-  "generator": "generate-image-assets.ts",
+  "generator": "generate-image-assets.cjs",
   "items": [
     {
       "id": "top_slider_1.items.hero",
       "size": "1008x1344",
       "prompt": "string",
       "files": [],
+      "backup_file": "generated-images/top_slider_1.items.hero.png",
       "status": "pending",
       "url": ""
     }
@@ -97,7 +100,7 @@ every pending item; it is not a manual handoff checklist:
 }
 ```
 
-`generate-image-assets.ts` can run after the initial framework preview exists.
+`generate-image-assets.cjs` can run after the initial framework preview exists.
 It must resolve every pending item before the final image-ready render:
 
 - First try the global `youzan-image` Skill with the item's `prompt`, `size`,
@@ -107,10 +110,15 @@ It must resolve every pending item before the final image-ready render:
   Skill's built-in OpenAI image generation.
 - Upload fallback outputs through `youzan-oss` and write the final CDN URL back
   into `assets-manifest.json`.
+- Save every resolved generated image under `generated-images/` as a local
+  backup, and write the relative backup path to `backup_file` in both
+  `assets-manifest.json` and `image-requests.json`.
 - Never complete the flow with placeholders, dry-run URLs, `example.invalid`,
   local temp paths, or any other fake asset URL.
 
 The manifest is authoritative for rendering. Empty URLs render pending states in
 the early preview; every non-empty rendered image URL must be a real reachable
-http(s) CDN URL. Final renders should run `render-page.ts --strict-images` and
-`validate-output.ts` without `--allow-missing-images`.
+http(s) CDN URL. Final renders should run `render-page.cjs --strict-images` and
+`validate-output.cjs` without `--allow-missing-images`.
+Local backups under `generated-images/` are copied into `dist/generated-images/`
+for recovery and later sequential references; rendering must still use CDN URLs.

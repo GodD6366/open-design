@@ -42,8 +42,9 @@ The module order must match `requirements.json.module_specs`.
 
 ## Image Modules
 
-All image-bearing targets must include an `image_prompt` and may include
-`reference_images`.
+All image-bearing targets must include `image_prompt_schema` and may include
+`reference_images`. `image_prompt` is legacy fallback only, used only when
+`image_prompt_schema` is missing.
 
 Common image sizes:
 
@@ -54,7 +55,7 @@ Common image sizes:
 - `1:1` -> `1024x1024`
 
 For `75:30`, use `1792x1008` and describe the required horizontal crop in the
-prompt.
+prompt schema.
 
 ### `top_slider`
 
@@ -71,7 +72,12 @@ prompt.
         "title": "春日新品",
         "subtitle": "手作烘焙每日新鲜出炉",
         "aspect_ratio": "3:4",
-        "image_prompt": "..."
+        "image_prompt_schema": {
+          "subject": "春日新品面包主视觉",
+          "composition": "近景陈列，适合 3:4 竖图首屏",
+          "style": "暖奶油烘焙氛围，真实食欲感",
+          "constraints": ["直角边缘", "无额外内边距"]
+        }
       }
     ]
   }
@@ -120,7 +126,12 @@ logo corner marks, or extra padding.
         "title": "到店自取",
         "subtitle": "提前下单免等待",
         "icon": "bag",
-        "image_prompt": "..."
+        "image_prompt_schema": {
+          "subject": "到店自取入口卡片插画",
+          "composition": "单卡主体清晰，适配 B 端功能入口卡",
+          "style": "简洁图标化，避免复杂背景",
+          "constraints": ["直角边缘", "无白边", "无圆角卡片壳"]
+        }
       }
     ]
   }
@@ -142,7 +153,13 @@ secondary actions.
 
 ## Prompt Rules
 
-- Keep image prompts lightweight and direct.
+- New schema must express prompts through `image_prompt_schema`; `image_prompt`
+  is only for legacy fallback compatibility.
+- `generate-images.cjs` should prefer `item.image_prompt_schema` /
+  `entry.image_prompt_schema`, then `module.image_prompt_schema`.
+- The final `image-requests.json.items[*].prompt` should preferably be the JSON
+  string returned by the Open Design contracts prompt helper, not ad hoc prose.
+- Keep prompt schemas lightweight and direct.
 - Ask for straight edges and no inner padding by default.
 - Do not ask for rounded card shells unless the user explicitly asks for them.
 - Do not ask for extra white margins around generated images.
@@ -150,3 +167,5 @@ secondary actions.
   density, color hierarchy, and title scale.
 - For `user_assets`, each entry prompt describes one card subject, title mood,
   and icon/illustration language; it does not describe the whole membership panel.
+- `generate-images.cjs` may load `shop-home-page.style-guide.json` first, then
+  `style-guide.json`, and pass it into the shared helper when present.
