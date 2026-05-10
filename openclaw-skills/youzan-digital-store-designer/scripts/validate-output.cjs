@@ -127,7 +127,7 @@ function validateSchema(schema, requirements, errors) {
         const data = asObject(module.data);
         if (type === "user_assets") {
             const entries = asArray(data.entries);
-            const layout = asObject(data.layout);
+            const layout = asObject(data.card_layout);
             const templateType = layout.template_type;
             if (entries.length === 0)
                 errors.push(`${id}.data.entries must be non-empty`);
@@ -150,6 +150,8 @@ function validateSchema(schema, requirements, errors) {
                 const entry = asObject(entryValue);
                 if (!cleanString(entry.id))
                     errors.push(`${id}.entries item missing id`);
+                if (!cleanString(entry.slot_id))
+                    errors.push(`${id}.entries item missing slot_id`);
                 if (!cleanString(entry.title))
                     errors.push(`${id}.entries item missing title`);
                 if (!hasImagePrompt(entry))

@@ -173,9 +173,9 @@ async function resolveDerivedReferenceFiles(rootDir, item) {
     }
     return resolved;
 }
-async function cachedDerivedReferencePath(rootDir, requestId, url) {
+async function cachedDerivedReferencePath(rootDir, requestId, url, refresh = false) {
     const localPath = generatedImagePath(rootDir, requestId);
-    if (await fileExists(localPath))
+    if (!refresh && (await fileExists(localPath)))
         return localPath;
     const response = await fetch(url);
     if (!response.ok) {
@@ -194,11 +194,11 @@ async function withDerivedReferenceFiles(rootDir, item) {
         files: [...item.files, ...derivedFiles.filter((file) => !item.files.includes(file))],
     };
 }
-async function ensureLocalImageBackup(rootDir, item, url) {
+async function ensureLocalImageBackup(rootDir, item, url, { refresh = false } = {}) {
     const localPath = generatedImagePath(rootDir, item.id);
-    if (await fileExists(localPath))
+    if (!refresh && (await fileExists(localPath)))
         return localPath;
-    return await cachedDerivedReferencePath(rootDir, item.id, url);
+    return await cachedDerivedReferencePath(rootDir, item.id, url, refresh);
 }
 async function runNodeScript(scriptPath, args, timeoutMs) {
     await access(scriptPath);
@@ -574,7 +574,7 @@ async function main() {
             fallback += 1;
         }
         assertHttpUrl(url, item.id);
-        await ensureLocalImageBackup(rootDir, item, url);
+        await ensureLocalImageBackup(rootDir, item, url, { refresh: true });
         await recordImageResult(rootDir, item.id, url, source, generatedImageRelativePath(item.id), timeoutMs);
         done += 1;
     }

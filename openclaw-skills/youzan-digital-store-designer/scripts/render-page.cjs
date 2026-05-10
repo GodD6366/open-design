@@ -172,8 +172,56 @@ async function readJson(filePath) {
     }
     return parsed;
 }
+async function readOptionalJson(filePath) {
+    try {
+        return await readJson(filePath);
+    }
+    catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+            return null;
+        }
+        throw error;
+    }
+}
 async function writeJson(filePath, value) {
     await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+async function readStyleGuide(rootDir) {
+    return ((await readOptionalJson(path.join(rootDir, "shop-home-page.style-guide.json"))) ??
+        (await readOptionalJson(path.join(rootDir, "style-guide.json"))));
+}
+async function resolveSchemaHelpers(rootDir) {
+    const scriptDir = __dirname;
+    const candidates = [
+        "@open-design/contracts/shop-home-page-schema",
+        "@open-design/contracts",
+        path.resolve(scriptDir, "../../../packages/contracts/dist/shop-home-page-schema.js"),
+        path.resolve(rootDir, "../../packages/contracts/dist/shop-home-page-schema.js"),
+        path.resolve(process.cwd(), "packages/contracts/dist/shop-home-page-schema.js"),
+    ];
+    const errors = [];
+    for (const candidate of candidates) {
+        try {
+            const loaded = (await import(candidate));
+            if (typeof loaded.normalizeShopHomePageSchema === "function") {
+                return loaded;
+            }
+        }
+        catch (error) {
+            errors.push(`${candidate}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    throw new Error([
+        "Unable to load @open-design/contracts/shop-home-page-schema.",
+        "Run from the open-design repo or build/install @open-design/contracts before rendering.",
+        ...errors.map((line) => `- ${line}`),
+    ].join("\n"));
+}
+async function normalizeSchemaFile(rootDir, schemaPath, schema, requirements, styleGuide) {
+    const schemaHelpers = await resolveSchemaHelpers(rootDir);
+    const normalized = schemaHelpers.normalizeShopHomePageSchema(schema, requirements, styleGuide);
+    await writeJson(schemaPath, normalized);
+    return normalized;
 }
 function cleanString(value) {
     return typeof value === "string" ? value.trim() : "";
@@ -525,8 +573,6 @@ function computeModuleLayout(module, index, modules, schema) {
 }
 function normalizeSchemaForRendering(schema, manifest) {
     const next = deepClone(schema);
-    next.layout_mode = next.layout_mode === "flow" ? "flow" : "overlay";
-    next.design_context = normalizeDesignContext(next);
     next.modules = asArray(next.modules).map((moduleValue) => {
         const module = asObject(moduleValue);
         const moduleId = stringOr(module.id);
@@ -541,7 +587,6 @@ function normalizeSchemaForRendering(schema, manifest) {
             });
             module.data = {
                 ...data,
-                card_layout: resolveUserAssetsCardLayout({ ...data, entries }),
                 entries,
             };
             return module;
@@ -553,21 +598,6 @@ function normalizeSchemaForRendering(schema, manifest) {
             return { ...item, ...(image ? { image } : {}) };
         });
         module.data = { ...data, items };
-        return module;
-    });
-    next.modules = asArray(next.modules).map((moduleValue, index, modules) => {
-        const module = asObject(moduleValue);
-        const data = asObject(module.data);
-        module.layout = computeModuleLayout(module, index, modules.map(asObject), next);
-        if (module.type === "user_assets") {
-            module.data = { ...data, height: computeUserAssetsHeight(module, next) };
-            return module;
-        }
-        if (module.type === "top_slider" && asArray(data.items).length > 1) {
-            data.mode = "carousel_poster";
-            data.auto_play_ms = toPositiveInteger(data.auto_play_ms, 3000);
-        }
-        module.data = { ...data, height: computeImageHeight({ ...module, data }, index, next) };
         return module;
     });
     return next;
@@ -918,11 +948,14 @@ async function main() {
     const scriptDir = __dirname;
     const skillDir = path.resolve(scriptDir, "..");
     const templateDir = path.resolve(option(options, "template-dir", path.join(skillDir, "assets", "template")));
-    const rawSchema = await readJson(path.join(rootDir, "schema.json"));
+    const schemaPath = path.join(rootDir, "schema.json");
+    const rawSchema = await readJson(schemaPath);
     const requirements = await readJson(path.join(rootDir, "requirements.json"));
+    const styleGuide = await readStyleGuide(rootDir);
     const manifest = await readJson(path.join(rootDir, "assets-manifest.json"));
-    assertManifestReadyForRendering(rawSchema, manifest, strictImages);
-    const schema = normalizeSchemaForRendering(rawSchema, manifest);
+    const normalizedSourceSchema = await normalizeSchemaFile(rootDir, schemaPath, rawSchema, requirements, styleGuide);
+    assertManifestReadyForRendering(normalizedSourceSchema, manifest, strictImages);
+    const schema = normalizeSchemaForRendering(normalizedSourceSchema, manifest);
     const template = await fs.readFile(path.join(templateDir, "index.template.html"), "utf8");
     const baseCss = await fs.readFile(path.join(templateDir, "tokens.css"), "utf8");
     const page = asObject(schema.page);

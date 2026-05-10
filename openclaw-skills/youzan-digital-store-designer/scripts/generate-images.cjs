@@ -115,6 +115,33 @@ async function readStyleGuide(rootDir) {
     return ((await readOptionalJson(path.join(rootDir, "shop-home-page.style-guide.json"))) ??
         (await readOptionalJson(path.join(rootDir, "style-guide.json"))));
 }
+async function resolveSchemaHelpers(rootDir) {
+    const scriptDir = __dirname;
+    const candidates = [
+        "@open-design/contracts/shop-home-page-schema",
+        "@open-design/contracts",
+        path.resolve(scriptDir, "../../../packages/contracts/dist/shop-home-page-schema.js"),
+        path.resolve(rootDir, "../../packages/contracts/dist/shop-home-page-schema.js"),
+        path.resolve(process.cwd(), "packages/contracts/dist/shop-home-page-schema.js"),
+    ];
+    const errors = [];
+    for (const candidate of candidates) {
+        try {
+            const loaded = (await import(candidate));
+            if (typeof loaded.normalizeShopHomePageSchema === "function") {
+                return loaded;
+            }
+        }
+        catch (error) {
+            errors.push(`${candidate}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    throw new Error([
+        "Unable to load @open-design/contracts/shop-home-page-schema.",
+        "Run from the open-design repo or build/install @open-design/contracts before normalizing schema.",
+        ...errors.map((line) => `- ${line}`),
+    ].join("\n"));
+}
 async function resolvePromptHelpers(rootDir) {
     const scriptDir = __dirname;
     const candidates = [
@@ -142,6 +169,12 @@ async function resolvePromptHelpers(rootDir) {
         "Run from the open-design repo or build/install @open-design/contracts before generating image requests.",
         ...errors.map((line) => `- ${line}`),
     ].join("\n"));
+}
+async function normalizeSchemaFile(rootDir, schemaPath, schema, requirements, styleGuide) {
+    const schemaHelpers = await resolveSchemaHelpers(rootDir);
+    const normalized = schemaHelpers.normalizeShopHomePageSchema(schema, requirements, styleGuide);
+    await writeJson(schemaPath, normalized);
+    return normalized;
 }
 function inferUserAssetsTemplateType(count) {
     if (count <= 1)
@@ -361,8 +394,10 @@ async function main() {
     const schemaPath = path.join(rootDir, "schema.json");
     const manifestPath = path.join(rootDir, "assets-manifest.json");
     const requestsPath = path.join(rootDir, "image-requests.json");
-    const schema = await readJson(schemaPath);
+    const rawSchema = await readJson(schemaPath);
+    const requirements = await readJson(path.join(rootDir, "requirements.json"));
     const styleGuide = await readStyleGuide(rootDir);
+    const schema = await normalizeSchemaFile(rootDir, schemaPath, rawSchema, requirements, styleGuide);
     const promptHelpers = await resolvePromptHelpers(rootDir);
     const targets = await collectTargets(rootDir, schema, styleGuide, promptHelpers);
     const force = hasFlag(options, "force");

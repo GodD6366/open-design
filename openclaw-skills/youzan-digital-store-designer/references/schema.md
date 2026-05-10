@@ -1,31 +1,16 @@
 # Schema Contract
 
 `schema.json` is the static homepage source of truth. It must be JSON and must
-not depend on a host renderer.
+not depend on a host renderer. The Skill scripts normalize this file through the
+same pure contracts schema helper used by OD `shopHomePage`, then write the OD
+canonical structure back to `schema.json`.
 
 ## Top-Level Shape
 
-```json
-{
-  "version": "1.0.0",
-  "page": {
-    "title": "string",
-    "industry": "string",
-    "brand_name": "string",
-    "goal": "string"
-  },
-  "theme": {
-    "background": "#F7F3EC",
-    "surface": "#FFFFFF",
-    "surface_subtle": "#F1E8DA",
-    "text": "#2C241C",
-    "muted": "#7A6B5C",
-    "accent": "#B97945",
-    "radius": 8
-  },
-  "modules": []
-}
-```
+After `generate-images.cjs` or `render-page.cjs`, the top level must be OD
+canonical shape: `page_id`, `version`, `layout_mode`, `design_context`, and
+`modules`. Legacy authoring conveniences such as top-level `page` / `theme` may
+be accepted as input, but they are not preserved after normalization.
 
 ## Supported Modules
 
@@ -110,22 +95,33 @@ confirmed order and any requested aspect ratio.
 and clean; do not generate complex scenic backgrounds, heavy gradients, watermarks,
 logo corner marks, or extra padding.
 
+Each generated entry image defaults to one icon plus one single-line description
+from that entry's own `subtitle`. Do not put the entry title, a third text line,
+module-level summary text, other entry names, slogans, or extra buttons inside a
+single entry image unless explicitly requested.
+
 ```json
 {
   "id": "user_assets_1",
   "type": "user_assets",
   "title": "会员服务",
   "data": {
-    "layout": {
-      "label": "一行三个",
-      "template_type": 3
+    "card_layout": {
+      "template_type": 3,
+      "slots": [
+        { "id": "left_1", "role": "sub_action", "size": "small", "position": "left_1" },
+        { "id": "center_1", "role": "sub_action", "size": "small", "position": "center_1" },
+        { "id": "right_1", "role": "sub_action", "size": "small", "position": "right_1" }
+      ]
     },
     "entries": [
       {
         "id": "entry_1",
+        "slot_id": "left_1",
         "title": "到店自取",
         "subtitle": "提前下单免等待",
         "icon": "bag",
+        "reference_images": [],
         "image_prompt_schema": {
           "subject": "到店自取入口卡片插画",
           "composition": "单卡主体清晰，适配 B 端功能入口卡",
@@ -167,5 +163,8 @@ secondary actions.
   density, color hierarchy, and title scale.
 - For `user_assets`, each entry prompt describes one card subject, title mood,
   and icon/illustration language; it does not describe the whole membership panel.
+- For `user_assets`, visible text in each generated entry image should default to
+  the current entry `subtitle` only. Treat `content.description` as equivalent to
+  that subtitle, not as a place for module summaries such as multiple button names.
 - `generate-images.cjs` may load `shop-home-page.style-guide.json` first, then
   `style-guide.json`, and pass it into the shared helper when present.

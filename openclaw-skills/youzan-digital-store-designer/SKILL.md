@@ -82,14 +82,14 @@ youzan-digital-store-designer/
    ```
 
    该脚本只写入 `image-requests.json` 和带空 URL 槽位的 `assets-manifest.json`，不要在该脚本中直接调用图片服务。
-   该脚本是静态独立实现，但会复用纯 contracts prompt helper，把 `image_prompt_schema` 转成最终下游 prompt；优先读取 `$OUTPUT_DIR/shop-home-page.style-guide.json`，若不存在再尝试 `$OUTPUT_DIR/style-guide.json`。
+   该脚本是静态独立实现，但会先复用纯 contracts schema helper 将 `$OUTPUT_DIR/schema.json` 写回 OD `shopHomePage` 规范结构，再复用纯 contracts prompt helper 把 `image_prompt_schema` 转成最终下游 prompt；优先读取 `$OUTPUT_DIR/shop-home-page.style-guide.json`，若不存在再尝试 `$OUTPUT_DIR/style-guide.json`。
 4. 立即渲染可打开的页面框架预览。图片可以稍后生成，预览页必须先产出：
 
    ```bash
    node "$SKILL_DIR/scripts/render-page.cjs" "$OUTPUT_DIR"
    ```
 
-   该步骤写入 `dist/shop-home-page.preview.html`、`dist/schema.json`、`dist/requirements.json` 和 `dist/assets-manifest.json`。图片 URL 为空时，页面使用正式组件的待生成态展示模块框架；但仍禁止 `example.invalid`、dry-run URL、本地文件路径或非 http(s) 假图地址。
+   该步骤也会复用同一 contracts schema helper 写回 `$OUTPUT_DIR/schema.json`，然后写入 `dist/shop-home-page.preview.html`、`dist/schema.json`、`dist/requirements.json` 和 `dist/assets-manifest.json`。图片 URL 为空时，页面使用正式组件的待生成态展示模块框架；但仍禁止 `example.invalid`、dry-run URL、本地文件路径或非 http(s) 假图地址。
 5. 消费 `image-requests.json.items` 中每个 `status = "pending"` 的条目，生成真实图片资产并回写 CDN URL：
 
    ```bash
@@ -176,6 +176,7 @@ youzan-digital-store-designer/
 - 3 个 `user_assets` 入口默认布局是 `一行三个`。
 - 只有用户明确说 `左一右二`、`一大两小`、`主次入口` 或等价表达时，才使用 `左一右二`。
 - 只有入口数量超过 5 个，或用户明确要求热区 / 自由布局时，才使用 `hotzone`。
+- `user_assets` 每张入口图片默认只生成一个 icon 和一行来自当前入口 `subtitle` 的说明文字；不要把模块汇总文案、其它入口名称、标题、第三行文字、营销 slogan 或额外按钮画进单张入口图，除非用户明确要求。
 - 图片提示词默认要求直角边缘、零内边距；除非用户明确要求，不要生成圆角卡片壳或额外白边。
 - 图片生成入口固定为 `generate-image-assets.cjs`。它优先使用全局 `youzan-image`，必要时自动兜底到 Skill 内置 OpenAI 生图 + `youzan-oss` 上传；不要改回人工逐条调用。
 - `generate-images.cjs` 必须优先消费 `item/entry.image_prompt_schema`，其次 `module.image_prompt_schema`；只有 schema 缺失时才允许退回 `image_prompt`，并输出 legacy warning。
