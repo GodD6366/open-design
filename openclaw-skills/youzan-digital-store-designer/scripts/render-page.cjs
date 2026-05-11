@@ -571,6 +571,27 @@ function computeModuleLayout(module, index, modules, schema) {
     }
     return { offsetY: 0, zIndex: 1, paddingX: 0, paddingTop: 0, paddingBottom: 0 };
 }
+function resolvePageLayout(schema) {
+    const next = deepClone(schema);
+    const modules = asArray(next.modules).map(asObject);
+    next.modules = modules.map((module, index) => {
+        const resolved = deepClone(module);
+        resolved.layout = computeModuleLayout(resolved, index, modules, next);
+        if (resolved.type === "user_assets") {
+            resolved.data = {
+                ...asObject(resolved.data),
+                height: computeUserAssetsHeight(resolved, next),
+            };
+            return resolved;
+        }
+        resolved.data = {
+            ...asObject(resolved.data),
+            height: computeImageHeight(resolved, index, next),
+        };
+        return resolved;
+    });
+    return next;
+}
 function normalizeSchemaForRendering(schema, manifest) {
     const next = deepClone(schema);
     next.modules = asArray(next.modules).map((moduleValue) => {
@@ -600,7 +621,7 @@ function normalizeSchemaForRendering(schema, manifest) {
         module.data = { ...data, items };
         return module;
     });
-    return next;
+    return resolvePageLayout(next);
 }
 function hasImageAsset(item) {
     return Boolean(resolveReusableUrl(asObject(item).image));
@@ -709,19 +730,13 @@ function renderImageModule(module) {
                 : "";
     return `<div class="sf-image-card ${typeClass}" ${imageCardStyleAttr(item, height)}>${renderImageItem(moduleType, item)}</div>`;
 }
-function userAssetsCardRadius(slot) {
-    const size = stringOr(slot?.size);
-    return size === "large" || size === "wide" ? 24 : 20;
-}
 function renderUserAssetsEntryShell(itemValue, slotValue) {
     const item = asObject(itemValue);
     const slot = asObject(slotValue);
     const large = stringOr(slot.size) === "large" || stringOr(slot.size) === "wide";
     const title = shortenText(stringOr(item.title, "功能入口"), large ? 10 : 8);
     const subtitle = shortenText(stringOr(item.subtitle, "ENTRY"), large ? 14 : 12);
-    return `<div class="sf-user-assets-entry${large ? " is-large" : ""}" style="${styleAttr({
-        borderRadius: `${userAssetsCardRadius(slot)}px`,
-    })}">
+    return `<div class="sf-user-assets-entry${large ? " is-large" : ""}">
     <div class="sf-user-assets-entry__icon"></div>
     <div class="sf-user-assets-entry__copy">
       <strong class="sf-user-assets-entry__title">${escapeHtml(title)}</strong>
@@ -735,7 +750,7 @@ function renderUserAssetsCard(entryValue, slotValue) {
     const imageUrl = resolveReusableUrl(entry.image);
     if (imageUrl) {
         const alt = stringOr(entry.alt, stringOr(entry.title, "客户资产入口"));
-        return `<div class="sf-user-assets-card" style="${styleAttr({ borderRadius: `${userAssetsCardRadius(slot)}px` })}">
+        return `<div class="sf-user-assets-card">
       <img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(alt)}" class="sf-user-assets-card__img" />
     </div>`;
     }

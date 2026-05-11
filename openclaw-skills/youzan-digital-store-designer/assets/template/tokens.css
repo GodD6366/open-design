@@ -500,7 +500,7 @@ img {
   flex-direction: column;
   gap: 12px;
   padding: 6px 16px;
-  border-radius: var(--sf-radius);
+  border-radius: 8px;
   background: var(--sf-card-bg);
   box-shadow: var(--sf-shadow);
 }

@@ -61,6 +61,9 @@ const allowedPathPrefixes = [
   "skills/hyperframes/scripts/",
   // Vendored upstream html-ppt skill runtime assets (lewislulu/html-ppt-skill).
   "skills/html-ppt/assets/",
+  // OpenClaw skills are copied/executed outside the workspace by generic
+  // runners, so their local helper scripts intentionally stay plain CommonJS.
+  "openclaw-skills/youzan-digital-store-designer/scripts/",
   "test-results/",
   "vendor/",
 ];

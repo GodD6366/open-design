@@ -48,7 +48,7 @@ function buildRequirements() {
 
 describe('createSeedSchema', () => {
   it('defaults storefront image prompts to straight-edge zero-padding constraints', () => {
-    const schema = createSeedSchema(buildRequirements(), null);
+    const schema = createSeedSchema(buildRequirements(), null) as any;
     const imageModules = schema.modules.filter((module: any) => module.type !== 'user_assets');
 
     for (const module of imageModules) {
@@ -107,7 +107,7 @@ describe('createSeedSchema', () => {
       analysis: {
         layout_style: '海报感 hero 居首，浮动会员卡片，三等分功能入口排布。',
       },
-    });
+    }) as any;
 
     const topSliderRefs = schema.modules
       .find((module: any) => module.type === 'top_slider')
@@ -140,7 +140,7 @@ describe('createSeedSchema', () => {
         must: ['参考图可见的 hero 组件空间分布、产品数量、留白比例、文字数量和标题尺度'],
         avoid: [],
       },
-    });
+    }) as any;
 
     const shopInfoRefs = schema.modules
       .find((module: any) => module.type === 'shop_info')

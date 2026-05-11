@@ -31,6 +31,8 @@ Use these stable requirement fields in `requirements.json`:
     "custom": ""
   },
   "style": {
+    "industry": "烘焙 | 咖啡茶饮 | other user-provided industry",
+    "brand_name": "string",
     "tone": "string",
     "primary_color": "string",
     "avoid": ["string"],
@@ -109,10 +111,12 @@ textarea immediately after `modules`. It is an editable ordered module analysis:
 
 ## 字段映射
 
-- `shop_name` maps to top-level `shop_name`, `schema.page.brand_name`, and
-  module copy where relevant.
+- `shop_name` maps to top-level `shop_name`; also write the same value to
+  `style.brand_name` so the OD prompt/schema helper can use it deterministically.
 - `brand_logo` maps to `brand_logo`; do not force it into every image prompt.
-- `industry` maps to top-level `industry` and `schema.page.industry`.
+- `industry` maps to top-level `industry`; also write the same value to
+  `style.industry` so category, tone preset selection, and prompt schemas stay
+  aligned with OD.
 - `homepage_goal` maps to top-level `homepage_goal` and `schema.page.goal`.
 - Module labels from clarification map to schema types: `顶部轮播` -> `top_slider`,
   `客户资产` -> `user_assets`, `活动轮播` -> `banner`, `商品展示` -> `goods`,

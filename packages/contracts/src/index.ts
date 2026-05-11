@@ -12,6 +12,8 @@ export * from './api/registry';
 export * from './api/version';
 export * from './question-form';
 export * from './prompts/shop-home-page-tones';
+export * from './prompts/shop-home-page-image-prompts';
+export * from './shop-home-page-schema';
 export * from './shop-home-page-templates';
 export * from './sse/common';
 export * from './sse/chat';

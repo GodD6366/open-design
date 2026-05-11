@@ -17,6 +17,14 @@
       "types": "./src/prompts/shop-home-page-tones.ts",
       "default": "./dist/prompts/shop-home-page-tones.js"
     },
+    "./shop-home-page-image-prompts": {
+      "types": "./src/prompts/shop-home-page-image-prompts.ts",
+      "default": "./dist/prompts/shop-home-page-image-prompts.js"
+    },
+    "./shop-home-page-schema": {
+      "types": "./src/shop-home-page-schema.ts",
+      "default": "./dist/shop-home-page-schema.js"
+    },
     "./question-form": {
       "types": "./src/question-form.ts",
       "default": "./dist/question-form.js"
@@ -36,6 +44,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
+    "build": "tsc -p tsconfig.json --emitDeclarationOnly false && mkdir -p dist/shop-home-page/storefront && cp src/shop-home-page/tone-presets.json dist/shop-home-page/tone-presets.json && cp src/shop-home-page/storefront/tone-presets.json dist/shop-home-page/storefront/tone-presets.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
